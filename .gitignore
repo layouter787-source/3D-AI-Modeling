@@ -1,0 +1,14 @@
+# Android / Gradle
+.gradle/
+build/
+local.properties
+*.apk
+*.aab
+.idea/
+*.iml
+.cxx/
+
+# Segredos
+*.keystore
+*.jks
+secrets.properties
