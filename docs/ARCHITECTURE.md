@@ -5,10 +5,12 @@
 | Módulo | Linguagem | Função |
 |---|---|---|
 | `app/` | Kotlin (Compose) | Interface, viewport, painel de chat da IA |
-| `core/` | C++17 (NDK) | Malha half-edge, primitivas, extrusão, bevel, boolean, subdivisão, espelho, undo/redo, import/export OBJ e glTF |
-| `render/` | C++ / OpenGL ES 3.0 | Desenho da cena, seleção, gizmos. Vulkan numa fase posterior |
-| `ai/` | Kotlin | Provedores de IA, despachante de ferramentas, validação |
-| `ads/` | Kotlin | Anúncios, num módulo separado (ver Licença) |
+| `app/src/main/cpp/core/` | C++17 (NDK) | Malha, primitivas, extrusão, bevel, boolean, subdivisão, espelho, undo/redo, import/export OBJ e glTF |
+| `app/src/main/cpp/` (render) | C++ / OpenGL ES 3.0 | Desenho da cena, seleção, gizmos. Vulkan numa fase posterior |
+| `ai/` (planeado) | Kotlin | Provedores de IA, despachante de ferramentas, validação |
+| `ads/` (planeado) | Kotlin | Anúncios, num módulo separado |
+
+Quando o núcleo crescer, `core/` passa a ser uma biblioteca nativa própria.
 
 ## Fluxo da IA
 1. O utilizador escreve um pedido ("faz uma mesa com 4 pernas").
@@ -21,7 +23,7 @@
 A IA nunca escreve a malha diretamente: só chama ferramentas do motor.
 
 ## Licença e anúncios
-O projeto é GPL. SDKs de anúncios são proprietários e podem ser incompatíveis com a GPL, por isso ficam isolados em `ads/`. Decisão pendente: manter o módulo de anúncios com licença própria ou usar uma rede de anúncios compatível.
+O projeto usa Apache-2.0, que não conflita com SDKs de anúncios proprietários. Mesmo assim, o código de anúncios fica isolado em `ads/`. Evitar dependências GPL/AGPL (por exemplo CGAL) e confirmar a licença de cada biblioteca antes de a incluir.
 
 ## Pendências
 - Confirmar com a OpenAI se um app open source com anúncios continua elegível ao login com conta gratuita.
