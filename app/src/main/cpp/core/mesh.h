@@ -15,7 +15,13 @@ struct Mesh {
     std::vector<uint16_t> indices;
 };
 
-// Cubo centrado na origem, com normais por face (24 vértices, 36 índices).
+// Todas as primitivas ficam centradas na origem, com normais e triângulos
+// em sentido anti-horário visto de fora.
 Mesh makeCube(float size);
+Mesh makeSphere(float radius, int segments, int rings);
+Mesh makeCylinder(float radius, float height, int segments);
+Mesh makeCone(float radius, float height, int segments);
+Mesh makeTorus(float majorRadius, float minorRadius, int segments, int sides);
+Mesh makePlane(float size);
 
 }  // namespace core

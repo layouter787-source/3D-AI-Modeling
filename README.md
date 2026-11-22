@@ -3,13 +3,21 @@
 Aplicativo Android de modelagem 3D com assistente de IA integrado. O utilizador entra com a própria conta (ChatGPT) ou usa a própria chave de API, e a IA ajuda a modelar chamando as ferramentas do motor 3D.
 
 ## Estado
-Em desenvolvimento inicial. O projeto Android já abre um viewport OpenGL ES 3.0 com um cubo e câmera orbital por toque (1 dedo roda, 2 dedos deslocam, pinça aproxima), desenhado pelo núcleo em C++.
+Em desenvolvimento inicial (ainda não testado em dispositivo).
+
+Já existe:
+- Viewport OpenGL ES 3.0 com grelha e eixos, câmera orbital por toque (1 dedo roda, 2 dedos deslocam, pinça aproxima).
+- Cena com vários objetos: cubo, esfera, cilindro, cone, torus e plano.
+- Seleção por toque, mover, rodar, escalar, cor e apagar, com desfazer/refazer.
+- Camada de ferramentas para a IA (`ToolDispatcher`) e interface `AiProvider`.
+
+Falta: login e provedores de IA, painel de chat, edição de malha (extrudir, bevel, boolean), importar/exportar.
 
 Documentação: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) e [docs/AI_PROVIDERS.md](docs/AI_PROVIDERS.md).
 
 ## Base técnica
 - Interface: Kotlin + Jetpack Compose
-- Núcleo 3D: C++17 (NDK), malha, comandos com undo/redo (em construção)
+- Núcleo 3D: C++17 (NDK): malha, cena, `Editor` com histórico de comandos
 - Render: OpenGL ES 3.0 (Vulkan numa fase posterior)
 - IA: camada de provedores (login ChatGPT, chave de API, modelo local)
 

@@ -4,14 +4,22 @@ import android.content.Context
 import android.opengl.GLSurfaceView
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
+import android.view.ViewConfiguration
+import kotlin.math.hypot
 
 /**
- * Viewport 3D com câmera orbital:
- * - 1 dedo: rodar
- * - 2 dedos: deslocar (pan)
- * - pinça: aproximar/afastar
+ * Viewport 3D:
+ * - toque rápido: seleciona o objeto (ou limpa a seleção)
+ * - 1 dedo a arrastar: roda a câmera
+ * - 2 dedos: desloca (pan)
+ * - pinça: aproxima/afasta
  */
 class ModelingSurfaceView(context: Context) : GLSurfaceView(context) {
+
+    /** Chamado na thread da UI quando a seleção muda por toque. */
+    var onSceneChanged: (() -> Unit)? = null
+
+    private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
 
     private val scaleDetector = ScaleGestureDetector(
         context,
@@ -26,6 +34,11 @@ class ModelingSurfaceView(context: Context) : GLSurfaceView(context) {
 
     private var lastX = 0f
     private var lastY = 0f
+    private var downX = 0f
+    private var downY = 0f
+    private var downTime = 0L
+    private var moved = false
+    private var multiTouch = false
 
     init {
         setEGLContextClientVersion(3)
@@ -53,22 +66,41 @@ class ModelingSurfaceView(context: Context) : GLSurfaceView(context) {
         }
 
         when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN,
-            MotionEvent.ACTION_POINTER_DOWN,
+            MotionEvent.ACTION_DOWN -> {
+                downX = event.x
+                downY = event.y
+                downTime = event.eventTime
+                moved = false
+                multiTouch = false
+                lastX = cx
+                lastY = cy
+            }
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                multiTouch = true
+                lastX = cx
+                lastY = cy
+            }
             MotionEvent.ACTION_POINTER_UP -> {
                 lastX = cx
                 lastY = cy
             }
             MotionEvent.ACTION_MOVE -> {
+                if (hypot(event.x - downX, event.y - downY) > touchSlop) moved = true
                 val dx = cx - lastX
                 val dy = cy - lastY
                 if (event.pointerCount == 1) {
                     queueEvent { NativeBridge.onOrbit(dx, dy) }
-                } else if (event.pointerCount >= 2) {
+                } else {
                     queueEvent { NativeBridge.onPan(dx, dy) }
                 }
                 lastX = cx
                 lastY = cy
+            }
+            MotionEvent.ACTION_UP -> {
+                if (!multiTouch && !moved && event.eventTime - downTime < 300) {
+                    NativeBridge.pickAt(event.x, event.y)
+                    onSceneChanged?.invoke()
+                }
             }
         }
         return true
