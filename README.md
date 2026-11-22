@@ -3,7 +3,7 @@
 Aplicativo Android de modelagem 3D com assistente de IA integrado. O utilizador entra com a própria conta (ChatGPT) ou usa a própria chave de API, e a IA ajuda a modelar chamando as ferramentas do motor 3D.
 
 ## Estado
-Em desenvolvimento inicial. O projeto Android já abre um viewport OpenGL ES 3.0 com um cubo a rodar, desenhado pelo núcleo em C++.
+Em desenvolvimento inicial. O projeto Android já abre um viewport OpenGL ES 3.0 com um cubo e câmera orbital por toque (1 dedo roda, 2 dedos deslocam, pinça aproxima), desenhado pelo núcleo em C++.
 
 Documentação: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) e [docs/AI_PROVIDERS.md](docs/AI_PROVIDERS.md).
 

@@ -2,7 +2,9 @@
 #include <android/log.h>
 #include <jni.h>
 
+#include <algorithm>
 #include <cmath>
+#include <cstddef>
 
 #include "core/mesh.h"
 
@@ -10,6 +12,8 @@
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 namespace {
+
+constexpr float kFovY = 1.0472f;  // 60 graus
 
 // Matrizes 4x4 em ordem de colunas (como o OpenGL espera).
 struct Mat4 {
@@ -47,8 +51,10 @@ Mat4 perspective(float fovyRadians, float aspect, float nearZ, float farZ) {
     return r;
 }
 
-Mat4 translateZ(float z) {
+Mat4 translate(float x, float y, float z) {
     Mat4 r = identity();
+    r.m[12] = x;
+    r.m[13] = y;
     r.m[14] = z;
     return r;
 }
@@ -110,6 +116,19 @@ GLuint compileShader(GLenum type, const char* source) {
     return shader;
 }
 
+// Câmera orbital: rodar (yaw/pitch), aproximar (distance) e deslocar (pan no plano da tela).
+struct Camera {
+    float yaw = 0.6f;
+    float pitch = 0.4f;
+    float distance = 4.0f;
+    float panX = 0.0f;
+    float panY = 0.0f;
+
+    Mat4 view() const {
+        return multiply(translate(panX, panY, -distance), multiply(rotateX(pitch), rotateY(yaw)));
+    }
+};
+
 struct Renderer {
     GLuint program = 0;
     GLuint vao = 0;
@@ -119,7 +138,8 @@ struct Renderer {
     GLint modelLoc = -1;
     GLsizei indexCount = 0;
     float aspect = 1.0f;
-    float angle = 0.0f;
+    float height = 1.0f;
+    Camera camera;
 };
 
 Renderer gRenderer;
@@ -180,20 +200,19 @@ JNIEXPORT void JNICALL
 Java_com_layouter_aimodeling_NativeBridge_onSurfaceChanged(JNIEnv*, jobject, jint width,
                                                            jint height) {
     glViewport(0, 0, width, height);
+    gRenderer.height = height > 0 ? static_cast<float>(height) : 1.0f;
     gRenderer.aspect = height > 0 ? static_cast<float>(width) / static_cast<float>(height) : 1.0f;
 }
 
 JNIEXPORT void JNICALL
 Java_com_layouter_aimodeling_NativeBridge_onDrawFrame(JNIEnv*, jobject) {
     Renderer& r = gRenderer;
-    r.angle += 0.015f;
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    const Mat4 model = multiply(rotateY(r.angle), rotateX(r.angle * 0.6f));
-    const Mat4 view = translateZ(-3.0f);
-    const Mat4 proj = perspective(1.0472f, r.aspect, 0.1f, 100.0f);  // 60 graus
-    const Mat4 mvp = multiply(proj, multiply(view, model));
+    const Mat4 model = identity();
+    const Mat4 proj = perspective(kFovY, r.aspect, 0.1f, 200.0f);
+    const Mat4 mvp = multiply(proj, multiply(r.camera.view(), model));
 
     glUseProgram(r.program);
     glUniformMatrix4fv(r.mvpLoc, 1, GL_FALSE, mvp.m);
@@ -202,6 +221,30 @@ Java_com_layouter_aimodeling_NativeBridge_onDrawFrame(JNIEnv*, jobject) {
     glBindVertexArray(r.vao);
     glDrawElements(GL_TRIANGLES, r.indexCount, GL_UNSIGNED_SHORT, nullptr);
     glBindVertexArray(0);
+}
+
+JNIEXPORT void JNICALL
+Java_com_layouter_aimodeling_NativeBridge_onOrbit(JNIEnv*, jobject, jfloat dx, jfloat dy) {
+    Camera& c = gRenderer.camera;
+    c.yaw += dx * 0.01f;
+    c.pitch = std::clamp(c.pitch + dy * 0.01f, -1.5f, 1.5f);
+}
+
+JNIEXPORT void JNICALL
+Java_com_layouter_aimodeling_NativeBridge_onPan(JNIEnv*, jobject, jfloat dx, jfloat dy) {
+    Camera& c = gRenderer.camera;
+    // Converte pixels em unidades do mundo à distância atual da câmera.
+    const float scale = c.distance * 2.0f * std::tan(kFovY * 0.5f) / gRenderer.height;
+    c.panX += dx * scale;
+    c.panY -= dy * scale;
+}
+
+JNIEXPORT void JNICALL
+Java_com_layouter_aimodeling_NativeBridge_onZoom(JNIEnv*, jobject, jfloat factor) {
+    Camera& c = gRenderer.camera;
+    if (factor > 0.0f) {
+        c.distance = std::clamp(c.distance / factor, 1.0f, 50.0f);
+    }
 }
 
 }  // extern "C"

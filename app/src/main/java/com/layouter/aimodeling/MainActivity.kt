@@ -1,6 +1,5 @@
 package com.layouter.aimodeling
 
-import android.opengl.GLSurfaceView
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -25,12 +24,6 @@ class MainActivity : ComponentActivity() {
 fun Viewport() {
     AndroidView(
         modifier = Modifier.fillMaxSize(),
-        factory = { context ->
-            GLSurfaceView(context).apply {
-                setEGLContextClientVersion(3)
-                setRenderer(ViewportRenderer())
-                renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
-            }
-        }
+        factory = { context -> ModelingSurfaceView(context) }
     )
 }
