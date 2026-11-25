@@ -5,7 +5,7 @@ Aplicativo Android de modelagem 3D com assistente de IA integrado. A interface �
 ## O que já existe
 
 - Viewport 3D com grelha, eixos e câmera orbital por toque.
-- Objetos básicos: cubo, esfera, cilindro, cone, toro e plano.
+- Objetos básicos: cubo, esfera, cilindro, cone, toro, plano e pirâmide.
 - Seleção, transformações, cor, remoção e histórico undo/redo.
 - Guardar e abrir projetos editáveis `.3dproj` (JSON versionado, com validação e limite de 500 objetos).
 - Exportar geometria transformada para OBJ com biblioteca MTL separada para manter as cores.

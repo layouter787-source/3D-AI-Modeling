@@ -13,6 +13,7 @@ const char* primitiveName(Primitive p) {
         case Primitive::Cone: return "cone";
         case Primitive::Torus: return "torus";
         case Primitive::Plane: return "plane";
+        case Primitive::Pyramid: return "pyramid";
     }
     return "cube";
 }
@@ -25,6 +26,7 @@ Mesh makePrimitiveMesh(Primitive p, float size) {
         case Primitive::Cone: return makeCone(size * 0.5f, size, 48);
         case Primitive::Torus: return makeTorus(size * 0.35f, size * 0.15f, 64, 24);
         case Primitive::Plane: return makePlane(size);
+        case Primitive::Pyramid: return makePyramid(size);
     }
     return makeCube(size);
 }

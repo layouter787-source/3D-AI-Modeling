@@ -7,7 +7,8 @@ enum class PrimitiveType(val id: Int, val apiName: String, val label: String) {
     CYLINDER(2, "cylinder", "Cilindro"),
     CONE(3, "cone", "Cone"),
     TORUS(4, "torus", "Torus"),
-    PLANE(5, "plane", "Plano");
+    PLANE(5, "plane", "Plano"),
+    PYRAMID(6, "pyramid", "Pirâmide");
 
     companion object {
         fun fromApiName(name: String): PrimitiveType? = values().firstOrNull { it.apiName == name }

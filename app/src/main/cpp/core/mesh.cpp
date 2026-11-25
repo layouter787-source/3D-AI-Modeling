@@ -72,6 +72,39 @@ Mesh makeCube(float size) {
     return mesh;
 }
 
+Mesh makePyramid(float size) {
+    const float h = size * 0.5f;
+    const Vec3 p0{-h, -h, -h};
+    const Vec3 p1{ h, -h, -h};
+    const Vec3 p2{ h, -h,  h};
+    const Vec3 p3{-h, -h,  h};
+    const Vec3 apex{0.0f, h, 0.0f};
+
+    Mesh mesh;
+    const auto addFlatTriangle = [&mesh](Vec3 a, Vec3 b, Vec3 c) {
+        Vec3 normal = normalize(cross(b - a, c - a));
+        const Vec3 center = (a + b + c) * (1.0f / 3.0f);
+        if (dot(normal, center) < 0.0f) {
+            std::swap(b, c);
+            normal = normal * -1.0f;
+        }
+        const size_t base = mesh.vertices.size();
+        addVertex(mesh, a.x, a.y, a.z, normal.x, normal.y, normal.z);
+        addVertex(mesh, b.x, b.y, b.z, normal.x, normal.y, normal.z);
+        addVertex(mesh, c.x, c.y, c.z, normal.x, normal.y, normal.z);
+        addTri(mesh, base, base + 1, base + 2);
+    };
+
+    // Base quadrada e quatro faces triangulares, com normais planas orientadas para fora.
+    addFlatTriangle(p0, p1, p2);
+    addFlatTriangle(p0, p2, p3);
+    addFlatTriangle(p0, p1, apex);
+    addFlatTriangle(p1, p2, apex);
+    addFlatTriangle(p2, p3, apex);
+    addFlatTriangle(p3, p0, apex);
+    return mesh;
+}
+
 Mesh makeSphere(float radius, int segments, int rings) {
     segments = std::max(3, segments);
     rings = std::max(2, rings);

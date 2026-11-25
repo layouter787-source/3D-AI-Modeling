@@ -18,6 +18,7 @@ struct Mesh {
 // Todas as primitivas ficam centradas na origem, com normais e triângulos
 // em sentido anti-horário visto de fora.
 Mesh makeCube(float size);
+Mesh makePyramid(float size);
 Mesh makeSphere(float radius, int segments, int rings);
 Mesh makeCylinder(float radius, float height, int segments);
 Mesh makeCone(float radius, float height, int segments);
