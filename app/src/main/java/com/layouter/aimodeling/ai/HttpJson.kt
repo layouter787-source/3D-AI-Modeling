@@ -26,14 +26,14 @@ internal object HttpJson {
             connection.connectTimeout = 20_000
             connection.readTimeout = readTimeout
             connection.setRequestProperty("Accept", "application/json")
+            headers.forEach { (name, value) -> connection.setRequestProperty(name, value) }
             if (body != null) {
-                connection.doOutput = true
                 connection.setRequestProperty("Content-Type", "application/json")
+                connection.doOutput = true
                 connection.outputStream.use {
                     it.write(body.toString().toByteArray(Charsets.UTF_8))
                 }
             }
-            headers.forEach { (name, value) -> connection.setRequestProperty(name, value) }
 
             val code = connection.responseCode
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
