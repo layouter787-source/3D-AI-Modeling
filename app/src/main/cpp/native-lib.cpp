@@ -443,7 +443,7 @@ Java_com_layouter_aimodeling_NativeBridge_sculptMesh(JNIEnv*, jobject, jint id, 
 
 JNIEXPORT jboolean JNICALL
 Java_com_layouter_aimodeling_NativeBridge_meshOperation(JNIEnv* env, jobject, jint id, jstring operation,
-                                                        jintArray faceIds, jint parameter, jfloat value) {
+                                                        jintArray faceIds, jint parameter, jfloat value, jint otherObjectId) {
     if (operation == nullptr) return JNI_FALSE;
     const char* raw = env->GetStringUTFChars(operation, nullptr);
     if (raw == nullptr) return JNI_FALSE;
@@ -458,7 +458,7 @@ Java_com_layouter_aimodeling_NativeBridge_meshOperation(JNIEnv* env, jobject, ji
         if (env->ExceptionCheck()) { env->ExceptionClear(); return JNI_FALSE; }
     }
     std::lock_guard<std::mutex> lock(gMutex);
-    return toJ(gRenderer.editor.meshOperation(id, op, faces, parameter, value));
+    return toJ(gRenderer.editor.meshOperation(id, op, faces, parameter, value, otherObjectId));
 }
 
 JNIEXPORT jstring JNICALL
