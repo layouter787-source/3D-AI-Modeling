@@ -220,7 +220,7 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
         lines.add(ChatLine("user", text + if (outgoingImage != null) "  [imagem de referência anexada]" else ""))
         persistChats()
         busy = true
-        scope.launch {
+        AiWorkScope.launch {
             try {
                 current.ask(
                     userText = text,
