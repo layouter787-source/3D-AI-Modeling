@@ -1,6 +1,7 @@
 package com.layouter.aimodeling
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
@@ -121,7 +123,10 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
         }
 
         if (showSettings) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
                 ProviderKind.values().forEach { k ->
                     if (k == kind) {
                         Button(onClick = {}) { Text(k.label) }
@@ -143,6 +148,11 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 modifier = Modifier.fillMaxWidth()
             )
+            Text(
+                "Onde obter a chave: ${kind.keySource}",
+                color = Color(0xFFBBBBC4),
+                style = MaterialTheme.typography.bodySmall
+            )
             OutlinedTextField(
                 value = model,
                 onValueChange = { model = it },
@@ -152,7 +162,7 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
             )
             Text(
                 "A chave fica cifrada neste dispositivo e só é enviada ao serviço escolhido. " +
-                    "O uso é cobrado na tua conta de API.",
+                    "O uso é cobrado na tua conta desse serviço. Se o modelo não existir na tua conta, troca o nome acima.",
                 color = Color(0xFFBBBBC4),
                 style = MaterialTheme.typography.bodySmall
             )

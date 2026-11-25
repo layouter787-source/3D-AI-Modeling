@@ -1,31 +1,27 @@
 # Provedores de IA
 
-Interface comum `AiProvider` (em `app/src/main/java/com/layouter/aimodeling/ai/`).
+O app usa **apenas chave de API**: não há login com conta OpenAI/ChatGPT nem com conta Claude. O utilizador escolhe o serviço, cola a chave e a ligação fica pronta, porque a base URL de cada serviço já vem predefinida. Interface comum `AiProvider` em `app/src/main/java/com/layouter/aimodeling/ai/`.
 
-## Estado
+| Serviço | Base URL | Formato | Onde obter a chave |
+|---|---|---|---|
+| OpenAI | `https://api.openai.com/v1` | Chat Completions | platform.openai.com/api-keys |
+| Claude | `https://api.anthropic.com/v1` | Messages API | console.anthropic.com |
+| Google Gemini | `https://generativelanguage.googleapis.com/v1beta/openai` | Chat Completions (compatibilidade) | aistudio.google.com/apikey |
+| NVIDIA NIM | `https://integrate.api.nvidia.com/v1` | Chat Completions | build.nvidia.com (chaves `nvapi-`) |
 
-| Provedor | Estado |
-|---|---|
-| `OpenAiProvider` (chave de API do utilizador, Chat Completions) | implementado, não testado |
-| `AnthropicProvider` (chave de API do utilizador, Messages API) | implementado, não testado |
-| `ChatGptPlanProvider` (login "Continue with ChatGPT", OAuth/PKCE) | planeado: depende do registo do cliente na OpenAI |
-| `LocalProvider` (modelo no dispositivo) | planeado |
+OpenAI, Gemini e NVIDIA NIM usam o mesmo `OpenAiProvider`; só muda a base URL. O Claude usa o `AnthropicProvider`. Todos os provedores estão implementados mas **não foram testados**.
 
-O Claude só é suportado por chave de API, porque a Anthropic não permite login de conta Claude em apps de terceiros.
+Notas por serviço:
+- **Gemini 3:** exige que a `thought_signature` das chamadas de ferramenta seja devolvida na mensagem seguinte; o app guarda o `extra_content` de cada chamada e reenvia-o. Ferramentas sem argumentos são enviadas sem `parameters`.
+- **NVIDIA NIM:** o nível gratuito tem limite de pedidos por minuto; o modelo precisa de suportar chamadas de ferramenta.
+- Os nomes de modelo predefinidos são sugestões e podem ser mudados nas definições.
 
-O ciclo de conversa está no `AiAgent`: envia o pedido, executa as ferramentas pedidas pela IA no `ToolDispatcher`, devolve os resultados e repete até a IA responder só com texto. Limites: 6 rondas e 40 chamadas de ferramenta por pedido; histórico de 60 mensagens. O painel de chat (`AiPanel`) usa o botão "IA" no topo do ecrã.
+## Ciclo de conversa
+`AiAgent`: envia o pedido, executa as ferramentas pedidas pela IA no `ToolDispatcher`, devolve os resultados e repete até a IA responder só com texto. Limites: 6 rondas e 40 chamadas de ferramenta por pedido; histórico de 60 mensagens. O painel de chat (`AiPanel`) abre com o botão "IA".
 
 ## Chave de API
 - Guardada cifrada (AES-GCM) com uma chave do Android Keystore (`SecretStore`). Nunca é registada em logs.
-- Só é enviada ao serviço escolhido; o uso é cobrado na conta de API do utilizador.
-- O nome do modelo é editável nas definições, porque os modelos mudam com o tempo.
-
-## Login ChatGPT (planeado)
-- Abrir o navegador (Custom Tabs) com `state`, `nonce` e PKCE `S256`.
-- Retorno por deep link registado.
-- Trocar o código no endpoint de token, validar `state` e o ID token.
-- Guardar tokens no Android Keystore. Não reutilizar o client ID do Codex CLI: usar o registo oficial.
-- Tratar consentimento recusado, limite de uso atingido e sessão revogada, voltando ao modo manual.
+- Só é enviada ao serviço escolhido; o uso é cobrado na conta do utilizador nesse serviço.
 
 ## Ferramentas expostas à IA
 

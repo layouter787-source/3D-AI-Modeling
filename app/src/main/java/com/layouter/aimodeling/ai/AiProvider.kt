@@ -3,8 +3,17 @@ package com.layouter.aimodeling.ai
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Chamada de ferramenta pedida pela IA. */
-data class ToolCall(val id: String, val name: String, val arguments: JSONObject)
+/**
+ * Chamada de ferramenta pedida pela IA.
+ * [extra] guarda dados opacos do provedor que têm de voltar na próxima mensagem
+ * (por exemplo, a thought_signature do Gemini 3).
+ */
+data class ToolCall(
+    val id: String,
+    val name: String,
+    val arguments: JSONObject,
+    val extra: JSONObject? = null
+)
 
 /** Resultado devolvido à IA depois de executar uma ferramenta. */
 data class ToolResult(val ok: Boolean, val message: String) {
@@ -24,7 +33,7 @@ data class AiTurn(val text: String, val toolCalls: List<ToolCall>)
 class AiException(message: String) : Exception(message)
 
 /**
- * Provedor de IA (chave de API OpenAI/Anthropic, login ChatGPT, modelo local).
+ * Provedor de IA acedido com a chave de API do utilizador.
  * Converte as ferramentas neutras de [ToolDispatcher.toolDefinitions] para o formato do seu serviço.
  */
 interface AiProvider {

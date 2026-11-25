@@ -5,14 +5,18 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** OpenAI com a chave de API do próprio utilizador (Chat Completions com chamadas de função). */
+/**
+ * Qualquer serviço compatível com a API Chat Completions da OpenAI, com chamadas de função:
+ * OpenAI, Google Gemini (endpoint de compatibilidade) e NVIDIA NIM. Muda só a base URL.
+ */
 class OpenAiProvider(
     private val apiKey: String,
     private val model: String,
-    private val baseUrl: String = "https://api.openai.com/v1"
+    private val baseUrl: String = "https://api.openai.com/v1",
+    override val displayName: String = "OpenAI",
+    // O Gemini não aceita `parameters` vazio em ferramentas sem argumentos.
+    private val omitEmptyParameters: Boolean = false
 ) : AiProvider {
-
-    override val displayName = "OpenAI (chave de API)"
 
     override suspend fun send(system: String, messages: List<AiMessage>, tools: JSONArray): AiTurn =
         withContext(Dispatchers.IO) {
@@ -23,22 +27,22 @@ class OpenAiProvider(
                     is AiMessage.User ->
                         msgs.put(JSONObject().put("role", "user").put("content", m.text))
                     is AiMessage.Assistant -> {
-                        val o = JSONObject().put("role", "assistant")
-                        o.put("content", if (m.text.isEmpty()) JSONObject.NULL else m.text)
+                        val o = JSONObject().put("role", "assistant").put("content", m.text)
                         if (m.toolCalls.isNotEmpty()) {
                             val calls = JSONArray()
                             for (call in m.toolCalls) {
-                                calls.put(
-                                    JSONObject()
-                                        .put("id", call.id)
-                                        .put("type", "function")
-                                        .put(
-                                            "function",
-                                            JSONObject()
-                                                .put("name", call.name)
-                                                .put("arguments", call.arguments.toString())
-                                        )
-                                )
+                                val entry = JSONObject()
+                                    .put("id", call.id)
+                                    .put("type", "function")
+                                    .put(
+                                        "function",
+                                        JSONObject()
+                                            .put("name", call.name)
+                                            .put("arguments", call.arguments.toString())
+                                    )
+                                // Ex.: thought_signature do Gemini 3, que tem de ser devolvida.
+                                call.extra?.let { entry.put("extra_content", it) }
+                                calls.put(entry)
                             }
                             o.put("tool_calls", calls)
                         }
@@ -56,7 +60,12 @@ class OpenAiProvider(
 
             val toolDefs = JSONArray()
             for (i in 0 until tools.length()) {
-                toolDefs.put(JSONObject().put("type", "function").put("function", tools.getJSONObject(i)))
+                val definition = JSONObject(tools.getJSONObject(i).toString())
+                if (omitEmptyParameters) {
+                    val properties = definition.optJSONObject("parameters")?.optJSONObject("properties")
+                    if (properties == null || properties.length() == 0) definition.remove("parameters")
+                }
+                toolDefs.put(JSONObject().put("type", "function").put("function", definition))
             }
 
             val body = JSONObject()
@@ -83,7 +92,8 @@ class OpenAiProvider(
                     } catch (e: Exception) {
                         JSONObject()
                     }
-                    calls.add(ToolCall(c.getString("id"), fn.getString("name"), args))
+                    val id = c.optString("id").ifBlank { "call_$i" }
+                    calls.add(ToolCall(id, fn.getString("name"), args, c.optJSONObject("extra_content")))
                 }
             }
             AiTurn(text, calls)
