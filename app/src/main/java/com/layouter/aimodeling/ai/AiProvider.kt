@@ -22,7 +22,7 @@ data class ToolResult(val ok: Boolean, val message: String) {
 
 /** Histórico da conversa, em formato neutro. Cada provedor converte para o seu formato. */
 sealed class AiMessage {
-    data class User(val text: String) : AiMessage()
+    data class User(val text: String, val imageBase64: String? = null, val imageMimeType: String = "image/jpeg") : AiMessage()
     data class Assistant(val text: String, val toolCalls: List<ToolCall>) : AiMessage()
     data class ToolOutput(val callId: String, val name: String, val result: ToolResult) : AiMessage()
 }
