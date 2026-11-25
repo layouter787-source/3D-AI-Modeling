@@ -30,7 +30,7 @@ sealed class AiMessage {
 /** Uma resposta da IA: texto para mostrar e/ou ferramentas a executar. */
 data class AiTurn(val text: String, val toolCalls: List<ToolCall>)
 
-class AiException(message: String) : Exception(message)
+class AiException(message: String, val httpCode: Int? = null, cause: Throwable? = null) : Exception(message, cause)
 
 /**
  * Provedor de IA acedido com a chave de API do utilizador.
