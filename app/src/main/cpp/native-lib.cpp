@@ -531,7 +531,7 @@ Java_com_layouter_aimodeling_NativeBridge_exportObj(JNIEnv* env, jobject) {
 
 JNIEXPORT jstring JNICALL
 Java_com_layouter_aimodeling_NativeBridge_exportMtl(JNIEnv* env, jobject) {
-    std::string output = "# Material library for 3d-model.obj\\n";
+    std::string output = "# Material library for 3d-model.obj\n";
     {
         std::lock_guard<std::mutex> lock(gMutex);
         const Scene& scene = gRenderer.editor.scene();
@@ -539,7 +539,7 @@ Java_com_layouter_aimodeling_NativeBridge_exportMtl(JNIEnv* env, jobject) {
             char line[320];
             std::snprintf(
                 line, sizeof(line),
-                "newmtl material_%d\\nKa 0.080000 0.080000 0.080000\\nKd %.6f %.6f %.6f\\nKs 0.180000 0.180000 0.180000\\nNs 32.000000\\nillum 2\\n\\n",
+                "newmtl material_%d\nKa 0.080000 0.080000 0.080000\nKd %.6f %.6f %.6f\nKs 0.180000 0.180000 0.180000\nNs 32.000000\nillum 2\n\n",
                 object.id, object.color.r, object.color.g, object.color.b
             );
             output += line;
