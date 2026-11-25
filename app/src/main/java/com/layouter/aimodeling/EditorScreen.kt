@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowBack
@@ -38,6 +39,11 @@ import androidx.compose.material.icons.outlined.SmartToy
 import androidx.compose.material.icons.outlined.Undo
 import androidx.compose.material.icons.outlined.ZoomIn
 import androidx.compose.material.icons.outlined.ZoomOut
+import androidx.compose.material.icons.outlined.Build
+import androidx.compose.material.icons.outlined.Extension
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -77,6 +83,9 @@ fun EditorScreen(isDarkTheme: Boolean = true, onToggleTheme: () -> Unit = {}) {
     val rev = revision.intValue
     val refresh: () -> Unit = { revision.intValue++ }
     var showAi by remember { mutableStateOf(false) }
+    var showMeshTools by remember { mutableStateOf(false) }
+    var showExtensions by remember { mutableStateOf(false) }
+    var faceIndex by remember { mutableStateOf("0") }
     var objExport by remember { mutableStateOf("") }
     var projectExport by remember { mutableStateOf("") }
     var mtlExport by remember { mutableStateOf("") }
@@ -240,10 +249,22 @@ fun EditorScreen(isDarkTheme: Boolean = true, onToggleTheme: () -> Unit = {}) {
                 Icon(Icons.Outlined.FileDownload, "Export OBJ", tint = Color(0xFFBFC7D1))
             }
             IconButton(onClick = { showAi = !showAi }) {
-                Icon(Icons.Outlined.SmartToy, "Assistente IA", tint = Color(0xFF9BC8C0))
+                Icon(Icons.Outlined.SmartToy, "Assistente IA", tint = MaterialTheme.colorScheme.primary)
+            }
+            IconButton(onClick = { showMeshTools = true }) {
+                Icon(Icons.Outlined.Build, "Ferramentas de malha", tint = MaterialTheme.colorScheme.primary)
+            }
+            IconButton(onClick = { showExtensions = true }) {
+                Icon(Icons.Outlined.Extension, "Extensões", tint = MaterialTheme.colorScheme.onSurface)
+            }
+            IconButton(onClick = onToggleTheme) {
+                Icon(if (isDarkTheme) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,
+                    if (isDarkTheme) "Tema claro" else "Tema escuro", tint = MaterialTheme.colorScheme.primary)
             }
         }
 
+        if (showMeshTools) MeshWorkbenchDialog(selected, faceIndex, { faceIndex = it }, { showMeshTools = false }, refresh)
+        if (showExtensions) ExtensionLibraryDialog { showExtensions = false }
         AiPanel(
             onClose = { showAi = false },
             onSceneChanged = refresh,
@@ -261,6 +282,74 @@ fun EditorScreen(isDarkTheme: Boolean = true, onToggleTheme: () -> Unit = {}) {
             }
         }
     }
+}
+
+
+@Composable
+private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (String) -> Unit, onClose: () -> Unit, onChanged: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    fun apply(operation: String, parameter: Int = 1, value: Float = 0.15f, faces: IntArray = intArrayOf()) {
+        if (selected < 0) { Toast.makeText(context, "Seleciona um objeto primeiro", Toast.LENGTH_SHORT).show(); return }
+        val ok = NativeBridge.meshOperation(selected, operation, faces, parameter, value)
+        Toast.makeText(context, if (ok) "Malha alterada · Undo disponível" else "Operação falhou: verifica a topologia", Toast.LENGTH_SHORT).show()
+        if (ok) onChanged()
+    }
+    AlertDialog(onDismissRequest = onClose, title = { Text("Mesh Workbench") }, text = {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Text("Ferramentas de geometria nativa. As alterações entram no Undo/Redo.")
+            Text("Face ID (pede à IA: get_mesh_topology)")
+            OutlinedTextField(faceIndex, onFaceIndex, label = { Text("Índice da face") }, singleLine = true)
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Button(onClick = { apply("extrude", value = 0.2f, faces = intArrayOf(faceIndex.toIntOrNull() ?: 0)) }) { Text("Extrude") }
+                Button(onClick = { apply("inset", value = 0.08f, faces = intArrayOf(faceIndex.toIntOrNull() ?: 0)) }) { Text("Inset") }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Button(onClick = { apply("subdivide") }) { Text("Subdividir") }
+                Button(onClick = { apply("smooth", parameter = 3, value = 0.35f) }) { Text("Suavizar") }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Button(onClick = { apply("solidify", value = 0.08f) }) { Text("Espessura") }
+                Button(onClick = { apply("weld", value = 0.0001f) }) { Text("Weld") }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Button(onClick = { apply("triangulate") }) { Text("Triangular") }
+                Button(onClick = { apply("flip_normals") }) { Text("Inverter normais") }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Button(onClick = { apply("crease_by_angle", value = 30f) }) { Text("Crease 30°") }
+                Button(onClick = { apply("mirror", parameter = 0) }) { Text("Mirror X") }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Button(onClick = { apply("mirror", parameter = 1) }) { Text("Mirror Y") }
+                Button(onClick = { apply("mirror", parameter = 2) }) { Text("Mirror Z") }
+            }
+            Text("Loop Cut e Boolean estão disponíveis ao agente: pede para consultar a topologia e executar sobre as arestas/objetos corretos.")
+        }
+    }, confirmButton = { TextButton(onClick = onClose) { Text("Fechar") } })
+}
+
+@Composable
+private fun ExtensionLibraryDialog(onClose: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val items = listOf(
+        "Terrain3D" to ("Terreno com sculpt, heightmaps, textura e LOD/clipmaps." to "https://github.com/TokisanGames/Terrain3D"),
+        "Polyforge" to ("Edit Mode com extrude, inset, bevel, loop cut, mirror, Boolean e seleção." to "https://github.com/Seba313/polyforge"),
+        "GoBuild" to ("Edição de mesh por vértice, aresta e face." to "https://github.com/marcel-b-roodt/gobuild"),
+        "Blender BMesh" to ("API de topologia para operações de malha." to "https://developer.blender.org/docs/features/objects/mesh/bmesh/"),
+        "Materializr CAD" to ("CAD paramétrico e operações de sólidos." to "https://github.com/materializr-cad/materializr"),
+        "Strata:3D" to ("Viewer Android e referência para formatos/meshes grandes." to "https://github.com/damzenquis/Strata-3D")
+    )
+    AlertDialog(onDismissRequest = onClose, title = { Text("Extensões e pesquisa") }, text = {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Text("Addons Godot/Blender não se instalam diretamente neste app nativo. Esta biblioteca reúne fontes para adaptar recursos em Kotlin/C++/OpenGL; integração real exige portar, validar licença e testar.")
+            items.forEach { (name, data) ->
+                Text(name, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleSmall)
+                Text(data.first, style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(data.second))) } }) { Text("Abrir fonte") }
+                androidx.compose.material3.HorizontalDivider()
+            }
+        }
+    }, confirmButton = { TextButton(onClick = onClose) { Text("Fechar") } })
 }
 
 @Composable
