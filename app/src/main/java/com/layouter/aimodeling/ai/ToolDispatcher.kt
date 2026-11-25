@@ -25,6 +25,7 @@ object ToolDispatcher {
             "web_search" -> ToolResult(true, InternetTools.search(a.getString("query")))
             "read_webpage" -> ToolResult(true, InternetTools.readPage(a.getString("url")))
             "create_primitive" -> createPrimitive(a)
+            "create_loft_mesh" -> createLoftMesh(a)
             "create_batch" -> createBatch(a)
             "create_asset_preset" -> createPreset(a)
             "duplicate_object" -> duplicateObject(a)
@@ -77,6 +78,32 @@ object ToolDispatcher {
             "search_modeling_reference" -> ToolResult(true, InternetTools.search(a.getString("query")))
             else -> ToolResult(false, "Unknown tool: ${call.name}")
         }
+    }
+
+    private fun createLoftMesh(a: JSONObject): ToolResult {
+        val profiles = a.getJSONArray("profiles")
+        require(profiles.length() in 3..24) { "A loft needs 3..24 cross-section profiles" }
+        val packed = FloatArray(profiles.length() * 4)
+        var previousX = Float.NEGATIVE_INFINITY
+        for (i in 0 until profiles.length()) {
+            val p = profiles.getJSONObject(i)
+            val x = p.getDouble("x").toFloat()
+            val width = p.getDouble("half_width").toFloat()
+            val centerY = p.optDouble("center_y", 0.5).toFloat()
+            val height = p.getDouble("half_height").toFloat()
+            require(x.isFinite() && width.isFinite() && centerY.isFinite() && height.isFinite())
+            require(x > previousX) { "Profile x values must increase from front to rear" }
+            require(width > 0.01f && height > 0.01f) { "Profile width and height must be positive" }
+            previousX = x
+            packed[i*4] = x; packed[i*4+1] = width
+            packed[i*4+2] = centerY; packed[i*4+3] = height
+        }
+        val segments = a.optInt("segments", 16).coerceIn(8, 32)
+        val position = a.optJSONArray("position")?.let { a.vec3("position") } ?: floatArrayOf(0f,0f,0f)
+        val id = NativeBridge.createLoftMesh(packed, segments, position[0], position[1], position[2])
+        if (id < 0) return ToolResult(false, "Mesh creation failed: invalid profile or object limit")
+        a.optJSONArray("color")?.let { val c=a.vec3("color"); NativeBridge.setColor(id,c[0],c[1],c[2]) }
+        return ToolResult(true, "Created smooth closed loft mesh id $id with ${profiles.length()} profiles and $segments segments. Scene: ${NativeBridge.describeScene()}")
     }
 
     private fun createPrimitive(a: JSONObject): ToolResult {
@@ -195,7 +222,7 @@ object ToolDispatcher {
                         .put("required", JSONArray(required))
                 )
 
-        val primitiveTypes = JSONArray(PrimitiveType.values().map { it.apiName })
+        val primitiveTypes = JSONArray(PrimitiveType.values().filter { it != PrimitiveType.CUSTOM_MESH }.map { it.apiName })
 
         return JSONArray()
             .put(
@@ -209,6 +236,22 @@ object ToolDispatcher {
                     listOf("type")
                 )
             )
+            .put(tool(
+                "create_loft_mesh",
+                "Create ONE continuous, closed, smooth custom mesh by lofting cross-sections along X. Use for car bodies, vehicle shells, helmets, organic elongated forms and shaped hulls—not primitive piles. profiles are ordered front-to-rear and each profile has x, half_width (along Z), center_y and half_height (along Y). Shape the silhouette by changing width/height at each section. 3..24 profiles; segments 8..32. Optional position and RGB color.",
+                JSONObject()
+                    .put("profiles", JSONObject().put("type","array").put("minItems",3).put("maxItems",24)
+                        .put("items",JSONObject().put("type","object").put("properties",JSONObject()
+                            .put("x",JSONObject().put("type","number"))
+                            .put("half_width",JSONObject().put("type","number"))
+                            .put("center_y",JSONObject().put("type","number"))
+                            .put("half_height",JSONObject().put("type","number")))
+                            .put("required",JSONArray(listOf("x","half_width","half_height")))))
+                    .put("segments",JSONObject().put("type","integer").put("minimum",8).put("maximum",32).put("default",16))
+                    .put("position",number3("World position"))
+                    .put("color",number3("RGB 0..1")),
+                listOf("profiles")
+            ))
             .put(
                 tool(
                     "set_transform",
