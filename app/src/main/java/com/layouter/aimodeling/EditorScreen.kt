@@ -1,5 +1,8 @@
 package com.layouter.aimodeling
 
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +24,7 @@ import androidx.compose.material.icons.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Redo
 import androidx.compose.material.icons.outlined.RotateLeft
@@ -36,6 +40,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +51,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private const val MOVE_STEP = 0.25f
 
@@ -63,6 +71,24 @@ fun EditorScreen() {
     val rev = revision.intValue
     val refresh: () -> Unit = { revision.intValue++ }
     var showAi by remember { mutableStateOf(false) }
+    var objExport by remember { mutableStateOf("") }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/plain")
+    ) { uri ->
+        if (uri != null && objExport.isNotBlank()) {
+            scope.launch {
+                val saved = withContext(Dispatchers.IO) {
+                    runCatching {
+                        context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(objExport) }
+                            ?: error("Could not open file")
+                    }
+                }
+                Toast.makeText(context, if (saved.isSuccess) "OBJ exported" else "OBJ export failed", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     val selected = remember(rev) { NativeBridge.getSelected() }
     val canUndo = remember(rev) { NativeBridge.canUndo() }
@@ -88,6 +114,13 @@ fun EditorScreen() {
                 Icon(Icons.Outlined.Redo, "Refazer", tint = if (canRedo) Color.White else Color.Gray)
             }
             Box(Modifier.size(1.dp, 25.dp).background(Color(0xFF454B54)))
+            IconButton(onClick = {
+                objExport = NativeBridge.exportObj()
+                if (objExport.isBlank()) Toast.makeText(context, "Scene is empty", Toast.LENGTH_SHORT).show()
+                else exportLauncher.launch("3d-model.obj")
+            }) {
+                Icon(Icons.Outlined.FileDownload, "Export OBJ", tint = Color(0xFFBFC7D1))
+            }
             IconButton(onClick = { showAi = !showAi }) {
                 Icon(Icons.Outlined.SmartToy, "Assistente IA", tint = Color(0xFF75C8F2))
             }
