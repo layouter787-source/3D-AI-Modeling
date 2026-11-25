@@ -1,7 +1,6 @@
 package com.layouter.aimodeling
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,17 +9,38 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Send
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.Button
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -39,7 +59,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.layouter.aimodeling.ai.AiAgent
+import com.layouter.aimodeling.ai.AiModel
 import com.layouter.aimodeling.ai.AiSettings
+import com.layouter.aimodeling.ai.ModelCatalog
 import com.layouter.aimodeling.ai.ProviderKind
 import com.layouter.aimodeling.ai.SecretStore
 import com.layouter.aimodeling.ai.buildProvider
@@ -47,6 +69,11 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 private data class ChatLine(val role: String, val text: String)
+
+private val panelBg = Color(0xFF17191E)
+private val surfaceBg = Color(0xFF22252C)
+private val accent = Color(0xFF75C8F2)
+private val secondaryText = Color(0xFFA7ADB8)
 
 @Composable
 fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier = Modifier) {
@@ -58,7 +85,12 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
     var kind by remember { mutableStateOf(settings.kind) }
     var model by remember { mutableStateOf(settings.model(settings.kind)) }
     var apiKey by remember { mutableStateOf(secrets.get(AiSettings.keyName(settings.kind)) ?: "") }
-    var showSettings by remember { mutableStateOf(apiKey.isBlank()) }
+    var showSettings by remember { mutableStateOf(apiKey.isBlank() || model.isBlank()) }
+    var providerMenu by remember { mutableStateOf(false) }
+    var modelMenu by remember { mutableStateOf(false) }
+    var modelOptions by remember { mutableStateOf<List<AiModel>>(emptyList()) }
+    var loadingModels by remember { mutableStateOf(false) }
+    var modelError by remember { mutableStateOf<String?>(null) }
     var agent by remember { mutableStateOf<AiAgent?>(null) }
     val lines = remember { mutableStateListOf<ChatLine>() }
     var input by remember { mutableStateOf("") }
@@ -69,14 +101,44 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
         if (lines.isNotEmpty()) listState.animateScrollToItem(lines.lastIndex)
     }
 
+    fun loadModels() {
+        if (apiKey.isBlank()) {
+            modelError = "Introduz a chave de API antes de consultar os modelos."
+            return
+        }
+        scope.launch {
+            loadingModels = true
+            modelError = null
+            try {
+                modelOptions = ModelCatalog.load(kind, apiKey.trim())
+                if (modelOptions.isEmpty()) {
+                    modelError = "A API não devolveu modelos disponíveis para esta chave."
+                }
+            } catch (e: Exception) {
+                modelError = e.message ?: "Não foi possível consultar a API."
+            } finally {
+                loadingModels = false
+            }
+        }
+    }
+
+    fun saveSettings() {
+        settings.kind = kind
+        settings.setModel(kind, model)
+        if (apiKey.isNotBlank()) secrets.put(AiSettings.keyName(kind), apiKey.trim())
+        else secrets.remove(AiSettings.keyName(kind))
+        agent = null
+        showSettings = false
+    }
+
     fun send() {
         val text = input.trim()
         if (text.isEmpty() || busy) return
-        if (apiKey.isBlank()) {
+        if (apiKey.isBlank() || model.isBlank()) {
             showSettings = true
             return
         }
-        val current = agent ?: AiAgent(buildProvider(kind, apiKey, model)).also { agent = it }
+        val current = agent ?: AiAgent(buildProvider(kind, apiKey.trim(), model.trim())).also { agent = it }
         input = ""
         lines.add(ChatLine("user", text))
         busy = true
@@ -84,138 +146,247 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
             try {
                 current.ask(
                     userText = text,
-                    onText = { lines.add(ChatLine("assistant", it)) },
+                    onText = { answer -> if (answer.isNotBlank()) lines.add(ChatLine("assistant", answer)) },
                     onTool = { call, result ->
-                        lines.add(ChatLine("tool", "${call.name}: ${result.message}".take(160)))
+                        lines.add(ChatLine("tool", if (result.ok) "Executado: ${call.name}" else "Falhou: ${call.name}"))
                     },
                     onSceneChanged = onSceneChanged
                 )
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                lines.add(ChatLine("error", e.message ?: "Erro desconhecido"))
+                lines.add(ChatLine("error", e.message ?: "Falha na ligação. Confirma a chave e o modelo."))
+            } finally {
+                onSceneChanged()
+                busy = false
             }
-            onSceneChanged()
-            busy = false
         }
     }
 
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .fillMaxHeight(0.55f)
-            .background(Color(0xF01E1E24))
+            .fillMaxHeight(0.90f)
+            .background(panelBg, RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
             .systemBarsPadding()
             .imePadding()
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Assistente de IA", color = Color.White, style = MaterialTheme.typography.titleMedium)
-            Row {
-                TextButton(onClick = { showSettings = !showSettings }) { Text("Config") }
-                TextButton(onClick = onClose) { Text("Fechar") }
+            Surface(shape = RoundedCornerShape(13.dp), color = Color(0xFF2B3945)) {
+                Icon(Icons.Filled.SmartToy, null, tint = accent, modifier = Modifier.padding(9.dp).size(23.dp))
             }
+            Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                Text("Assistente", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                Text(
+                    "${kind.label} · ${model.ifBlank { "Escolhe um modelo" }}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = secondaryText,
+                    maxLines = 1
+                )
+            }
+            IconButton(onClick = {
+                lines.clear()
+                agent = null
+                input = ""
+            }) { Icon(Icons.Outlined.Add, "Nova conversa", tint = secondaryText) }
+            IconButton(onClick = { showSettings = !showSettings }) {
+                Icon(Icons.Outlined.Settings, "Configuração", tint = if (showSettings) accent else secondaryText)
+            }
+            IconButton(onClick = onClose) { Icon(Icons.Outlined.Close, "Fechar", tint = secondaryText) }
         }
 
         if (showSettings) {
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            Column(
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .fillMaxWidth()
+                    .background(surfaceBg, RoundedCornerShape(18.dp))
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                ProviderKind.values().forEach { k ->
-                    if (k == kind) {
-                        Button(onClick = {}) { Text(k.label) }
-                    } else {
-                        FilledTonalButton(onClick = {
-                            kind = k
-                            model = settings.model(k)
-                            apiKey = secrets.get(AiSettings.keyName(k)) ?: ""
-                        }) { Text(k.label) }
+                Text("Ligação à IA", color = Color.White, style = MaterialTheme.typography.titleSmall)
+                Text("Escolhe o serviço e consulta os modelos que a tua chave pode ver.", color = secondaryText, style = MaterialTheme.typography.bodySmall)
+
+                Box {
+                    OutlinedButton(
+                        onClick = { providerMenu = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(13.dp)
+                    ) {
+                        Text(kind.label, modifier = Modifier.weight(1f), color = Color.White)
+                        Icon(Icons.Outlined.KeyboardArrowDown, null)
+                    }
+                    DropdownMenu(expanded = providerMenu, onDismissRequest = { providerMenu = false }) {
+                        ProviderKind.values().forEach { provider ->
+                            DropdownMenuItem(
+                                text = { Text(provider.label) },
+                                onClick = {
+                                    kind = provider
+                                    model = settings.model(provider)
+                                    apiKey = secrets.get(AiSettings.keyName(provider)) ?: ""
+                                    modelOptions = emptyList()
+                                    modelError = null
+                                    agent = null
+                                    providerMenu = false
+                                }
+                            )
+                        }
                     }
                 }
-            }
-            OutlinedTextField(
-                value = apiKey,
-                onValueChange = { apiKey = it },
-                label = { Text("Chave de API (${kind.keyHint})") },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                modifier = Modifier.fillMaxWidth()
-            )
-            Text(
-                "Onde obter a chave: ${kind.keySource}",
-                color = Color(0xFFBBBBC4),
-                style = MaterialTheme.typography.bodySmall
-            )
-            OutlinedTextField(
-                value = model,
-                onValueChange = { model = it },
-                label = { Text("Modelo") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Text(
-                "A chave fica cifrada neste dispositivo e só é enviada ao serviço escolhido. " +
-                    "O uso é cobrado na tua conta desse serviço. Se o modelo não existir na tua conta, troca o nome acima.",
-                color = Color(0xFFBBBBC4),
-                style = MaterialTheme.typography.bodySmall
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = {
-                    settings.kind = kind
-                    settings.setModel(kind, model.trim())
-                    if (apiKey.isNotBlank()) {
-                        secrets.put(AiSettings.keyName(kind), apiKey.trim())
-                    } else {
-                        secrets.remove(AiSettings.keyName(kind))
+
+                OutlinedTextField(
+                    value = apiKey,
+                    onValueChange = { apiKey = it },
+                    label = { Text("Chave de API") },
+                    placeholder = { Text(kind.keyHint) },
+                    leadingIcon = { Icon(Icons.Outlined.Key, null) },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(13.dp)
+                )
+                Text("Chave: ${kind.keySource}", color = secondaryText, style = MaterialTheme.typography.labelSmall)
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = model,
+                        onValueChange = { model = it; agent = null },
+                        label = { Text("ID do modelo") },
+                        placeholder = { Text("Seleciona na lista da API") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        shape = RoundedCornerShape(13.dp)
+                    )
+                    Box {
+                        IconButton(onClick = { modelMenu = true }, enabled = modelOptions.isNotEmpty()) {
+                            Icon(Icons.Outlined.KeyboardArrowDown, "Modelos consultados")
+                        }
+                        DropdownMenu(expanded = modelMenu, onDismissRequest = { modelMenu = false }) {
+                            modelOptions.forEach { option ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Column {
+                                            Text(option.displayName, maxLines = 1)
+                                            if (option.displayName != option.id) {
+                                                Text(option.id, color = secondaryText, style = MaterialTheme.typography.labelSmall)
+                                            }
+                                        }
+                                    },
+                                    onClick = {
+                                        model = option.id
+                                        agent = null
+                                        modelMenu = false
+                                    }
+                                )
+                            }
+                        }
                     }
-                    agent = null
-                    showSettings = false
-                }) { Text("Guardar") }
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Button(
+                        onClick = { loadModels() },
+                        enabled = !loadingModels && apiKey.isNotBlank(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF314B5C))
+                    ) {
+                        Icon(Icons.Outlined.Refresh, null, modifier = Modifier.size(18.dp))
+                        Text(if (loadingModels) "A consultar…" else "Consultar modelos", modifier = Modifier.padding(start = 6.dp))
+                    }
+                    TextButton(onClick = { saveSettings() }) {
+                        Icon(Icons.Outlined.CheckCircle, null, tint = accent, modifier = Modifier.size(18.dp))
+                        Text("Guardar", color = accent)
+                    }
+                }
+                modelError?.let {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.Warning, null, tint = Color(0xFFFFB66E), modifier = Modifier.size(17.dp))
+                        Text(it, color = Color(0xFFFFB66E), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 6.dp))
+                    }
+                }
+                Text(
+                    "A chave é guardada cifrada no dispositivo. A lista vem da API do provedor; o modelo escolhido é validado pelo próprio serviço.",
+                    color = secondaryText,
+                    style = MaterialTheme.typography.labelSmall
+                )
                 TextButton(onClick = {
                     secrets.remove(AiSettings.keyName(kind))
                     apiKey = ""
                     agent = null
-                }) { Text("Apagar chave") }
+                }) {
+                    Icon(Icons.Outlined.DeleteOutline, null, modifier = Modifier.size(18.dp))
+                    Text("Remover chave")
+                }
             }
         } else {
             LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
+                modifier = Modifier.weight(1f).fillMaxWidth(),
                 state = listState,
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                verticalArrangement = Arrangement.spacedBy(13.dp)
             ) {
                 if (lines.isEmpty()) {
                     item {
-                        Text(
-                            "Peça algo, por exemplo: \"faz uma mesa com 4 pernas\".",
-                            color = Color(0xFFBBBBC4)
-                        )
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(top = 34.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Surface(shape = CircleShape, color = Color(0xFF27333D)) {
+                                Icon(Icons.Filled.SmartToy, null, tint = accent, modifier = Modifier.padding(19.dp).size(38.dp))
+                            }
+                            Text("O que vamos criar?", color = Color.White, style = MaterialTheme.typography.titleLarge)
+                            Text(
+                                "Descreve um objeto 3D. A IA pode criar e editar a cena.",
+                                color = secondaryText,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
                     }
                 }
                 items(lines) { line -> ChatBubble(line) }
+                if (busy) {
+                    item {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.SmartToy, null, tint = accent, modifier = Modifier.size(19.dp))
+                            Text(" A pensar…", color = secondaryText, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
             }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = input,
-                    onValueChange = { input = it },
-                    placeholder = { Text("Escreve o que queres modelar") },
-                    enabled = !busy,
-                    modifier = Modifier.weight(1f)
-                )
-                Button(onClick = { send() }, enabled = !busy && input.isNotBlank()) {
-                    Text(if (busy) "..." else "Enviar")
+
+            Surface(color = surfaceBg, shape = RoundedCornerShape(22.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 7.dp, top = 5.dp, bottom = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = input,
+                        onValueChange = { input = it },
+                        placeholder = { Text("Mensagem…") },
+                        enabled = !busy,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 4,
+                        singleLine = false,
+                        shape = RoundedCornerShape(16.dp),
+                        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                            unfocusedBorderColor = Color.Transparent,
+                            focusedBorderColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            focusedContainerColor = Color.Transparent
+                        )
+                    )
+                    IconButton(
+                        onClick = { send() },
+                        enabled = !busy && input.isNotBlank(),
+                        modifier = Modifier.background(if (!busy && input.isNotBlank()) accent else Color(0xFF3A414B), CircleShape)
+                    ) {
+                        Icon(Icons.Outlined.Send, "Enviar", tint = Color(0xFF10151A))
+                    }
                 }
             }
         }
@@ -224,23 +395,54 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
 
 @Composable
 private fun ChatBubble(line: ChatLine) {
-    val background = when (line.role) {
-        "user" -> Color(0xFF3A5BA0)
-        "tool" -> Color(0xFF26352B)
-        "error" -> Color(0xFF6B2B2B)
-        else -> Color(0xFF2E2E36)
+    if (line.role == "tool") {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 34.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Outlined.CheckCircle, null, tint = Color(0xFF79CDA4), modifier = Modifier.size(15.dp))
+            Text(line.text, color = secondaryText, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 6.dp))
+        }
+        return
     }
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(background, RoundedCornerShape(8.dp))
-            .padding(8.dp)
+
+    val isUser = line.role == "user"
+    val isError = line.role == "error"
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
+        verticalAlignment = Alignment.Top
     ) {
-        Text(
-            text = line.text,
-            color = Color.White,
-            style = if (line.role == "tool") MaterialTheme.typography.bodySmall
-            else MaterialTheme.typography.bodyMedium
-        )
+        if (!isUser) {
+            Icon(
+                if (isError) Icons.Outlined.Warning else Icons.Filled.SmartToy,
+                null,
+                tint = if (isError) Color(0xFFFFB66E) else accent,
+                modifier = Modifier.padding(top = 6.dp, end = 8.dp).size(20.dp)
+            )
+        }
+        Surface(
+            color = when {
+                isUser -> Color(0xFF30424F)
+                isError -> Color(0xFF492D2D)
+                else -> surfaceBg
+            },
+            shape = RoundedCornerShape(
+                topStart = 18.dp, topEnd = 18.dp,
+                bottomStart = if (isUser) 18.dp else 5.dp,
+                bottomEnd = if (isUser) 5.dp else 18.dp
+            ),
+            modifier = Modifier.fillMaxWidth(if (isUser) 0.86f else 0.94f)
+        ) {
+            Text(
+                line.text,
+                color = Color(0xFFF0F2F5),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp)
+            )
+        }
+        if (isUser) {
+            Icon(Icons.Outlined.Person, null, tint = secondaryText, modifier = Modifier.padding(start = 7.dp, top = 6.dp).size(19.dp))
+        }
     }
 }
