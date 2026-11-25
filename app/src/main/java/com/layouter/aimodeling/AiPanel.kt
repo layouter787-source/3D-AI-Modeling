@@ -84,13 +84,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 
 private data class ChatLine(val role: String, val text: String)
-private data class SavedChat(val title: String, val messages: List<ChatLine>)
+private data class SavedChat(val id: String, val title: String, val messages: List<ChatLine>)
 private val AiWorkScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-private val panelBg = Color(0xFF17191E)
-private val surfaceBg = Color(0xFF22252C)
-private val accent = Color(0xFF75C8F2)
-private val secondaryText = Color(0xFFA7ADB8)
+private val panelBg = Color(0xFF15171B)
+private val surfaceBg = Color(0xFF202329)
+private val accent = Color(0xFF9BC8C0)
+private val secondaryText = Color(0xFFA9AFB8)
 
 @Composable
 fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier = Modifier, visible: Boolean = true) {
@@ -117,16 +117,18 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
     var historyMenu by remember { mutableStateOf(false) }
     val chatPrefs = remember { context.getSharedPreferences("ai_chat_history", android.content.Context.MODE_PRIVATE) }
     val savedChats = remember { mutableStateListOf<SavedChat>() }
+    var activeChatId by remember { mutableStateOf(System.currentTimeMillis().toString()) }
     fun persistChats() {
         val current = lines.toList()
-        val title = current.firstOrNull { it.role == "user" }?.text?.take(48) ?: "Conversa"
-        val sessions = if (current.isEmpty()) savedChats.toList() else
-            (listOf(SavedChat(title, current)) + savedChats.filterNot { it.title == title }).take(25)
+        if (current.isEmpty()) return
+        val title = current.firstOrNull { it.role == "user" }?.text?.take(48)?.ifBlank { "Conversa" } ?: "Conversa"
+        val sessions = (listOf(SavedChat(activeChatId, title, current)) +
+            savedChats.filterNot { it.id == activeChatId }).take(25)
         savedChats.clear()
         savedChats.addAll(sessions)
         val array = org.json.JSONArray()
         sessions.forEach { session ->
-            val obj = org.json.JSONObject().put("title", session.title)
+            val obj = org.json.JSONObject().put("id", session.id).put("title", session.title)
             val msgArray = org.json.JSONArray()
             session.messages.forEach { msg -> msgArray.put(org.json.JSONObject().put("role", msg.role).put("text", msg.text)) }
             obj.put("messages", msgArray)
@@ -141,7 +143,7 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
             for (i in 0 until array.length()) {
                 val obj = array.getJSONObject(i); val msgs = obj.getJSONArray("messages")
                 val list = (0 until msgs.length()).map { j -> val m = msgs.getJSONObject(j); ChatLine(m.getString("role"), m.getString("text")) }
-                savedChats.add(SavedChat(obj.optString("title", "Conversa"), list))
+                savedChats.add(SavedChat(obj.optString("id", "legacy-" + i + "-" + obj.optString("title")), obj.optString("title", "Conversa"), list))
             }
         }
     }
@@ -249,7 +251,7 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
         modifier = modifier
             .fillMaxWidth()
             .fillMaxHeight(0.90f)
-            .background(panelBg, RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+            .background(panelBg, RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
             .systemBarsPadding()
             .imePadding()
             .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -259,7 +261,7 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Surface(shape = RoundedCornerShape(13.dp), color = Color(0xFF2B3945)) {
+            Surface(shape = RoundedCornerShape(13.dp), color = Color(0xFF2A3439)) {
                 Icon(Icons.Filled.SmartToy, null, tint = accent, modifier = Modifier.padding(9.dp).size(23.dp))
             }
             Column(Modifier.weight(1f).padding(start = 10.dp)) {
@@ -271,11 +273,29 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
                     maxLines = 1
                 )
             }
-            IconButton(onClick = {
-                lines.clear()
-                agent = null
-                input = ""
-            }) { Icon(Icons.Outlined.Add, "Nova conversa", tint = secondaryText) }
+            Box {
+                IconButton(onClick = { historyMenu = true }) {
+                    Icon(Icons.Outlined.History, "Histórico de conversas", tint = secondaryText)
+                }
+                DropdownMenu(expanded = historyMenu, onDismissRequest = { historyMenu = false }) {
+                    DropdownMenuItem(text = { Text("Nova conversa") }, leadingIcon = { Icon(Icons.Outlined.Add, null) }, onClick = {
+                        persistChats()
+                        lines.clear(); agent = null; input = ""
+                        activeChatId = System.currentTimeMillis().toString()
+                        historyMenu = false
+                    })
+                    savedChats.forEach { saved ->
+                        DropdownMenuItem(text = { Text(saved.title, maxLines = 1) }, onClick = {
+                            persistChats()
+                            lines.clear(); lines.addAll(saved.messages)
+                            activeChatId = saved.id
+                            agent = AiAgent(buildProvider(kind, apiKey.trim(), model.trim()))
+                            agent?.restoreConversation(saved.messages.map { it.role to it.text })
+                            input = ""; historyMenu = false
+                        })
+                    }
+                }
+            }
             IconButton(onClick = { showSettings = !showSettings }) {
                 Icon(Icons.Outlined.Settings, "Configuração", tint = if (showSettings) accent else secondaryText)
             }
