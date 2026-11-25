@@ -438,6 +438,9 @@ Java_com_layouter_aimodeling_NativeBridge_setColor(JNIEnv*, jobject, jint id, jf
 }
 
 JNIEXPORT jboolean JNICALL
+Java_com_layouter_aimodeling_NativeBridge_sculptMesh(JNIEnv*, jobject, jint id, jfloat cx,jfloat cy,jfloat cz,jfloat radius,jfloat dx,jfloat dy,jfloat dz){std::lock_guard<std::mutex> lock(gMutex);return toJ(gRenderer.editor.sculptMesh(id,Vec3{cx,cy,cz},radius,Vec3{dx,dy,dz}));}
+
+JNIEXPORT jboolean JNICALL
 Java_com_layouter_aimodeling_NativeBridge_snapToGround(JNIEnv*, jobject, jint id) {
     std::lock_guard<std::mutex> lock(gMutex);
     return toJ(gRenderer.editor.snapToGround(id));
