@@ -22,6 +22,14 @@ Abre o assistente → Configurações → escolhe o provedor → introduz a chav
 
 A disponibilidade depende da chave, região, conta e permissões do provedor. O app mostra os modelos anunciados pela API; o próprio endpoint de conversa confirma se o modelo suporta as ferramentas usadas pelo editor.
 
+## Interface e extensões
+
+- Tema claro branco/preto e tema escuro preto/branco, com azul como cor de destaque; escolha guardada no dispositivo.
+- Catálogo de capacidades nativas e projetos de extensão pesquisados, acessível à IA pela ferramenta get_modeling_extensions.
+- Pesquisa na web e leitura de documentação pública por ferramentas HTTPS com validação de destinos, redirecionamentos e limites de tamanho.
+- Extensões de terceiros são portadas e compiladas nativamente; addons Godot/Blender não são carregados diretamente no APK.
+- [Pesquisa e plano de integração do ecossistema](docs/MODELING_EXTENSION_ECOSYSTEM.md).
+
 ## Base técnica
 
 - Android: Kotlin, Jetpack Compose, Material 3
