@@ -34,6 +34,10 @@ public:
     bool rotateBy(int id, Vec3 degrees);
     bool scaleBy(int id, Vec3 factor);
     bool sculptMesh(int id, Vec3 center, float radius, Vec3 offset);
+    // Blender-inspired polygon operations applied to the existing editable triangle topology.
+    bool meshOperation(int id, const std::string& operation, const std::vector<int>& faces,
+                       int parameter, float value);
+    std::string describeMesh(int id, int offset, int limit) const;
     bool setColor(int id, Color color);
     bool snapToGround(int id);
     bool snapToGrid(int id, float step);
