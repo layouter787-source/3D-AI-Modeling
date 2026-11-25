@@ -5,8 +5,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Base64
-import android.content.Context
-import android.net.Uri
 import java.io.ByteArrayOutputStream
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -111,7 +109,7 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             try {
-                val bitmap = context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
+                val bitmap = decodeReferenceBitmap(context, uri)
                 if (bitmap != null) {
                     attachedImage = encodeReferenceImage(bitmap)
                     attachedMime = "image/jpeg"
@@ -446,6 +444,17 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
             }
         }
     }
+}
+
+private fun decodeReferenceBitmap(context: android.content.Context, uri: android.net.Uri): Bitmap? {
+    val resolver = context.contentResolver
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+    var sample = 1
+    while (bounds.outWidth / sample > 1280 || bounds.outHeight / sample > 1280) sample *= 2
+    val options = BitmapFactory.Options().apply { inSampleSize = sample; inPreferredConfig = Bitmap.Config.RGB_565 }
+    return resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
 }
 
 private fun encodeReferenceImage(source: Bitmap): String {
