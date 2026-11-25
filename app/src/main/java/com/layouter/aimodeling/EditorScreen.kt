@@ -213,13 +213,14 @@ fun EditorScreen(isDarkTheme: Boolean = true, onToggleTheme: () -> Unit = {}) {
             horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Text("MESH", color = if (isDarkTheme) Color(0xFF60A5FA) else Color(0xFF2563EB), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 8.dp, end = 4.dp))
+            IconButton(onClick = onToggleTheme) { Icon(if (isDarkTheme) Icons.Outlined.LightMode else Icons.Outlined.DarkMode, if (isDarkTheme) "Tema claro" else "Tema escuro", tint = if (isDarkTheme) Color(0xFF60A5FA) else Color(0xFF2563EB)) }
             IconButton(onClick = { NativeBridge.undo(); refresh() }, enabled = canUndo) {
-                Icon(Icons.Outlined.Undo, "Desfazer", tint = if (canUndo) MaterialTheme.colorScheme.onSurface else Color.Gray)
+                Icon(Icons.Outlined.Undo, "Desfazer", tint = if (canUndo) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
             }
             IconButton(onClick = { NativeBridge.redo(); refresh() }, enabled = canRedo) {
-                Icon(Icons.Outlined.Redo, "Refazer", tint = if (canRedo) Color.White else Color.Gray)
+                Icon(Icons.Outlined.Redo, "Refazer", tint = if (canRedo) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Box(Modifier.size(1.dp, 25.dp).background(Color(0xFF454B54)))
+            Box(Modifier.size(1.dp, 25.dp).background(if (isDarkTheme) Color(0xFF454B54) else Color(0xFFD1D5DB)))
             IconButton(onClick = {
                 projectExport = SceneProjectCodec.encode()
                 projectSaveLauncher.launch("untitled.3dproj")
@@ -269,8 +270,8 @@ private fun ToolButton(label: String, onClick: () -> Unit) {
         contentPadding = PaddingValues(horizontal = 13.dp, vertical = 7.dp),
         shape = androidx.compose.foundation.shape.RoundedCornerShape(13.dp),
         colors = ButtonDefaults.filledTonalButtonColors(
-            containerColor = Color(0xFF2A3037),
-            contentColor = Color(0xFFE3E7EB)
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.onSurface
         )
     ) {
         Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1)
@@ -284,16 +285,16 @@ private fun SelectionTools(id: Int, refresh: () -> Unit) {
 
     Row(Modifier.horizontalScroll(scroll1), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
         IconButton(onClick = { NativeBridge.moveBy(id, -MOVE_STEP, 0f, 0f); refresh() }) {
-            Icon(Icons.Outlined.ArrowBack, "Mover para X negativo", tint = Color.White)
+            Icon(Icons.Outlined.ArrowBack, "Mover para X negativo", tint = MaterialTheme.colorScheme.onSurface)
         }
         IconButton(onClick = { NativeBridge.moveBy(id, MOVE_STEP, 0f, 0f); refresh() }) {
-            Icon(Icons.Outlined.ArrowForward, "Mover para X positivo", tint = Color.White)
+            Icon(Icons.Outlined.ArrowForward, "Mover para X positivo", tint = MaterialTheme.colorScheme.onSurface)
         }
         IconButton(onClick = { NativeBridge.moveBy(id, 0f, MOVE_STEP, 0f); refresh() }) {
-            Icon(Icons.Outlined.ArrowUpward, "Mover para Y positivo", tint = Color.White)
+            Icon(Icons.Outlined.ArrowUpward, "Mover para Y positivo", tint = MaterialTheme.colorScheme.onSurface)
         }
         IconButton(onClick = { NativeBridge.moveBy(id, 0f, -MOVE_STEP, 0f); refresh() }) {
-            Icon(Icons.Outlined.ArrowDownward, "Mover para Y negativo", tint = Color.White)
+            Icon(Icons.Outlined.ArrowDownward, "Mover para Y negativo", tint = MaterialTheme.colorScheme.onSurface)
         }
         ToolButton("Z−") { NativeBridge.moveBy(id, 0f, 0f, -MOVE_STEP); refresh() }
         ToolButton("MOLDAR +") { NativeBridge.sculptMesh(id, 0f, 0f, 0f, 0.85f, 0f, 0.10f, 0f); refresh() }
@@ -303,23 +304,23 @@ private fun SelectionTools(id: Int, refresh: () -> Unit) {
 
     Row(Modifier.horizontalScroll(scroll2), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
         IconButton(onClick = { NativeBridge.rotateBy(id, 0f, -15f, 0f); refresh() }) {
-            Icon(Icons.Outlined.RotateLeft, "Rodar -15 graus", tint = Color.White)
+            Icon(Icons.Outlined.RotateLeft, "Rodar -15 graus", tint = MaterialTheme.colorScheme.onSurface)
         }
         IconButton(onClick = { NativeBridge.rotateBy(id, 0f, 15f, 0f); refresh() }) {
-            Icon(Icons.Outlined.RotateRight, "Rodar +15 graus", tint = Color.White)
+            Icon(Icons.Outlined.RotateRight, "Rodar +15 graus", tint = MaterialTheme.colorScheme.onSurface)
         }
         IconButton(onClick = { NativeBridge.scaleBy(id, 1.1f, 1.1f, 1.1f); refresh() }) {
-            Icon(Icons.Outlined.ZoomIn, "Aumentar", tint = Color.White)
+            Icon(Icons.Outlined.ZoomIn, "Aumentar", tint = MaterialTheme.colorScheme.onSurface)
         }
         IconButton(onClick = { NativeBridge.scaleBy(id, 0.9f, 0.9f, 0.9f); refresh() }) {
-            Icon(Icons.Outlined.ZoomOut, "Diminuir", tint = Color.White)
+            Icon(Icons.Outlined.ZoomOut, "Diminuir", tint = MaterialTheme.colorScheme.onSurface)
         }
         IconButton(onClick = {
             val duplicate = NativeBridge.duplicateObject(id, 1f, 0f, 0f)
             if (duplicate >= 0) NativeBridge.select(duplicate)
             refresh()
         }) {
-            Icon(Icons.Outlined.ContentCopy, "Duplicar objeto", tint = Color.White)
+            Icon(Icons.Outlined.ContentCopy, "Duplicar objeto", tint = MaterialTheme.colorScheme.onSurface)
         }
         IconButton(onClick = { NativeBridge.deleteObject(id); refresh() }) {
             Icon(Icons.Outlined.DeleteOutline, "Apagar objeto", tint = Color(0xFFFF8D8D))
@@ -334,6 +335,23 @@ private fun SelectionTools(id: Int, refresh: () -> Unit) {
                 shape = androidx.compose.foundation.shape.CircleShape
             ) { }
         }
+    }
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+    fun meshAction(operation: String, parameter: Int = 1, value: Float = 0f) {
+        val applied = NativeBridge.meshOperation(id, operation, intArrayOf(), parameter, value, -1)
+        if (!applied) Toast.makeText(context, "Operação não aplicada: verifica se a malha suporta esta ação.", Toast.LENGTH_SHORT).show()
+        refresh()
+    }
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+        ToolButton("SUBDIVIDIR") { meshAction("subdivide", 1) }
+        ToolButton("SUAVIZAR") { meshAction("smooth", 5, 0.28f) }
+        ToolButton("ESPESSAR") { meshAction("solidify", 1, 0.035f) }
+        ToolButton("MIRROR X") { meshAction("mirror", 0) }
+        ToolButton("TRIANGULAR") { meshAction("triangulate") }
+        ToolButton("NORMAIS") { meshAction("flip_normals") }
+        ToolButton("WELD") { meshAction("weld", 1, 0.0001f) }
+        ToolButton("CREASE 30°") { meshAction("crease_by_angle", 1, 30f) }
     }
 }
 
