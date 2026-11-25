@@ -25,6 +25,8 @@ enum class Primitive : int {
 constexpr int kPrimitiveCount = 11;
 
 const char* primitiveName(Primitive p);
+PolyMesh makePrimitivePolyMesh(Primitive p, float size);
+float primitiveSmoothAngle(Primitive p);
 Mesh makePrimitiveMesh(Primitive p, float size);
 
 struct Transform {
