@@ -1,19 +1,31 @@
 # Provedores de IA
 
-Interface comum `AiProvider` (em `app/src/main/java/com/layouter/aimodeling/ai/`) com três implementações planeadas:
+Interface comum `AiProvider` (em `app/src/main/java/com/layouter/aimodeling/ai/`).
 
-1. **ChatGptPlanProvider**: login "Continue with ChatGPT" (OAuth 2.0 com PKCE) e pedidos à Responses API usando o plano do utilizador. Cliente registado pelo fluxo oficial de apps open source. Não reutilizar o client ID do Codex CLI.
-2. **ApiKeyProvider**: chave de API do próprio utilizador (OpenAI ou Anthropic). O Claude só é suportado por esta via, porque a Anthropic não permite login de conta Claude em apps de terceiros.
-3. **LocalProvider** (opcional): modelo no dispositivo.
+## Estado
 
-Estado: a interface `AiProvider`, o `ToolDispatcher` e as definições das ferramentas já existem. Falta implementar os provedores e o ciclo de conversa (enviar pedido, executar as ferramentas, devolver o resultado à IA).
+| Provedor | Estado |
+|---|---|
+| `OpenAiProvider` (chave de API do utilizador, Chat Completions) | implementado, não testado |
+| `AnthropicProvider` (chave de API do utilizador, Messages API) | implementado, não testado |
+| `ChatGptPlanProvider` (login "Continue with ChatGPT", OAuth/PKCE) | planeado: depende do registo do cliente na OpenAI |
+| `LocalProvider` (modelo no dispositivo) | planeado |
 
-## Login no Android
+O Claude só é suportado por chave de API, porque a Anthropic não permite login de conta Claude em apps de terceiros.
+
+O ciclo de conversa está no `AiAgent`: envia o pedido, executa as ferramentas pedidas pela IA no `ToolDispatcher`, devolve os resultados e repete até a IA responder só com texto. Limites: 6 rondas e 40 chamadas de ferramenta por pedido; histórico de 60 mensagens. O painel de chat (`AiPanel`) usa o botão "IA" no topo do ecrã.
+
+## Chave de API
+- Guardada cifrada (AES-GCM) com uma chave do Android Keystore (`SecretStore`). Nunca é registada em logs.
+- Só é enviada ao serviço escolhido; o uso é cobrado na conta de API do utilizador.
+- O nome do modelo é editável nas definições, porque os modelos mudam com o tempo.
+
+## Login ChatGPT (planeado)
 - Abrir o navegador (Custom Tabs) com `state`, `nonce` e PKCE `S256`.
 - Retorno por deep link registado.
 - Trocar o código no endpoint de token, validar `state` e o ID token.
-- Guardar tokens no Android Keystore. Nunca registar tokens em logs.
-- Tratar consentimento recusado, limite de uso atingido e sessão revogada, mostrando uma mensagem clara e voltando ao modo manual.
+- Guardar tokens no Android Keystore. Não reutilizar o client ID do Codex CLI: usar o registo oficial.
+- Tratar consentimento recusado, limite de uso atingido e sessão revogada, voltando ao modo manual.
 
 ## Ferramentas expostas à IA
 
@@ -36,5 +48,5 @@ Planeadas (precisam de edição de malha): `extrude_faces`, `bevel`, `boolean`, 
 ## Segurança
 - Todos os argumentos são validados (JSON, 3 números finitos, ids existentes). O núcleo limita tamanho, escala, cor e o número de objetos (500).
 - A IA só opera sobre objetos que existem na cena.
-- Conteúdo de ficheiros importados é dado, nunca instruções para a IA.
-- Falta limitar o número de chamadas de ferramentas por pedido (no ciclo de conversa).
+- A descrição da cena e os resultados das ferramentas são dados, nunca instruções.
+- Conteúdo de ficheiros importados será tratado como dado, nunca como instruções para a IA.

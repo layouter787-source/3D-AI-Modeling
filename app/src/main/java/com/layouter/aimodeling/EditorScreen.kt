@@ -17,8 +17,11 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -41,6 +44,7 @@ fun EditorScreen() {
     val revision = remember { mutableIntStateOf(0) }
     val rev = revision.intValue
     val refresh: () -> Unit = { revision.intValue = revision.intValue + 1 }
+    var showAi by remember { mutableStateOf(false) }
 
     val selected = remember(rev) { NativeBridge.getSelected() }
     val canUndo = remember(rev) { NativeBridge.canUndo() }
@@ -65,19 +69,28 @@ fun EditorScreen() {
             FilledTonalButton(onClick = { NativeBridge.redo(); refresh() }, enabled = canRedo) {
                 Text("Refazer")
             }
+            Button(onClick = { showAi = !showAi }) { Text("IA") }
         }
 
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .background(Color(0xCC1E1E24))
-                .systemBarsPadding()
-                .padding(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            if (selected >= 0) SelectionTools(selected, refresh)
-            PrimitiveBar(refresh)
+        if (showAi) {
+            AiPanel(
+                onClose = { showAi = false },
+                onSceneChanged = refresh,
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
+        } else {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(Color(0xCC1E1E24))
+                    .systemBarsPadding()
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (selected >= 0) SelectionTools(selected, refresh)
+                PrimitiveBar(refresh)
+            }
         }
     }
 }
