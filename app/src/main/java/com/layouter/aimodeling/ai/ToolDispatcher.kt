@@ -26,6 +26,7 @@ object ToolDispatcher {
             "read_webpage" -> ToolResult(true, InternetTools.readPage(a.getString("url")))
             "create_primitive" -> createPrimitive(a)
             "create_loft_mesh" -> createLoftMesh(a)
+            "sculpt_mesh" -> { val c=a.vec3("center"); val d=a.vec3("offset"); report(NativeBridge.sculptMesh(a.getInt("object_id"),c[0],c[1],c[2],a.getDouble("radius").toFloat(),d[0],d[1],d[2]),"Native mesh sculpt applied","No vertices in range or invalid sculpt parameters") }
             "create_batch" -> createBatch(a)
             "create_asset_preset" -> createPreset(a)
             "duplicate_object" -> duplicateObject(a)
@@ -252,6 +253,7 @@ object ToolDispatcher {
                     .put("color",number3("RGB 0..1")),
                 listOf("profiles")
             ))
+            .put(tool("sculpt_mesh","Deform the existing native mesh vertices with smooth radial falloff; local mesh-space center, radius and offset. Use repeated small strokes to shape the body shell, hood, roof and fenders. This is real vertex geometry, not object scaling or added primitives; undoable.",JSONObject().put("object_id",objectId).put("center",number3("Local center [x,y,z]")).put("radius",JSONObject().put("type","number").put("minimum",0.001).put("maximum",1000)).put("offset",number3("Local displacement [dx,dy,dz]")),listOf("object_id","center","radius","offset")))
             .put(
                 tool(
                     "set_transform",
