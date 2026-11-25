@@ -1,4 +1,5 @@
 #include "core/scene.h"
+#include "core/polymesh.h"
 
 #include <algorithm>
 #include <cmath>
@@ -23,20 +24,44 @@ const char* primitiveName(Primitive p) {
 }
 
 Mesh makePrimitiveMesh(Primitive p, float size) {
+    PolyMesh poly;
+    float smoothAngle = 35.0f;
     switch (p) {
-        case Primitive::Cube: return makeCube(size);
-        case Primitive::Sphere: return makeSphere(size * 0.5f, 48, 32);
-        case Primitive::Cylinder: return makeCylinder(size * 0.5f, size, 48);
-        case Primitive::Cone: return makeCone(size * 0.5f, size, 48);
-        case Primitive::Torus: return makeTorus(size * 0.35f, size * 0.15f, 64, 24);
-        case Primitive::Plane: return makePlane(size);
-        case Primitive::Pyramid: return makePyramid(size);
-        case Primitive::Capsule: return makeCapsule(size * 0.25f, size, 40, 12);
-        case Primitive::Octahedron: return makeOctahedron(size);
-        case Primitive::HexPrism: return makeCylinder(size * 0.5f, size, 6);
-        case Primitive::CustomMesh: return makeCube(size);
+        case Primitive::Cube:
+            poly = makeBoxPoly({size, size, size}, 1, 1, 1); break;
+        case Primitive::Sphere:
+            poly = makeSpherePoly(size * 0.5f, 48); smoothAngle = 180.0f; break;
+        case Primitive::Cylinder:
+            poly = makeCylinderPoly(size * 0.5f, size, 48, 1, true); break;
+        case Primitive::Cone:
+            poly = makeConePoly(size * 0.5f, size, 48, true); break;
+        case Primitive::Torus:
+            poly = makeTorusPoly(size * 0.35f, size * 0.15f, 64, 24); smoothAngle = 180.0f; break;
+        case Primitive::Plane:
+            poly = makePlanePoly(size, size, 1, 1); smoothAngle = 0.0f; break;
+        case Primitive::Pyramid: {
+            const float h=size*0.5f;
+            poly.verts={{-h,-h,-h},{h,-h,-h},{h,-h,h},{-h,-h,h},{0,h,0}};
+            poly.faces={{0,2,1},{0,3,2},{0,1,4},{1,2,4},{2,3,4},{3,0,4}};
+            break;
+        }
+        case Primitive::Capsule: {
+            const float r=size*0.25f, stem=std::max(0.01f,size-2.0f*r);
+            PolyMesh body=makeCylinderPoly(r,stem,40,2,true);
+            PolyMesh lower=transformed(makeSpherePoly(r,32),translate(0,-stem*0.5f,0));
+            PolyMesh upper=transformed(makeSpherePoly(r,32),translate(0,stem*0.5f,0));
+            poly=mergeMeshes(mergeMeshes(body,lower),upper); smoothAngle=180.0f; break;
+        }
+        case Primitive::Octahedron:
+            poly.verts={{0,size*0.5f,0},{size*0.5f,0,0},{0,0,size*0.5f},{-size*0.5f,0,0},{0,0,-size*0.5f},{0,-size*0.5f,0}};
+            poly.faces={{0,1,2},{0,2,3},{0,3,4},{0,4,1},{5,2,1},{5,3,2},{5,4,3},{5,1,4}};
+            break;
+        case Primitive::HexPrism:
+            poly=makeCylinderPoly(size*0.5f,size,6,1,true); break;
+        case Primitive::CustomMesh:
+            poly=makeBoxPoly({size,size,size},1,1,1); break;
     }
-    return makeCube(size);
+    return buildRenderMesh(poly,smoothAngle);
 }
 
 namespace {
