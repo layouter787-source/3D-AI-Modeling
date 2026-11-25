@@ -5,6 +5,7 @@
 
 #include "core/math.h"
 #include "core/mesh.h"
+#include "core/polymesh.h"
 
 namespace core {
 
@@ -49,7 +50,8 @@ struct Object {
     std::string name;
     Primitive type = Primitive::Cube;
     float size = 1.0f;
-    Mesh mesh;
+    Mesh mesh;                 // malha triangulada de renderização
+    PolyMesh topology;          // malha poligonal editável (quads/ngons)
     Transform transform;
     Color color;
 };
