@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <map>
+#include <tuple>
 #include <utility>
 
 namespace core {
@@ -77,6 +79,14 @@ private:
     int id_;
     Transform before_;
     Transform after_;
+};
+
+class MeshCommand : public Command {
+public:
+ MeshCommand(int id, Mesh before, Mesh after):id_(id),before_(std::move(before)),after_(std::move(after)){}
+ void apply(Scene& s) override { if(Object* o=s.find(id_)) o->mesh=after_; }
+ void revert(Scene& s) override { if(Object* o=s.find(id_)) o->mesh=before_; }
+private: int id_; Mesh before_; Mesh after_;
 };
 
 class ColorCommand : public Command {
@@ -226,6 +236,18 @@ bool Editor::scaleBy(int id, Vec3 factor) {
     Transform t = o->transform;
     t.scale = {t.scale.x * factor.x, t.scale.y * factor.y, t.scale.z * factor.z};
     return setTransform(id, t);
+}
+
+bool Editor::sculptMesh(int id, Vec3 center, float radius, Vec3 offset) {
+ Object* o=scene_.find(id);
+ if(!o||o->mesh.vertices.empty()||!finite3(center)||!finite3(offset)||!std::isfinite(radius)||radius<0.001f||radius>1000.0f)return false;
+ Mesh before=o->mesh, after=before; bool changed=false;
+ for(Vertex& v:after.vertices){Vec3 delta=Vec3{v.px,v.py,v.pz}-center;float d=length(delta);if(d>=radius)continue;float t=std::clamp(1.0f-d/radius,0.0f,1.0f);float w=t*t*(3.0f-2.0f*t);v.px+=offset.x*w;v.py+=offset.y*w;v.pz+=offset.z*w;changed|=w>0.0001f;}
+ if(!changed)return false;
+ std::map<std::tuple<long long,long long,long long>,Vec3> sums;
+ for(size_t i=0;i+2<after.indices.size();i+=3){const Vertex&a=after.vertices[after.indices[i]],&b=after.vertices[after.indices[i+1]],&c=after.vertices[after.indices[i+2]];Vec3 n=cross(Vec3{b.px-a.px,b.py-a.py,b.pz-a.pz},Vec3{c.px-a.px,c.py-a.py,c.pz-a.pz});for(uint32_t ix:{after.indices[i],after.indices[i+1],after.indices[i+2]}){const Vertex&v=after.vertices[ix];sums[{std::llround(v.px*10000),std::llround(v.py*10000),std::llround(v.pz*10000)}]+=n;}}
+ for(Vertex&v:after.vertices){Vec3 n=normalize(sums[{std::llround(v.px*10000),std::llround(v.py*10000),std::llround(v.pz*10000)}]);if(length(n)>0.5f){v.nx=n.x;v.ny=n.y;v.nz=n.z;}}
+ execute(std::make_unique<MeshCommand>(id,std::move(before),std::move(after)));return true;
 }
 
 bool Editor::snapToGround(int id) {
