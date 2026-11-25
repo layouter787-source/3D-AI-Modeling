@@ -24,6 +24,7 @@ object ToolDispatcher {
         return when (call.name) {
             "web_search" -> ToolResult(true, InternetTools.search(a.getString("query")))
             "read_webpage" -> ToolResult(true, InternetTools.readPage(a.getString("url")))
+            "get_modeling_extensions" -> modelingExtensions()
             "create_primitive" -> createPrimitive(a)
             "create_loft_mesh" -> createLoftMesh(a)
             "sculpt_mesh" -> { val c=a.vec3("center"); val d=a.vec3("offset"); report(NativeBridge.sculptMesh(a.getInt("object_id"),c[0],c[1],c[2],a.getDouble("radius").toFloat(),d[0],d[1],d[2]),"Native mesh sculpt applied","No vertices in range or invalid sculpt parameters") }
@@ -92,6 +93,28 @@ object ToolDispatcher {
         }
     }
 
+    private fun modelingExtensions(): ToolResult {
+        val catalog = JSONObject()
+            .put("app", "3D-AI-Modeling")
+            .put("integration_policy", "Android-native C++/JNI/Compose; Godot addons are not drop-in plugins")
+            .put("native_mesh_operations", JSONArray(listOf(
+                "Catmull-Clark subdivide", "face extrude", "face inset", "smooth",
+                "solidify", "axis mirror", "loop cut", "triangulate", "flip normals",
+                "weld by tolerance", "crease by angle", "Boolean union", "Boolean difference",
+                "Boolean intersection", "radial vertex sculpt", "lofted profile mesh",
+                "topology inspection", "undo/redo mesh commands"
+            )))
+            .put("research_candidates", JSONArray()
+                .put(JSONObject().put("name", "meshoptimizer").put("purpose", "mesh cache optimization, simplification and LOD").put("license", "MIT").put("status", "not yet vendored"))
+                .put(JSONObject().put("name", "OpenSubdiv").put("purpose", "production subdivision surfaces").put("license", "Apache-2.0").put("status", "candidate; Android build/size review required"))
+                .put(JSONObject().put("name", "Manifold").put("purpose", "robust manifold Boolean geometry").put("license", "MIT").put("status", "candidate; ABI and build integration required"))
+                .put(JSONObject().put("name", "libigl").put("purpose", "mesh processing, parameterization and geometry algorithms").put("license", "MPL-2.0 with third-party exceptions").put("status", "candidate; audit individual modules/dependencies"))
+                .put(JSONObject().put("name", "Assimp").put("purpose", "import pipeline for supported 3D formats").put("license", "BSD-3-Clause").put("status", "candidate; Android import/export scope to define"))
+                .put(JSONObject().put("name", "Terrain3D").put("purpose", "reference for terrain sculpting, heightmaps, LOD and paint layers").put("license", "MIT").put("status", "Godot GDExtension; not directly loadable in this app, port concepts only"))
+                .put(JSONObject().put("name", "Blender BMesh / modeling operators").put("purpose", "topology and modeling reference").put("license", "GPL-3.0-or-later Blender code").put("status", "source-level reference; full Blender integration changes distribution/licensing architecture")))
+            .put("web_tools", JSONArray(listOf("web_search", "read_webpage", "search_modeling_reference")))
+        return ToolResult(true, catalog.toString(2))
+    }
     private fun createLoftMesh(a: JSONObject): ToolResult {
         val profiles = a.getJSONArray("profiles")
         require(profiles.length() in 3..24) { "A loft needs 3..24 cross-section profiles" }
@@ -237,6 +260,7 @@ object ToolDispatcher {
         val primitiveTypes = JSONArray(PrimitiveType.values().filter { it != PrimitiveType.CUSTOM_MESH }.map { it.apiName })
 
         return JSONArray()
+            .put(tool("get_modeling_extensions", "Return the real extension and mesh-tool capability catalog. Distinguish implemented native tools from researched candidates that are not installed.", JSONObject(), emptyList()))
             .put(
                 tool(
                     "create_primitive",

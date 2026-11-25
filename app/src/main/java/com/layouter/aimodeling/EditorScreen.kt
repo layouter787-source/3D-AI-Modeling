@@ -1,5 +1,7 @@
 package com.layouter.aimodeling
 
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -16,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowBack
@@ -24,6 +27,8 @@ import androidx.compose.material.icons.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.FolderOpen
@@ -36,6 +41,11 @@ import androidx.compose.material.icons.outlined.SmartToy
 import androidx.compose.material.icons.outlined.Undo
 import androidx.compose.material.icons.outlined.ZoomIn
 import androidx.compose.material.icons.outlined.ZoomOut
+import androidx.compose.material.icons.outlined.Build
+import androidx.compose.material.icons.outlined.Extension
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -70,11 +80,14 @@ private val palette = listOf(
 )
 
 @Composable
-fun EditorScreen() {
+fun EditorScreen(isDarkTheme: Boolean = true, onToggleTheme: () -> Unit = {}) {
     val revision = remember { mutableIntStateOf(0) }
     val rev = revision.intValue
     val refresh: () -> Unit = { revision.intValue++ }
     var showAi by remember { mutableStateOf(false) }
+    var showMeshTools by remember { mutableStateOf(false) }
+    var showExtensions by remember { mutableStateOf(false) }
+    var faceIndex by remember { mutableStateOf("0") }
     var objExport by remember { mutableStateOf("") }
     var projectExport by remember { mutableStateOf("") }
     var mtlExport by remember { mutableStateOf("") }
@@ -205,24 +218,25 @@ fun EditorScreen() {
 
         Row(
             modifier = Modifier.align(Alignment.TopCenter).systemBarsPadding().padding(8.dp)
-                .background(Color(0xE91B1E23), androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
+                .background(if (isDarkTheme) Color(0xE9000000) else Color(0xE9FFFFFF), androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Text("MESH", color = Color(0xFF9BC8C0), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 8.dp, end = 4.dp))
+            Text("MESH", color = if (isDarkTheme) Color(0xFF60A5FA) else Color(0xFF2563EB), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 8.dp, end = 4.dp))
+            IconButton(onClick = onToggleTheme) { Icon(if (isDarkTheme) Icons.Outlined.LightMode else Icons.Outlined.DarkMode, if (isDarkTheme) "Tema claro" else "Tema escuro", tint = if (isDarkTheme) Color(0xFF60A5FA) else Color(0xFF2563EB)) }
             IconButton(onClick = { NativeBridge.undo(); refresh() }, enabled = canUndo) {
-                Icon(Icons.Outlined.Undo, "Desfazer", tint = if (canUndo) Color.White else Color.Gray)
+                Icon(Icons.Outlined.Undo, "Desfazer", tint = if (canUndo) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
             }
             IconButton(onClick = { NativeBridge.redo(); refresh() }, enabled = canRedo) {
-                Icon(Icons.Outlined.Redo, "Refazer", tint = if (canRedo) Color.White else Color.Gray)
+                Icon(Icons.Outlined.Redo, "Refazer", tint = if (canRedo) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Box(Modifier.size(1.dp, 25.dp).background(Color(0xFF454B54)))
+            Box(Modifier.size(1.dp, 25.dp).background(if (isDarkTheme) Color(0xFF454B54) else Color(0xFFD1D5DB)))
             IconButton(onClick = {
                 projectExport = SceneProjectCodec.encode()
                 projectSaveLauncher.launch("untitled.3dproj")
             }) {
-                Icon(Icons.Outlined.Save, "Guardar projeto", tint = Color(0xFFBFC7D1))
+                Icon(Icons.Outlined.Save, "Guardar projeto", tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             IconButton(onClick = {
                 projectOpenLauncher.launch(arrayOf("*/*"))
@@ -237,10 +251,22 @@ fun EditorScreen() {
                 Icon(Icons.Outlined.FileDownload, "Export OBJ", tint = Color(0xFFBFC7D1))
             }
             IconButton(onClick = { showAi = !showAi }) {
-                Icon(Icons.Outlined.SmartToy, "Assistente IA", tint = Color(0xFF9BC8C0))
+                Icon(Icons.Outlined.SmartToy, "Assistente IA", tint = MaterialTheme.colorScheme.primary)
+            }
+            IconButton(onClick = { showMeshTools = true }) {
+                Icon(Icons.Outlined.Build, "Ferramentas de malha", tint = MaterialTheme.colorScheme.primary)
+            }
+            IconButton(onClick = { showExtensions = true }) {
+                Icon(Icons.Outlined.Extension, "Extensões", tint = MaterialTheme.colorScheme.onSurface)
+            }
+            IconButton(onClick = onToggleTheme) {
+                Icon(if (isDarkTheme) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,
+                    if (isDarkTheme) "Tema claro" else "Tema escuro", tint = MaterialTheme.colorScheme.primary)
             }
         }
 
+        if (showMeshTools) MeshWorkbenchDialog(selected, faceIndex, { faceIndex = it }, { showMeshTools = false }, refresh)
+        if (showExtensions) ExtensionLibraryDialog { showExtensions = false }
         AiPanel(
             onClose = { showAi = false },
             onSceneChanged = refresh,
@@ -260,6 +286,74 @@ fun EditorScreen() {
     }
 }
 
+
+@Composable
+private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (String) -> Unit, onClose: () -> Unit, onChanged: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    fun apply(operation: String, parameter: Int = 1, value: Float = 0.15f, faces: IntArray = intArrayOf()) {
+        if (selected < 0) { Toast.makeText(context, "Seleciona um objeto primeiro", Toast.LENGTH_SHORT).show(); return }
+        val ok = NativeBridge.meshOperation(selected, operation, faces, parameter, value)
+        Toast.makeText(context, if (ok) "Malha alterada · Undo disponível" else "Operação falhou: verifica a topologia", Toast.LENGTH_SHORT).show()
+        if (ok) onChanged()
+    }
+    AlertDialog(onDismissRequest = onClose, title = { Text("Mesh Workbench") }, text = {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Text("Ferramentas de geometria nativa. As alterações entram no Undo/Redo.")
+            Text("Face ID (pede à IA: get_mesh_topology)")
+            OutlinedTextField(faceIndex, onFaceIndex, label = { Text("Índice da face") }, singleLine = true)
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Button(onClick = { apply("extrude", value = 0.2f, faces = intArrayOf(faceIndex.toIntOrNull() ?: 0)) }) { Text("Extrude") }
+                Button(onClick = { apply("inset", value = 0.08f, faces = intArrayOf(faceIndex.toIntOrNull() ?: 0)) }) { Text("Inset") }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Button(onClick = { apply("subdivide") }) { Text("Subdividir") }
+                Button(onClick = { apply("smooth", parameter = 3, value = 0.35f) }) { Text("Suavizar") }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Button(onClick = { apply("solidify", value = 0.08f) }) { Text("Espessura") }
+                Button(onClick = { apply("weld", value = 0.0001f) }) { Text("Weld") }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Button(onClick = { apply("triangulate") }) { Text("Triangular") }
+                Button(onClick = { apply("flip_normals") }) { Text("Inverter normais") }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Button(onClick = { apply("crease_by_angle", value = 30f) }) { Text("Crease 30°") }
+                Button(onClick = { apply("mirror", parameter = 0) }) { Text("Mirror X") }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Button(onClick = { apply("mirror", parameter = 1) }) { Text("Mirror Y") }
+                Button(onClick = { apply("mirror", parameter = 2) }) { Text("Mirror Z") }
+            }
+            Text("Loop Cut e Boolean estão disponíveis ao agente: pede para consultar a topologia e executar sobre as arestas/objetos corretos.")
+        }
+    }, confirmButton = { TextButton(onClick = onClose) { Text("Fechar") } })
+}
+
+@Composable
+private fun ExtensionLibraryDialog(onClose: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val items = listOf(
+        "Terrain3D" to ("Terreno com sculpt, heightmaps, textura e LOD/clipmaps." to "https://github.com/TokisanGames/Terrain3D"),
+        "Polyforge" to ("Edit Mode com extrude, inset, bevel, loop cut, mirror, Boolean e seleção." to "https://github.com/Seba313/polyforge"),
+        "GoBuild" to ("Edição de mesh por vértice, aresta e face." to "https://github.com/marcel-b-roodt/gobuild"),
+        "Blender BMesh" to ("API de topologia para operações de malha." to "https://developer.blender.org/docs/features/objects/mesh/bmesh/"),
+        "Materializr CAD" to ("CAD paramétrico e operações de sólidos." to "https://github.com/materializr-cad/materializr"),
+        "Strata:3D" to ("Viewer Android e referência para formatos/meshes grandes." to "https://github.com/damzenquis/Strata-3D")
+    )
+    AlertDialog(onDismissRequest = onClose, title = { Text("Extensões e pesquisa") }, text = {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Text("Addons Godot/Blender não se instalam diretamente neste app nativo. Esta biblioteca reúne fontes para adaptar recursos em Kotlin/C++/OpenGL; integração real exige portar, validar licença e testar.")
+            items.forEach { (name, data) ->
+                Text(name, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleSmall)
+                Text(data.first, style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(data.second))) } }) { Text("Abrir fonte") }
+                androidx.compose.material3.HorizontalDivider()
+            }
+        }
+    }, confirmButton = { TextButton(onClick = onClose) { Text("Fechar") } })
+}
+
 @Composable
 private fun ToolButton(label: String, onClick: () -> Unit) {
     FilledTonalButton(
@@ -267,8 +361,8 @@ private fun ToolButton(label: String, onClick: () -> Unit) {
         contentPadding = PaddingValues(horizontal = 13.dp, vertical = 7.dp),
         shape = androidx.compose.foundation.shape.RoundedCornerShape(13.dp),
         colors = ButtonDefaults.filledTonalButtonColors(
-            containerColor = Color(0xFF2A3037),
-            contentColor = Color(0xFFE3E7EB)
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.onSurface
         )
     ) {
         Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1)
@@ -282,16 +376,16 @@ private fun SelectionTools(id: Int, refresh: () -> Unit) {
 
     Row(Modifier.horizontalScroll(scroll1), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
         IconButton(onClick = { NativeBridge.moveBy(id, -MOVE_STEP, 0f, 0f); refresh() }) {
-            Icon(Icons.Outlined.ArrowBack, "Mover para X negativo", tint = Color.White)
+            Icon(Icons.Outlined.ArrowBack, "Mover para X negativo", tint = MaterialTheme.colorScheme.onSurface)
         }
         IconButton(onClick = { NativeBridge.moveBy(id, MOVE_STEP, 0f, 0f); refresh() }) {
-            Icon(Icons.Outlined.ArrowForward, "Mover para X positivo", tint = Color.White)
+            Icon(Icons.Outlined.ArrowForward, "Mover para X positivo", tint = MaterialTheme.colorScheme.onSurface)
         }
         IconButton(onClick = { NativeBridge.moveBy(id, 0f, MOVE_STEP, 0f); refresh() }) {
-            Icon(Icons.Outlined.ArrowUpward, "Mover para Y positivo", tint = Color.White)
+            Icon(Icons.Outlined.ArrowUpward, "Mover para Y positivo", tint = MaterialTheme.colorScheme.onSurface)
         }
         IconButton(onClick = { NativeBridge.moveBy(id, 0f, -MOVE_STEP, 0f); refresh() }) {
-            Icon(Icons.Outlined.ArrowDownward, "Mover para Y negativo", tint = Color.White)
+            Icon(Icons.Outlined.ArrowDownward, "Mover para Y negativo", tint = MaterialTheme.colorScheme.onSurface)
         }
         ToolButton("Z−") { NativeBridge.moveBy(id, 0f, 0f, -MOVE_STEP); refresh() }
         ToolButton("MOLDAR +") { NativeBridge.sculptMesh(id, 0f, 0f, 0f, 0.85f, 0f, 0.10f, 0f); refresh() }
@@ -301,23 +395,23 @@ private fun SelectionTools(id: Int, refresh: () -> Unit) {
 
     Row(Modifier.horizontalScroll(scroll2), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
         IconButton(onClick = { NativeBridge.rotateBy(id, 0f, -15f, 0f); refresh() }) {
-            Icon(Icons.Outlined.RotateLeft, "Rodar -15 graus", tint = Color.White)
+            Icon(Icons.Outlined.RotateLeft, "Rodar -15 graus", tint = MaterialTheme.colorScheme.onSurface)
         }
         IconButton(onClick = { NativeBridge.rotateBy(id, 0f, 15f, 0f); refresh() }) {
-            Icon(Icons.Outlined.RotateRight, "Rodar +15 graus", tint = Color.White)
+            Icon(Icons.Outlined.RotateRight, "Rodar +15 graus", tint = MaterialTheme.colorScheme.onSurface)
         }
         IconButton(onClick = { NativeBridge.scaleBy(id, 1.1f, 1.1f, 1.1f); refresh() }) {
-            Icon(Icons.Outlined.ZoomIn, "Aumentar", tint = Color.White)
+            Icon(Icons.Outlined.ZoomIn, "Aumentar", tint = MaterialTheme.colorScheme.onSurface)
         }
         IconButton(onClick = { NativeBridge.scaleBy(id, 0.9f, 0.9f, 0.9f); refresh() }) {
-            Icon(Icons.Outlined.ZoomOut, "Diminuir", tint = Color.White)
+            Icon(Icons.Outlined.ZoomOut, "Diminuir", tint = MaterialTheme.colorScheme.onSurface)
         }
         IconButton(onClick = {
             val duplicate = NativeBridge.duplicateObject(id, 1f, 0f, 0f)
             if (duplicate >= 0) NativeBridge.select(duplicate)
             refresh()
         }) {
-            Icon(Icons.Outlined.ContentCopy, "Duplicar objeto", tint = Color.White)
+            Icon(Icons.Outlined.ContentCopy, "Duplicar objeto", tint = MaterialTheme.colorScheme.onSurface)
         }
         IconButton(onClick = { NativeBridge.deleteObject(id); refresh() }) {
             Icon(Icons.Outlined.DeleteOutline, "Apagar objeto", tint = Color(0xFFFF8D8D))
@@ -332,6 +426,23 @@ private fun SelectionTools(id: Int, refresh: () -> Unit) {
                 shape = androidx.compose.foundation.shape.CircleShape
             ) { }
         }
+    }
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+    fun meshAction(operation: String, parameter: Int = 1, value: Float = 0f) {
+        val applied = NativeBridge.meshOperation(id, operation, intArrayOf(), parameter, value, -1)
+        if (!applied) Toast.makeText(context, "Operação não aplicada: verifica se a malha suporta esta ação.", Toast.LENGTH_SHORT).show()
+        refresh()
+    }
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+        ToolButton("SUBDIVIDIR") { meshAction("subdivide", 1) }
+        ToolButton("SUAVIZAR") { meshAction("smooth", 5, 0.28f) }
+        ToolButton("ESPESSAR") { meshAction("solidify", 1, 0.035f) }
+        ToolButton("MIRROR X") { meshAction("mirror", 0) }
+        ToolButton("TRIANGULAR") { meshAction("triangulate") }
+        ToolButton("NORMAIS") { meshAction("flip_normals") }
+        ToolButton("WELD") { meshAction("weld", 1, 0.0001f) }
+        ToolButton("CREASE 30°") { meshAction("crease_by_angle", 1, 30f) }
     }
 }
 

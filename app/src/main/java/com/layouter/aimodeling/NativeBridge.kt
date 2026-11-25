@@ -9,6 +9,7 @@ object NativeBridge {
     external fun onSurfaceCreated()
     external fun onSurfaceChanged(width: Int, height: Int)
     external fun onDrawFrame()
+    external fun setViewportTheme(dark: Boolean)
 
     // Câmera
     external fun onOrbit(dx: Float, dy: Float)

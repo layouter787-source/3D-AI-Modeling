@@ -182,6 +182,7 @@ struct Renderer {
     float aspect = 1.0f;
     float width = 1.0f;
     float height = 1.0f;
+    bool darkViewport = true;
     Camera camera;
     Editor editor;
 };
@@ -274,11 +275,18 @@ Java_com_layouter_aimodeling_NativeBridge_onSurfaceChanged(JNIEnv*, jobject, jin
 }
 
 JNIEXPORT void JNICALL
+Java_com_layouter_aimodeling_NativeBridge_setViewportTheme(JNIEnv*, jobject, jboolean dark) {
+    std::lock_guard<std::mutex> lock(gMutex);
+    gRenderer.darkViewport = dark == JNI_TRUE;
+}
+
+JNIEXPORT void JNICALL
 Java_com_layouter_aimodeling_NativeBridge_onDrawFrame(JNIEnv*, jobject) {
     std::lock_guard<std::mutex> lock(gMutex);
     Renderer& r = gRenderer;
     const Scene& scene = r.editor.scene();
 
+    glClearColor(r.darkViewport ? 0.035f : 0.965f, r.darkViewport ? 0.035f : 0.965f, r.darkViewport ? 0.04f : 0.975f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     const Mat4 proj = perspective(kFovY, r.aspect, 0.1f, 200.0f);
