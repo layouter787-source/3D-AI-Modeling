@@ -24,6 +24,8 @@ public:
 
     // Devolve o id do novo objeto, ou -1 se os valores forem inválidos ou o limite foi atingido.
     int addPrimitive(Primitive type, float size, Vec3 position);
+    // Profiles are [x, halfWidth, centerY, halfHeight] along the X axis.
+    int addLoftMesh(const std::vector<float>& profiles, int segments, Vec3 position);
     int duplicateObject(int id, Vec3 offset);
     bool deleteObject(int id);
 
