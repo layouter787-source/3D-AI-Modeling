@@ -88,10 +88,6 @@ private data class ChatLine(val role: String, val text: String)
 private data class SavedChat(val id: String, val title: String, val messages: List<ChatLine>)
 private val AiWorkScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-private val panelBg = Color(0xFF15171B)
-private val surfaceBg = Color(0xFF202329)
-private val accent = Color(0xFF9BC8C0)
-private val secondaryText = Color(0xFFA9AFB8)
 
 @Composable
 fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier = Modifier, visible: Boolean = true) {
@@ -261,7 +257,7 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
         modifier = modifier
             .fillMaxWidth()
             .fillMaxHeight(0.90f)
-            .background(panelBg, RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
+            .background(MaterialTheme.colorScheme.background, RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
             .systemBarsPadding()
             .imePadding()
             .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -272,20 +268,20 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(shape = RoundedCornerShape(13.dp), color = Color(0xFF2A3439)) {
-                Icon(Icons.Filled.SmartToy, null, tint = accent, modifier = Modifier.padding(9.dp).size(23.dp))
+                Icon(Icons.Filled.SmartToy, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(9.dp).size(23.dp))
             }
             Column(Modifier.weight(1f).padding(start = 10.dp)) {
-                Text("Assistente", style = MaterialTheme.typography.titleMedium, color = Color.White)
+                Text("Assistente", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                 Text(
                     routeStatus.ifBlank { "${kind.label} · ${model.ifBlank { "Modelo por escolher" }}" },
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (routeStatus.contains("falh", ignoreCase = true)) Color(0xFFFFB66E) else secondaryText,
+                    color = if (routeStatus.contains("falh", ignoreCase = true)) Color(0xFFFFB66E) else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1
                 )
             }
             Box {
                 IconButton(onClick = { historyMenu = true }) {
-                    Icon(Icons.Outlined.History, "Histórico de conversas", tint = secondaryText)
+                    Icon(Icons.Outlined.History, "Histórico de conversas", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 DropdownMenu(expanded = historyMenu, onDismissRequest = { historyMenu = false }) {
                     DropdownMenuItem(text = { Text("Nova conversa") }, leadingIcon = { Icon(Icons.Outlined.Add, null) }, onClick = {
@@ -315,10 +311,10 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
                 }
             }
             IconButton(onClick = { showSettings = !showSettings }) {
-                Icon(Icons.Outlined.Settings, "Configuração", tint = if (showSettings) accent else secondaryText)
+                Icon(Icons.Outlined.Settings, "Configuração", tint = if (showSettings) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Box(Modifier.padding(start = 5.dp).pointerInput(Unit) { detectVerticalDragGestures(onVerticalDrag = { _, dy -> if (dy > 18f) onClose() }) }) {
-                IconButton(onClick = onClose) { Icon(Icons.Outlined.KeyboardArrowDown, "Recolher painel (a tarefa continua)", tint = accent) }
+                IconButton(onClick = onClose) { Icon(Icons.Outlined.KeyboardArrowDown, "Recolher painel (a tarefa continua)", tint = MaterialTheme.colorScheme.primary) }
             }
         }
 
@@ -327,12 +323,12 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
                 modifier = Modifier
                     .weight(1f, fill = false)
                     .fillMaxWidth()
-                    .background(surfaceBg, RoundedCornerShape(18.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(18.dp))
                     .padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text("Ligação à IA", color = Color.White, style = MaterialTheme.typography.titleSmall)
-                Text("Escolhe o serviço e consulta os modelos que a tua chave pode ver.", color = secondaryText, style = MaterialTheme.typography.bodySmall)
+                Text("Escolhe o serviço e consulta os modelos que a tua chave pode ver.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
 
                 Box {
                     OutlinedButton(
@@ -373,7 +369,7 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(13.dp)
                 )
-                Text("Chave: ${kind.keySource}", color = secondaryText, style = MaterialTheme.typography.labelSmall)
+                Text("Chave: ${kind.keySource}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
@@ -396,7 +392,7 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
                                         Column {
                                             Text(option.displayName, maxLines = 1)
                                             if (option.displayName != option.id) {
-                                                Text(option.id, color = secondaryText, style = MaterialTheme.typography.labelSmall)
+                                                Text(option.id, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
                                             }
                                         }
                                     },
@@ -415,14 +411,14 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
                     Button(
                         onClick = { loadModels() },
                         enabled = !loadingModels && apiKey.isNotBlank(),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF314B5C))
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
                         Icon(Icons.Outlined.Refresh, null, modifier = Modifier.size(18.dp))
                         Text(if (loadingModels) "A consultar…" else "Consultar modelos", modifier = Modifier.padding(start = 6.dp))
                     }
                     TextButton(onClick = { saveSettings() }) {
-                        Icon(Icons.Outlined.CheckCircle, null, tint = accent, modifier = Modifier.size(18.dp))
-                        Text("Guardar", color = accent)
+                        Icon(Icons.Outlined.CheckCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                        Text("Guardar", color = MaterialTheme.colorScheme.primary)
                     }
                 }
                 modelError?.let {
@@ -433,7 +429,7 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
                 }
                 Text(
                     "A chave é guardada cifrada no dispositivo. A lista vem da API do provedor; o modelo escolhido é validado pelo próprio serviço.",
-                    color = secondaryText,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.labelSmall
                 )
                 TextButton(onClick = {
@@ -458,13 +454,13 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Surface(shape = CircleShape, color = Color(0xFF27333D)) {
-                                Icon(Icons.Filled.SmartToy, null, tint = accent, modifier = Modifier.padding(19.dp).size(38.dp))
+                            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {
+                                Icon(Icons.Filled.SmartToy, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(19.dp).size(38.dp))
                             }
                             Text("O que vamos criar?", color = Color.White, style = MaterialTheme.typography.titleLarge)
                             Text(
                                 "Descreve um objeto 3D. A IA pode criar e editar a cena.",
-                                color = secondaryText,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
@@ -474,21 +470,21 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
                 if (busy) {
                     item {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.SmartToy, null, tint = accent, modifier = Modifier.size(19.dp))
-                            Text(" A pensar…", color = secondaryText, style = MaterialTheme.typography.bodySmall)
+                            Icon(Icons.Filled.SmartToy, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(19.dp))
+                            Text(" A pensar…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
             }
 
-            Surface(color = surfaceBg, shape = RoundedCornerShape(22.dp)) {
+            Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(22.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 7.dp, top = 5.dp, bottom = 5.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box {
                         IconButton(onClick = { attachmentMenu = true }, enabled = !busy) {
-                            Icon(Icons.Outlined.Add, "Adicionar imagem ou usar câmara", tint = accent)
+                            Icon(Icons.Outlined.Add, "Adicionar imagem ou usar câmara", tint = MaterialTheme.colorScheme.primary)
                         }
                         DropdownMenu(expanded = attachmentMenu, onDismissRequest = { attachmentMenu = false }) {
                             DropdownMenuItem(text = { Text("Escolher imagem / ficheiro") }, leadingIcon = { Icon(Icons.Outlined.AttachFile, null) }, onClick = {
@@ -520,7 +516,7 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
                     IconButton(
                         onClick = { send() },
                         enabled = !busy && (input.isNotBlank() || attachedImage != null),
-                        modifier = Modifier.background(if (!busy && input.isNotBlank()) accent else Color(0xFF3A414B), CircleShape)
+                        modifier = Modifier.background(if (!busy && input.isNotBlank()) MaterialTheme.colorScheme.primary else Color(0xFF3A414B), CircleShape)
                     ) {
                         Icon(Icons.Outlined.Send, "Enviar", tint = Color(0xFF10151A))
                     }
@@ -582,7 +578,7 @@ private fun ChatBubble(line: ChatLine) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(Icons.Outlined.CheckCircle, null, tint = Color(0xFF79CDA4), modifier = Modifier.size(15.dp))
-            Text(line.text, color = secondaryText, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 6.dp))
+            Text(line.text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 6.dp))
         }
         return
     }
@@ -598,15 +594,15 @@ private fun ChatBubble(line: ChatLine) {
             Icon(
                 if (isError) Icons.Outlined.Warning else Icons.Filled.SmartToy,
                 null,
-                tint = if (isError) Color(0xFFFFB66E) else accent,
+                tint = if (isError) Color(0xFFFFB66E) else MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(top = 6.dp, end = 8.dp).size(20.dp)
             )
         }
         Surface(
             color = when {
-                isUser -> Color(0xFF30424F)
+                isUser -> MaterialTheme.colorScheme.primary
                 isError -> Color(0xFF492D2D)
-                else -> surfaceBg
+                else -> MaterialTheme.colorScheme.surfaceVariant
             },
             shape = RoundedCornerShape(
                 topStart = 18.dp, topEnd = 18.dp,
@@ -617,13 +613,13 @@ private fun ChatBubble(line: ChatLine) {
         ) {
             Text(
                 line.text,
-                color = Color(0xFFF0F2F5),
+                color = MaterialTheme.colorScheme.onSurface,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp)
             )
         }
         if (isUser) {
-            Icon(Icons.Outlined.Person, null, tint = secondaryText, modifier = Modifier.padding(start = 7.dp, top = 6.dp).size(19.dp))
+            Icon(Icons.Outlined.Person, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 7.dp, top = 6.dp).size(19.dp))
         }
     }
 }
