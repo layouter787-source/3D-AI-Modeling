@@ -60,11 +60,11 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.layouter.aimodeling.ai.AiAgent
 import com.layouter.aimodeling.ai.AiModel
+import com.layouter.aimodeling.ai.AiOrchestrator
 import com.layouter.aimodeling.ai.AiSettings
 import com.layouter.aimodeling.ai.ModelCatalog
 import com.layouter.aimodeling.ai.ProviderKind
 import com.layouter.aimodeling.ai.SecretStore
-import com.layouter.aimodeling.ai.buildProvider
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -95,6 +95,7 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
     val lines = remember { mutableStateListOf<ChatLine>() }
     var input by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    var routeStatus by remember { mutableStateOf("Pronto") }
     val listState = rememberLazyListState()
 
     LaunchedEffect(lines.size) {
@@ -138,7 +139,23 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
             showSettings = true
             return
         }
-        val current = agent ?: AiAgent(buildProvider(kind, apiKey.trim(), model.trim())).also { agent = it }
+        val current = agent ?: run {
+            val keys = ProviderKind.values().associateWith { provider ->
+                if (provider == kind) apiKey.trim()
+                else secrets.get(AiSettings.keyName(provider)).orEmpty().trim()
+            }
+            val savedModels = ProviderKind.values().associateWith { settings.model(it) }
+            val router = AiOrchestrator(
+                credentials = keys,
+                preferredProvider = kind,
+                preferredModel = model.trim(),
+                savedModels = savedModels,
+                onRoute = { event ->
+                    routeStatus = "${event.provider.label} · ${event.model} · ${event.message}"
+                }
+            )
+            AiAgent(router).also { agent = it }
+        }
         input = ""
         lines.add(ChatLine("user", text))
         busy = true
@@ -183,9 +200,9 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
             Column(Modifier.weight(1f).padding(start = 10.dp)) {
                 Text("Assistente", style = MaterialTheme.typography.titleMedium, color = Color.White)
                 Text(
-                    "${kind.label} · ${model.ifBlank { "Escolhe um modelo" }}",
+                    routeStatus.ifBlank { "${kind.label} · ${model.ifBlank { "Modelo por escolher" }}" },
                     style = MaterialTheme.typography.labelSmall,
-                    color = secondaryText,
+                    color = if (routeStatus.contains("falh", ignoreCase = true)) Color(0xFFFFB66E) else secondaryText,
                     maxLines = 1
                 )
             }
