@@ -127,7 +127,7 @@ GpuMesh upload(const Mesh& mesh) {
     glGenBuffers(1, &g.ibo);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, g.ibo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(mesh.indices.size() * sizeof(uint16_t)),
+                 static_cast<GLsizeiptr>(mesh.indices.size() * sizeof(uint32_t)),
                  mesh.indices.data(), GL_STATIC_DRAW);
 
     glEnableVertexAttribArray(0);
@@ -295,7 +295,7 @@ Java_com_layouter_aimodeling_NativeBridge_onDrawFrame(JNIEnv*, jobject) {
         glUniform1f(r.objSelected, o.id == scene.selectedId ? 1.0f : 0.0f);
 
         glBindVertexArray(it->second.vao);
-        glDrawElements(GL_TRIANGLES, it->second.count, GL_UNSIGNED_SHORT, nullptr);
+        glDrawElements(GL_TRIANGLES, it->second.count, GL_UNSIGNED_INT, nullptr);
     }
     glBindVertexArray(0);
 
