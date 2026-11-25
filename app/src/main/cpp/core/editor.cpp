@@ -302,7 +302,7 @@ bool Editor::sculptMesh(int id, Vec3 center, float radius, Vec3 offset) {
 }
 
 bool Editor::meshOperation(int id, const std::string& operation, const std::vector<int>& faces,
-                            int parameter, float value) {
+                            int parameter, float value, int otherObjectId) {
     Object* object = scene_.find(id);
     if (object == nullptr || object->mesh.vertices.empty() || object->mesh.indices.size() < 3 ||
         !std::isfinite(value)) return false;
@@ -324,7 +324,16 @@ bool Editor::meshOperation(int id, const std::string& operation, const std::vect
     if (source.empty() || source.faces.size() > 250000 || source.verts.size() > 250000) return false;
 
     PolyMesh result;
-    if (operation == "subdivide") {
+    if (operation == "boolean_union" || operation == "boolean_difference" || operation == "boolean_intersection") {
+        const Object* operand = scene_.find(otherObjectId);
+        if (!operand || operand->id == object->id || operand->topology.empty()) return false;
+        const int op = operation == "boolean_union" ? 0 : (operation == "boolean_difference" ? 1 : 2);
+        // Boolean operands are converted into the selected object's local space.
+        const Mat4 inverseSelected = inverse(object->transform.matrix());
+        const Mat4 operandWorld = operand->transform.matrix();
+        PolyMesh other = transformed(operand->topology, inverseSelected * operandWorld);
+        result = booleanOp(source, other, op);
+    } else if (operation == "subdivide") {
         const int levels = std::clamp(parameter, 1, 3);
         if (estimateSubdividedFaces(source, levels) > 180000) return false;
         result = catmullClark(source, levels);
