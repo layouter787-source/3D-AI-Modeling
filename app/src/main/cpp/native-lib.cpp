@@ -440,6 +440,53 @@ Java_com_layouter_aimodeling_NativeBridge_pickAt(JNIEnv*, jobject, jfloat x, jfl
     return gRenderer.editor.pick(cameraRay(gRenderer, x, y));
 }
 
+
+JNIEXPORT jstring JNICALL
+Java_com_layouter_aimodeling_NativeBridge_exportObj(JNIEnv* env, jobject) {
+    std::string output;
+    {
+        std::lock_guard<std::mutex> lock(gMutex);
+        const Scene& scene = gRenderer.editor.scene();
+        output.reserve(scene.objects.size() * 2048);
+        output += "# 3D-AI-Modeling OBJ export\\n";
+        size_t vertexOffset = 1;
+        for (const Object& object : scene.objects) {
+            output += "o " + object.name + "\\n";
+            const Mat4 model = object.transform.matrix();
+            for (const Vertex& vertex : object.mesh.vertices) {
+                const Vec3 p = transformPoint(model, Vec3{vertex.px, vertex.py, vertex.pz});
+                char line[160];
+                std::snprintf(line, sizeof(line), "v %.6f %.6f %.6f\\n", p.x, p.y, p.z);
+                output += line;
+            }
+            float nm[9];
+            normalMatrix(object.transform, nm);
+            for (const Vertex& vertex : object.mesh.vertices) {
+                const Vec3 n = normalize(Vec3{
+                    nm[0] * vertex.nx + nm[3] * vertex.ny + nm[6] * vertex.nz,
+                    nm[1] * vertex.nx + nm[4] * vertex.ny + nm[7] * vertex.nz,
+                    nm[2] * vertex.nx + nm[5] * vertex.ny + nm[8] * vertex.nz
+                });
+                char line[160];
+                std::snprintf(line, sizeof(line), "vn %.6f %.6f %.6f\\n", n.x, n.y, n.z);
+                output += line;
+            }
+            const size_t base = vertexOffset;
+            for (size_t i = 0; i + 2 < object.mesh.indices.size(); i += 3) {
+                char line[128];
+                const size_t a = base + object.mesh.indices[i];
+                const size_t b = base + object.mesh.indices[i + 1];
+                const size_t d = base + object.mesh.indices[i + 2];
+                std::snprintf(line, sizeof(line), "f %zu//%zu %zu//%zu %zu//%zu\\n",
+                              a, a, b, b, d, d);
+                output += line;
+            }
+            vertexOffset += object.mesh.vertices.size();
+        }
+    }
+    return env->NewStringUTF(output.c_str());
+}
+
 JNIEXPORT jstring JNICALL
 Java_com_layouter_aimodeling_NativeBridge_describeScene(JNIEnv* env, jobject) {
     std::string json;
