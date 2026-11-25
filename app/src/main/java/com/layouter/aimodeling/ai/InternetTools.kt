@@ -6,6 +6,7 @@ import java.net.HttpURLConnection
 import java.net.URI
 import java.net.URLEncoder
 import java.net.URL
+import java.net.InetAddress
 import java.io.ByteArrayOutputStream
 
 /**
@@ -38,6 +39,22 @@ object InternetTools {
             val host = uri.host.lowercase()
             require(!host.equals("localhost") && !host.endsWith(".localhost") && !host.endsWith(".local") &&
                 !host.matches(Regex("""[0-9.]+""")) && !host.contains(":")) { "Private/local hosts are blocked" }
+            val resolved = InetAddress.getAllByName(host)
+            require(resolved.isNotEmpty() && resolved.all { address ->
+                val b = address.address.map { it.toInt() and 0xff }
+                val v4Private = b.size == 4 && (
+                    b[0] == 10 || b[0] == 127 || (b[0] == 169 && b[1] == 254) ||
+                    (b[0] == 172 && b[1] in 16..31) || (b[0] == 192 && b[1] == 168) ||
+                    b[0] == 0 || b[0] >= 224
+                )
+                val v6Local = b.size == 16 && (
+                    address.isLoopbackAddress || address.isLinkLocalAddress ||
+                    address.isSiteLocalAddress || (b[0] and 0xfe) == 0xfc || b[0] == 0xff
+                )
+                !address.isAnyLocalAddress && !address.isLoopbackAddress &&
+                    !address.isLinkLocalAddress && !address.isSiteLocalAddress &&
+                    !address.isMulticastAddress && !v4Private && !v6Local
+            }) { "Private or reserved network destinations are blocked" }
             val connection = URL(current).openConnection() as HttpURLConnection
             connection.instanceFollowRedirects = false
             connection.connectTimeout = 10000
