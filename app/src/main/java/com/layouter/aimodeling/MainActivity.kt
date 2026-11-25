@@ -9,6 +9,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
@@ -23,6 +24,7 @@ class MainActivity : ComponentActivity() {
         val preferences = getSharedPreferences("studio_preferences", MODE_PRIVATE)
         setContent {
             var darkTheme by remember { mutableStateOf(preferences.getBoolean("dark_theme", true)) }
+            SideEffect { NativeBridge.setViewportTheme(darkTheme) }
             val colors = if (darkTheme) darkColorScheme(
                 primary = StudioBlueDark,
                 onPrimary = Color(0xFF07111F),
