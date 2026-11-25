@@ -43,6 +43,7 @@ import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -118,12 +119,11 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
     val chatPrefs = remember { context.getSharedPreferences("ai_chat_history", android.content.Context.MODE_PRIVATE) }
     val savedChats = remember { mutableStateListOf<SavedChat>() }
     var activeChatId by remember { mutableStateOf(System.currentTimeMillis().toString()) }
-    fun persistChats() {
-        val current = lines.toList()
-        if (current.isEmpty()) return
-        val title = current.firstOrNull { it.role == "user" }?.text?.take(48)?.ifBlank { "Conversa" } ?: "Conversa"
-        val sessions = (listOf(SavedChat(activeChatId, title, current)) +
-            savedChats.filterNot { it.id == activeChatId }).take(25)
+    var activeChatTitle by remember { mutableStateOf("") }
+    var renameDialog by remember { mutableStateOf(false) }
+    var renameValue by remember { mutableStateOf("") }
+    var deleteChatId by remember { mutableStateOf<String?>(null) }
+    fun storeChats(sessions: List<SavedChat>) {
         savedChats.clear()
         savedChats.addAll(sessions)
         val array = org.json.JSONArray()
@@ -135,6 +135,16 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
             array.put(obj)
         }
         chatPrefs.edit().putString("sessions", array.toString()).apply()
+    }
+    fun persistChats() {
+        val current = lines.toList()
+        if (current.isEmpty()) return
+        val fallback = current.firstOrNull { it.role == "user" }?.text?.take(48)?.ifBlank { "Conversa" } ?: "Conversa"
+        val title = activeChatTitle.ifBlank { fallback }.take(64)
+        activeChatTitle = title
+        val sessions = (listOf(SavedChat(activeChatId, title, current)) +
+            savedChats.filterNot { it.id == activeChatId }).take(25)
+        storeChats(sessions)
     }
     fun loadSavedChats() {
         savedChats.clear()
@@ -280,15 +290,23 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
                 DropdownMenu(expanded = historyMenu, onDismissRequest = { historyMenu = false }) {
                     DropdownMenuItem(text = { Text("Nova conversa") }, leadingIcon = { Icon(Icons.Outlined.Add, null) }, onClick = {
                         persistChats()
-                        lines.clear(); agent = null; input = ""
+                        lines.clear(); agent = null; input = ""; activeChatTitle = ""
                         activeChatId = System.currentTimeMillis().toString()
                         historyMenu = false
                     })
+                    DropdownMenuItem(text = { Text("Renomear conversa atual") }, onClick = {
+                        renameValue = activeChatTitle.ifBlank { lines.firstOrNull { it.role == "user" }?.text?.take(48) ?: "Conversa" }
+                        renameDialog = true; historyMenu = false
+                    })
                     savedChats.forEach { saved ->
-                        DropdownMenuItem(text = { Text(saved.title, maxLines = 1) }, onClick = {
+                        DropdownMenuItem(text = { Text(saved.title, maxLines = 1) }, trailingIcon = {
+                            IconButton(onClick = { deleteChatId = saved.id; historyMenu = false }) {
+                                Icon(Icons.Outlined.DeleteOutline, "Apagar conversa", tint = Color(0xFFFF8D8D))
+                            }
+                        }, onClick = {
                             persistChats()
                             lines.clear(); lines.addAll(saved.messages)
-                            activeChatId = saved.id
+                            activeChatId = saved.id; activeChatTitle = saved.title
                             agent = AiAgent(buildProvider(kind, apiKey.trim(), model.trim()))
                             agent?.restoreConversation(saved.messages.map { it.role to it.text })
                             input = ""; historyMenu = false
@@ -509,6 +527,29 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
                 }
             }
         }
+    }
+
+    if (renameDialog) {
+        AlertDialog(
+            onDismissRequest = { renameDialog = false },
+            title = { Text("Renomear conversa") },
+            text = { OutlinedTextField(value = renameValue, onValueChange = { renameValue = it }, singleLine = true, label = { Text("Nome") }) },
+            confirmButton = { TextButton(onClick = { activeChatTitle = renameValue.trim().ifBlank { "Conversa" }.take(64); persistChats(); renameDialog = false }) { Text("Guardar") } },
+            dismissButton = { TextButton(onClick = { renameDialog = false }) { Text("Cancelar") } }
+        )
+    }
+    deleteChatId?.let { target ->
+        AlertDialog(
+            onDismissRequest = { deleteChatId = null },
+            title = { Text("Apagar conversa?") },
+            text = { Text("Esta conversa será removida do histórico local. Esta ação não pode ser desfeita.") },
+            confirmButton = { TextButton(onClick = {
+                storeChats(savedChats.filterNot { it.id == target })
+                if (activeChatId == target) { lines.clear(); agent = null; activeChatId = System.currentTimeMillis().toString(); activeChatTitle = "" }
+                deleteChatId = null
+            }) { Text("Apagar") } },
+            dismissButton = { TextButton(onClick = { deleteChatId = null }) { Text("Cancelar") } }
+        )
     }
 }
 
