@@ -1,4 +1,5 @@
 #include "core/scene.h"
+#include "core/polymesh.h"
 
 #include <algorithm>
 #include <cmath>
@@ -18,15 +19,32 @@ const char* primitiveName(Primitive p) {
 }
 
 Mesh makePrimitiveMesh(Primitive p, float size) {
+    PolyMesh poly;
+    float smoothAngle = 35.0f;
     switch (p) {
-        case Primitive::Cube: return makeCube(size);
-        case Primitive::Sphere: return makeSphere(size * 0.5f, 24, 16);
-        case Primitive::Cylinder: return makeCylinder(size * 0.5f, size, 24);
-        case Primitive::Cone: return makeCone(size * 0.5f, size, 24);
-        case Primitive::Torus: return makeTorus(size * 0.35f, size * 0.15f, 32, 16);
-        case Primitive::Plane: return makePlane(size);
+        case Primitive::Cube:
+            poly = makeBoxPoly({size, size, size}, 1, 1, 1);
+            break;
+        case Primitive::Sphere:
+            poly = makeSpherePoly(size * 0.5f, 24);
+            smoothAngle = 180.0f;
+            break;
+        case Primitive::Cylinder:
+            poly = makeCylinderPoly(size * 0.5f, size, 24, 1, true);
+            break;
+        case Primitive::Cone:
+            poly = makeConePoly(size * 0.5f, size, 24, true);
+            break;
+        case Primitive::Torus:
+            poly = makeTorusPoly(size * 0.35f, size * 0.15f, 32, 16);
+            smoothAngle = 180.0f;
+            break;
+        case Primitive::Plane:
+            poly = makePlanePoly(size, size, 1, 1);
+            smoothAngle = 0.0f;
+            break;
     }
-    return makeCube(size);
+    return buildRenderMesh(poly, smoothAngle);
 }
 
 namespace {
