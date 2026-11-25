@@ -261,8 +261,9 @@ std::string Editor::describeScene() const {
         if (!first) out += ",";
         first = false;
         std::snprintf(buf, sizeof(buf),
-                      R"JSON({"id":%d,"type":"%s","size":%.3f,"position":[%.3f,%.3f,%.3f],"rotation":[%.1f,%.1f,%.1f],"scale":[%.3f,%.3f,%.3f],"color":[%.2f,%.2f,%.2f]})JSON",
-                      o.id, primitiveName(o.type), o.size, o.transform.position.x,
+                      R"JSON({"id":%d,"type":"%s","size":%.3f,"vertices":%zu,"triangles":%zu,"position":[%.3f,%.3f,%.3f],"rotation":[%.1f,%.1f,%.1f],"scale":[%.3f,%.3f,%.3f],"color":[%.2f,%.2f,%.2f]})JSON",
+                      o.id, primitiveName(o.type), o.size, o.mesh.vertices.size(),
+                      o.mesh.indices.size() / 3, o.transform.position.x,
                       o.transform.position.y, o.transform.position.z, o.transform.rotationDeg.x,
                       o.transform.rotationDeg.y, o.transform.rotationDeg.z, o.transform.scale.x,
                       o.transform.scale.y, o.transform.scale.z, o.color.r, o.color.g, o.color.b);
