@@ -180,9 +180,31 @@ int Editor::addLoftMesh(const std::vector<float>& profiles, int segments, Vec3 p
         const uint16_t r0=static_cast<uint16_t>(last+j), r1=static_cast<uint16_t>(last+(j+1)%segments);
         mesh.indices.insert(mesh.indices.end(),{leftCenter,l1,l0,rightCenter,r0,r1});
     }
+    // Preserve the loft's quad rings as editable topology. The render mesh is a separate
+    // triangulated copy generated only for OpenGL.
+    PolyMesh topology;
+    topology.verts.reserve(rings * static_cast<size_t>(segments) + 2);
+    for (size_t i = 0; i < rings; ++i) {
+        const float x=profiles[i*4], w=profiles[i*4+1], cy=profiles[i*4+2], h=profiles[i*4+3];
+        for (int j=0;j<segments;++j) {
+            const float a=2.0f*kPi*static_cast<float>(j)/segments;
+            topology.verts.push_back({x,cy+h*std::cos(a),w*std::sin(a)});
+        }
+    }
+    auto vid=[&](size_t ring,int j){return static_cast<uint32_t>(ring*static_cast<size_t>(segments)+static_cast<size_t>((j+segments)%segments));};
+    for(size_t i=0;i+1<rings;++i) for(int j=0;j<segments;++j)
+        topology.faces.push_back({vid(i,j),vid(i,j+1),vid(i+1,j+1),vid(i+1,j)});
+    std::vector<uint32_t> left,right;
+    for(int j=segments;j-- >0;) left.push_back(vid(0,j));
+    for(int j=0;j<segments;++j) right.push_back(vid(rings-1,j));
+    topology.faces.push_back(std::move(left));
+    topology.faces.push_back(std::move(right));
+    mesh=buildRenderMesh(topology,35.0f);
+
     Object object;
     object.id=scene_.nextId++; object.type=Primitive::CustomMesh; object.size=1.0f;
     object.name="loft_mesh_"+std::to_string(object.id); object.mesh=std::move(mesh);
+    object.topology=std::move(topology);
     object.transform.position=position;
     const int id=object.id;
     execute(std::make_unique<AddCommand>(std::move(object)));
