@@ -119,13 +119,18 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
     val savedChats = remember { mutableStateListOf<SavedChat>() }
     fun persistChats() {
         val current = lines.toList()
-        val sessions = savedChats.toMutableList().apply { if (current.isNotEmpty()) add(0, SavedChat(current.firstOrNull { it.role == "user" }?.text?.take(48) ?: "Conversa", current)) }.distinctBy { it.title + it.messages.size }.take(25)
+        val title = current.firstOrNull { it.role == "user" }?.text?.take(48) ?: "Conversa"
+        val sessions = if (current.isEmpty()) savedChats.toList() else
+            (listOf(SavedChat(title, current)) + savedChats.filterNot { it.title == title }).take(25)
+        savedChats.clear()
+        savedChats.addAll(sessions)
         val array = org.json.JSONArray()
         sessions.forEach { session ->
             val obj = org.json.JSONObject().put("title", session.title)
             val msgArray = org.json.JSONArray()
             session.messages.forEach { msg -> msgArray.put(org.json.JSONObject().put("role", msg.role).put("text", msg.text)) }
-            obj.put("messages", msgArray); array.put(obj)
+            obj.put("messages", msgArray)
+            array.put(obj)
         }
         chatPrefs.edit().putString("sessions", array.toString()).apply()
     }
