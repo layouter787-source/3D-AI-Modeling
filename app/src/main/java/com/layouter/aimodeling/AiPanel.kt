@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -32,6 +34,8 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.Menu
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Refresh
@@ -75,8 +79,13 @@ import com.layouter.aimodeling.ai.buildProvider
 import com.layouter.aimodeling.ai.SecretStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 private data class ChatLine(val role: String, val text: String)
+private data class SavedChat(val title: String, val messages: List<ChatLine>)
+private val AiWorkScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
 private val panelBg = Color(0xFF17191E)
 private val surfaceBg = Color(0xFF22252C)
@@ -105,6 +114,33 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
     var attachedImage by remember { mutableStateOf<String?>(null) }
     var attachedMime by remember { mutableStateOf("image/jpeg") }
     var attachmentMenu by remember { mutableStateOf(false) }
+    var historyMenu by remember { mutableStateOf(false) }
+    val chatPrefs = remember { context.getSharedPreferences("ai_chat_history", android.content.Context.MODE_PRIVATE) }
+    val savedChats = remember { mutableStateListOf<SavedChat>() }
+    fun persistChats() {
+        val current = lines.toList()
+        val sessions = savedChats.toMutableList().apply { if (current.isNotEmpty()) add(0, SavedChat(current.firstOrNull { it.role == "user" }?.text?.take(48) ?: "Conversa", current)) }.distinctBy { it.title + it.messages.size }.take(25)
+        val array = org.json.JSONArray()
+        sessions.forEach { session ->
+            val obj = org.json.JSONObject().put("title", session.title)
+            val msgArray = org.json.JSONArray()
+            session.messages.forEach { msg -> msgArray.put(org.json.JSONObject().put("role", msg.role).put("text", msg.text)) }
+            obj.put("messages", msgArray); array.put(obj)
+        }
+        chatPrefs.edit().putString("sessions", array.toString()).apply()
+    }
+    fun loadSavedChats() {
+        savedChats.clear()
+        runCatching {
+            val array = org.json.JSONArray(chatPrefs.getString("sessions", "[]"))
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i); val msgs = obj.getJSONArray("messages")
+                val list = (0 until msgs.length()).map { j -> val m = msgs.getJSONObject(j); ChatLine(m.getString("role"), m.getString("text")) }
+                savedChats.add(SavedChat(obj.optString("title", "Conversa"), list))
+            }
+        }
+    }
+    LaunchedEffect(Unit) { loadSavedChats() }
 
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -177,6 +213,7 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
         val outgoingMime = attachedMime
         attachedImage = null
         lines.add(ChatLine("user", text + if (outgoingImage != null) "  [imagem de referência anexada]" else ""))
+        persistChats()
         busy = true
         scope.launch {
             try {
@@ -184,16 +221,16 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
                     userText = text,
                     imageBase64 = outgoingImage,
                     imageMimeType = outgoingMime,
-                    onText = { answer -> if (answer.isNotBlank()) lines.add(ChatLine("assistant", answer)) },
+                    onText = { answer -> if (answer.isNotBlank()) { lines.add(ChatLine("assistant", answer)); persistChats() } },
                     onTool = { call, result ->
-                        lines.add(ChatLine("tool", if (result.ok) "Executado: ${call.name}" else "Falhou: ${call.name}"))
+                        lines.add(ChatLine("tool", if (result.ok) "Executado: ${call.name}" else "Falhou: ${call.name}")); persistChats()
                     },
                     onSceneChanged = onSceneChanged
                 )
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                lines.add(ChatLine("error", e.message ?: "Falha na ligação. Confirma a chave e o modelo."))
+                lines.add(ChatLine("error", e.message ?: "Falha na ligação. Confirma a chave e o modelo.")); persistChats()
             } finally {
                 onSceneChanged()
                 busy = false
@@ -235,7 +272,9 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
             IconButton(onClick = { showSettings = !showSettings }) {
                 Icon(Icons.Outlined.Settings, "Configuração", tint = if (showSettings) accent else secondaryText)
             }
-            IconButton(onClick = onClose) { Icon(Icons.Outlined.Close, "Fechar", tint = secondaryText) }
+            Box(Modifier.padding(start = 5.dp).pointerInput(Unit) { detectVerticalDragGestures(onVerticalDrag = { _, dy -> if (dy > 18f) onClose() }) }) {
+                IconButton(onClick = onClose) { Icon(Icons.Outlined.KeyboardArrowDown, "Recolher painel (a tarefa continua)", tint = accent) }
+            }
         }
 
         if (showSettings) {
