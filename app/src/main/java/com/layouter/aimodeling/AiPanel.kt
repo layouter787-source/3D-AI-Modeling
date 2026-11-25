@@ -1,5 +1,13 @@
 package com.layouter.aimodeling
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.util.Base64
+import android.content.Context
+import android.net.Uri
+import java.io.ByteArrayOutputStream
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,6 +28,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.AttachFile
+import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
@@ -94,6 +104,27 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
     var agent by remember { mutableStateOf<AiAgent?>(null) }
     val lines = remember { mutableStateListOf<ChatLine>() }
     var input by remember { mutableStateOf("") }
+    var attachedImage by remember { mutableStateOf<String?>(null) }
+    var attachedMime by remember { mutableStateOf("image/jpeg") }
+    var attachmentMenu by remember { mutableStateOf(false) }
+
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            try {
+                val bitmap = context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
+                if (bitmap != null) {
+                    attachedImage = encodeReferenceImage(bitmap)
+                    attachedMime = "image/jpeg"
+                }
+            } catch (e: Exception) { routeStatus = "Falha ao abrir imagem" }
+        }
+    }
+    val cameraPicker = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap ->
+        if (bitmap != null) {
+            attachedImage = encodeReferenceImage(bitmap)
+            attachedMime = "image/jpeg"
+        }
+    }
     var busy by remember { mutableStateOf(false) }
     var routeStatus by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
@@ -134,7 +165,7 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
 
     fun send() {
         val text = input.trim()
-        if (text.isEmpty() || busy) return
+        if ((text.isEmpty() && attachedImage == null) || busy) return
         if (apiKey.isBlank() || model.isBlank()) {
             showSettings = true
             return
@@ -144,12 +175,17 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
             AiAgent(directProvider).also { agent = it }
         }
         input = ""
-        lines.add(ChatLine("user", text))
+        val outgoingImage = attachedImage
+        val outgoingMime = attachedMime
+        attachedImage = null
+        lines.add(ChatLine("user", text + if (outgoingImage != null) "  [imagem de referência anexada]" else ""))
         busy = true
         scope.launch {
             try {
                 current.ask(
                     userText = text,
+                    imageBase64 = outgoingImage,
+                    imageMimeType = outgoingMime,
                     onText = { answer -> if (answer.isNotBlank()) lines.add(ChatLine("assistant", answer)) },
                     onTool = { call, result ->
                         lines.add(ChatLine("tool", if (result.ok) "Executado: ${call.name}" else "Falhou: ${call.name}"))
@@ -368,10 +404,25 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
                     modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 7.dp, top = 5.dp, bottom = 5.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Box {
+                        IconButton(onClick = { attachmentMenu = true }, enabled = !busy) {
+                            Icon(Icons.Outlined.Add, "Adicionar imagem ou usar câmara", tint = accent)
+                        }
+                        DropdownMenu(expanded = attachmentMenu, onDismissRequest = { attachmentMenu = false }) {
+                            DropdownMenuItem(text = { Text("Escolher imagem / ficheiro") }, leadingIcon = { Icon(Icons.Outlined.AttachFile, null) }, onClick = {
+                                attachmentMenu = false
+                                imagePicker.launch(arrayOf("image/*"))
+                            })
+                            DropdownMenuItem(text = { Text("Tirar fotografia") }, leadingIcon = { Icon(Icons.Outlined.CameraAlt, null) }, onClick = {
+                                attachmentMenu = false
+                                cameraPicker.launch(null)
+                            })
+                        }
+                    }
                     OutlinedTextField(
                         value = input,
                         onValueChange = { input = it },
-                        placeholder = { Text("Mensagem…") },
+                        placeholder = { Text(if (attachedImage != null) "Imagem pronta · escreve o pedido…" else "Mensagem…") },
                         enabled = !busy,
                         modifier = Modifier.weight(1f),
                         maxLines = 4,
@@ -386,7 +437,7 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
                     )
                     IconButton(
                         onClick = { send() },
-                        enabled = !busy && input.isNotBlank(),
+                        enabled = !busy && (input.isNotBlank() || attachedImage != null),
                         modifier = Modifier.background(if (!busy && input.isNotBlank()) accent else Color(0xFF3A414B), CircleShape)
                     ) {
                         Icon(Icons.Outlined.Send, "Enviar", tint = Color(0xFF10151A))
@@ -395,6 +446,16 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
             }
         }
     }
+}
+
+private fun encodeReferenceImage(source: Bitmap): String {
+    val maxSide = 1280f
+    val scale = minOf(1f, maxSide / maxOf(source.width, source.height))
+    val bitmap = if (scale < 1f) Bitmap.createScaledBitmap(source, (source.width * scale).toInt().coerceAtLeast(1), (source.height * scale).toInt().coerceAtLeast(1), true) else source
+    val output = ByteArrayOutputStream()
+    bitmap.compress(Bitmap.CompressFormat.JPEG, 82, output)
+    if (bitmap !== source) bitmap.recycle()
+    return Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)
 }
 
 @Composable
