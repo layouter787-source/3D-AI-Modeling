@@ -1,48 +1,43 @@
-# Provedores de IA
+# Provedores de IA e modelos dinâmicos
 
-O app usa **apenas chave de API**: não há login com conta OpenAI/ChatGPT nem com conta Claude. O utilizador escolhe o serviço, cola a chave e a ligação fica pronta, porque a base URL de cada serviço já vem predefinida. Interface comum `AiProvider` em `app/src/main/java/com/layouter/aimodeling/ai/`.
+O aplicativo liga-se às APIs com a chave fornecida pelo utilizador. Não simula login nem inclui modelos fixos na interface.
 
-| Serviço | Base URL | Formato | Onde obter a chave |
-|---|---|---|---|
-| OpenAI | `https://api.openai.com/v1` | Chat Completions | platform.openai.com/api-keys |
-| Claude | `https://api.anthropic.com/v1` | Messages API | console.anthropic.com |
-| Google Gemini | `https://generativelanguage.googleapis.com/v1beta/openai` | Chat Completions (compatibilidade) | aistudio.google.com/apikey |
-| NVIDIA NIM | `https://integrate.api.nvidia.com/v1` | Chat Completions | build.nvidia.com (chaves `nvapi-`) |
+## Provedores integrados
 
-OpenAI, Gemini e NVIDIA NIM usam o mesmo `OpenAiProvider`; só muda a base URL. O Claude usa o `AnthropicProvider`. Todos os provedores estão implementados mas **não foram testados**.
+| Provedor | Endpoint de conversa | Endpoint usado para descobrir modelos |
+|---|---|---|
+| OpenAI | Chat Completions | `GET /v1/models` |
+| Claude / Anthropic | Messages API | `GET /v1/models` (com paginação) |
+| Google Gemini | API compatível com OpenAI | API nativa `GET /v1beta/models`; apenas modelos que anunciam `generateContent` |
+| NVIDIA NIM | Chat Completions compatível | `GET /v1/models` |
 
-Notas por serviço:
-- **Gemini 3:** exige que a `thought_signature` das chamadas de ferramenta seja devolvida na mensagem seguinte; o app guarda o `extra_content` de cada chamada e reenvia-o. Ferramentas sem argumentos são enviadas sem `parameters`.
-- **NVIDIA NIM:** o nível gratuito tem limite de pedidos por minuto; o modelo precisa de suportar chamadas de ferramenta.
-- Os nomes de modelo predefinidos são sugestões e podem ser mudados nas definições.
+Os IDs são recebidos diretamente do serviço, apresentados no seletor e guardados por provedor. O utilizador pode também introduzir manualmente um ID publicado pelo seu serviço. Não há fallback silencioso para um modelo fictício: é necessário escolher um modelo.
 
-## Ciclo de conversa
-`AiAgent`: envia o pedido, executa as ferramentas pedidas pela IA no `ToolDispatcher`, devolve os resultados e repete até a IA responder só com texto. Limites: 6 rondas e 40 chamadas de ferramenta por pedido; histórico de 60 mensagens. O painel de chat (`AiPanel`) abre com o botão "IA".
+A lista é a lista visível à chave/conta usada e pode incluir modelos que não suportam todas as ferramentas. A API de conversa é a autoridade final sobre disponibilidade, permissões e compatibilidade.
 
-## Chave de API
-- Guardada cifrada (AES-GCM) com uma chave do Android Keystore (`SecretStore`). Nunca é registada em logs.
-- Só é enviada ao serviço escolhido; o uso é cobrado na conta do utilizador nesse serviço.
+## Fluxo da aplicação
 
-## Ferramentas expostas à IA
+- `AiPanel.kt`: conversa, configurações, escolha de provedor e seletor de modelos.
+- `ModelCatalog.kt`: consulta as APIs reais e normaliza os IDs.
+- `HttpJson.kt`: pedidos HTTP autenticados executados em `Dispatchers.IO`.
+- `AiAgent.kt`: histórico, chamadas de ferramentas e limites de segurança.
+- `ToolDispatcher.kt`: valida os argumentos e executa apenas ferramentas expostas pelo motor.
 
-Implementadas (`ToolDispatcher`, sobre o `Editor` em C++, todas com undo/redo):
+## Chaves
 
-| Ferramenta | Argumentos |
-|---|---|
-| `create_primitive` | `type` (cube, sphere, cylinder, cone, torus, plane), `size`, `position` |
-| `set_transform` | `object_id`, `position`, `rotation_degrees`, `scale` |
-| `move_by` | `object_id`, `offset` |
-| `rotate_by` | `object_id`, `degrees` |
-| `scale_by` | `object_id`, `factor` |
-| `set_color` | `object_id`, `color` (r, g, b de 0 a 1) |
-| `delete_object` | `object_id` |
-| `undo` / `redo` | - |
-| `get_scene` | devolve a cena em JSON |
+As chaves são guardadas cifradas com AES-GCM e Android Keystore (`SecretStore`). Não são escritas em logs. A chave é enviada apenas ao endpoint do provedor selecionado. O custo e os limites são os da conta/API desse provedor.
 
-Planeadas (precisam de edição de malha): `extrude_faces`, `bevel`, `boolean`, `subdivide`, `mirror`, seleção de faces/arestas/vértices.
+## Ferramentas da cena
 
-## Segurança
-- Todos os argumentos são validados (JSON, 3 números finitos, ids existentes). O núcleo limita tamanho, escala, cor e o número de objetos (500).
-- A IA só opera sobre objetos que existem na cena.
-- A descrição da cena e os resultados das ferramentas são dados, nunca instruções.
-- Conteúdo de ficheiros importados será tratado como dado, nunca como instruções para a IA.
+- criar primitivas (cubo, esfera, cilindro, cone, toro e plano)
+- transformar, mover, rodar, escalar e colorir objetos
+- apagar, desfazer e refazer
+- consultar a cena
+
+A IA só altera a cena através destas ferramentas. Os parâmetros são validados no Kotlin e no núcleo C++.
+
+## Ícones e interface
+
+A interface utiliza ícones vetoriais consistentes e escaláveis em vez de símbolos Unicode usados como botões. O estilo é compacto, escuro e de alto contraste, com conversa, composer e configurações separadas.
+
+Referência de desenho SVG consultada: [Lucide Icons](https://lucide.dev/icons/). O projeto Android usa ícones vetoriais Compose/Android para manter renderização nativa e acessibilidade.
