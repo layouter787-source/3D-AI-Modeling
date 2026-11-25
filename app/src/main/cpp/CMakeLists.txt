@@ -7,6 +7,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_library(aimodeling SHARED
     native-lib.cpp
     core/mesh.cpp
+    core/polymesh.cpp
+    core/json.cpp
+    core/csg.cpp
     core/scene.cpp
     core/editor.cpp)
 
