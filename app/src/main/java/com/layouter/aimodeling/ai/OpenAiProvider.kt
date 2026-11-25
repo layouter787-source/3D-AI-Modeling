@@ -24,8 +24,17 @@ class OpenAiProvider(
             msgs.put(JSONObject().put("role", "system").put("content", system))
             for (m in messages) {
                 when (m) {
-                    is AiMessage.User ->
-                        msgs.put(JSONObject().put("role", "user").put("content", m.text))
+                    is AiMessage.User -> {
+                        if (m.imageBase64.isNullOrBlank()) {
+                            msgs.put(JSONObject().put("role", "user").put("content", m.text))
+                        } else {
+                            val parts = JSONArray()
+                            parts.put(JSONObject().put("type", "text").put("text", m.text.ifBlank { "Analyze this attached reference image and follow my instruction." }))
+                            parts.put(JSONObject().put("type", "image_url").put("image_url",
+                                JSONObject().put("url", "data:${m.imageMimeType};base64,${m.imageBase64}")))
+                            msgs.put(JSONObject().put("role", "user").put("content", parts))
+                        }
+                    }
                     is AiMessage.Assistant -> {
                         val o = JSONObject().put("role", "assistant").put("content", m.text)
                         if (m.toolCalls.isNotEmpty()) {
