@@ -3,8 +3,11 @@
 #include <cstdint>
 #include <vector>
 
+#include "core/polymesh.h"
+
 namespace core {
 
+// Malha de renderização: um vértice por canto de face, com normais suaves ou duras.
 struct Vertex {
     float px, py, pz;
     float nx, ny, nz;
@@ -12,19 +15,10 @@ struct Vertex {
 
 struct Mesh {
     std::vector<Vertex> vertices;
-    std::vector<uint16_t> indices;
+    std::vector<uint32_t> indices;
 };
 
-// Todas as primitivas ficam centradas na origem, com normais e triângulos
-// em sentido anti-horário visto de fora.
-Mesh makeCube(float size);
-Mesh makePyramid(float size);
-Mesh makeCapsule(float radius, float height, int segments, int hemisphereRings);
-Mesh makeOctahedron(float size);
-Mesh makeSphere(float radius, int segments, int rings);
-Mesh makeCylinder(float radius, float height, int segments);
-Mesh makeCone(float radius, float height, int segments);
-Mesh makeTorus(float majorRadius, float minorRadius, int segments, int sides);
-Mesh makePlane(float size);
+// smoothAngleDegrees: arestas com ângulo menor que isto ficam suaves; 0 = tudo plano; 180 = tudo suave.
+Mesh buildRenderMesh(const PolyMesh& poly, float smoothAngleDegrees);
 
 }  // namespace core
