@@ -424,6 +424,18 @@ Java_com_layouter_aimodeling_NativeBridge_setColor(JNIEnv*, jobject, jint id, jf
     return toJ(gRenderer.editor.setColor(id, c));
 }
 
+JNIEXPORT jboolean JNICALL
+Java_com_layouter_aimodeling_NativeBridge_snapToGround(JNIEnv*, jobject, jint id) {
+    std::lock_guard<std::mutex> lock(gMutex);
+    return toJ(gRenderer.editor.snapToGround(id));
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_layouter_aimodeling_NativeBridge_snapToGrid(JNIEnv*, jobject, jint id, jfloat step) {
+    std::lock_guard<std::mutex> lock(gMutex);
+    return toJ(gRenderer.editor.snapToGrid(id, step));
+}
+
 JNIEXPORT void JNICALL
 Java_com_layouter_aimodeling_NativeBridge_clearScene(JNIEnv*, jobject) {
     std::lock_guard<std::mutex> lock(gMutex);

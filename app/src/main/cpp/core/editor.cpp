@@ -176,6 +176,32 @@ bool Editor::scaleBy(int id, Vec3 factor) {
     return setTransform(id, t);
 }
 
+bool Editor::snapToGround(int id) {
+    const Object* object = scene_.find(id);
+    if (object == nullptr || object->mesh.vertices.empty()) return false;
+    const Mat4 model = object->transform.matrix();
+    float minimumY = 1.0e30f;
+    for (const Vertex& vertex : object->mesh.vertices) {
+        const Vec3 world = transformPoint(model, Vec3{vertex.px, vertex.py, vertex.pz});
+        if (!finite3(world)) return false;
+        minimumY = std::min(minimumY, world.y);
+    }
+    Transform transform = object->transform;
+    transform.position.y -= minimumY;
+    return setTransform(id, transform);
+}
+
+bool Editor::snapToGrid(int id, float step) {
+    const Object* object = scene_.find(id);
+    if (object == nullptr || !std::isfinite(step) || step <= 0.0f) return false;
+    step = std::clamp(step, 0.001f, 100.0f);
+    Transform transform = object->transform;
+    transform.position.x = std::round(transform.position.x / step) * step;
+    transform.position.y = std::round(transform.position.y / step) * step;
+    transform.position.z = std::round(transform.position.z / step) * step;
+    return setTransform(id, transform);
+}
+
 bool Editor::setColor(int id, Color color) {
     Object* o = scene_.find(id);
     if (o == nullptr) return false;

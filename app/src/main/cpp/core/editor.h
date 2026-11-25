@@ -32,6 +32,8 @@ public:
     bool rotateBy(int id, Vec3 degrees);
     bool scaleBy(int id, Vec3 factor);
     bool setColor(int id, Color color);
+    bool snapToGround(int id);
+    bool snapToGrid(int id, float step);
 
     void clearScene();
     void clearHistory();

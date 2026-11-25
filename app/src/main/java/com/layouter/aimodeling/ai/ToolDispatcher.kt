@@ -53,6 +53,8 @@ object ToolDispatcher {
                 val f = a.vec3("factor")
                 report(NativeBridge.scaleBy(a.getInt("object_id"), f[0], f[1], f[2]), "Object scaled")
             }
+            "snap_to_ground" -> report(NativeBridge.snapToGround(a.getInt("object_id")), "Object placed on ground")
+            "snap_to_grid" -> report(NativeBridge.snapToGrid(a.getInt("object_id"), a.optDouble("step", 1.0).toFloat()), "Object snapped to grid")
             "set_color" -> {
                 val c = a.vec3("color")
                 report(NativeBridge.setColor(a.getInt("object_id"), c[0], c[1], c[2]), "Color changed")
@@ -236,6 +238,8 @@ object ToolDispatcher {
                 )
             )
             .put(tool("delete_object", "Delete an object.", JSONObject().put("object_id", objectId), listOf("object_id")))
+            .put(tool("snap_to_ground", "Place object's transformed mesh lowest point on world ground y=0. Undoable.", JSONObject().put("object_id", objectId), listOf("object_id")))
+            .put(tool("snap_to_grid", "Snap object position to nearest grid step (default 1). Undoable.", JSONObject().put("object_id", objectId).put("step", JSONObject().put("type","number").put("minimum",0.001).put("maximum",100).put("default",1)), listOf("object_id")))
 
             .put(tool("create_batch", "Create 1..30 primitive meshes in one call. Each item: type, size, position and optional color, scale, rotation_degrees.", JSONObject().put("items", JSONObject().put("type","array").put("minItems",1).put("maxItems",30).put("items",JSONObject().put("type","object").put("properties",JSONObject().put("type",JSONObject().put("type","string").put("enum",primitiveTypes)).put("size",JSONObject().put("type","number")).put("position",number3("[x,y,z]")).put("color",number3("RGB 0..1")).put("scale",number3("XYZ")).put("rotation_degrees",number3("Euler degrees"))).put("required",JSONArray(listOf("type","size","position"))))), listOf("items")))
             .put(tool("create_asset_preset", "Generate editable, multi-part scene asset: tree, table, house, robot, barrel, stairs, lamp, crystal or sci_fi_crate.", JSONObject().put("preset",JSONObject().put("type","string").put("enum",JSONArray(listOf("tree","table","house","robot","barrel","stairs","lamp","crystal","sci_fi_crate")))).put("position",number3("World origin")).put("scale",JSONObject().put("type","number")), listOf("preset")))
