@@ -42,6 +42,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
@@ -61,11 +62,11 @@ import kotlinx.coroutines.withContext
 private const val MOVE_STEP = 0.25f
 
 private val palette = listOf(
-    Triple(0.35f, 0.60f, 0.95f),
-    Triple(0.90f, 0.30f, 0.30f),
-    Triple(0.30f, 0.80f, 0.40f),
-    Triple(0.95f, 0.80f, 0.25f),
-    Triple(0.85f, 0.85f, 0.85f),
+    Triple(0.72f, 0.78f, 0.82f),
+    Triple(0.78f, 0.56f, 0.42f),
+    Triple(0.48f, 0.70f, 0.62f),
+    Triple(0.70f, 0.62f, 0.78f),
+    Triple(0.92f, 0.90f, 0.84f),
 )
 
 @Composable
@@ -204,11 +205,12 @@ fun EditorScreen() {
 
         Row(
             modifier = Modifier.align(Alignment.TopCenter).systemBarsPadding().padding(8.dp)
-                .background(Color(0xCC17191E), androidx.compose.foundation.shape.RoundedCornerShape(18.dp))
-                .padding(horizontal = 5.dp, vertical = 2.dp),
+                .background(Color(0xE91B1E23), androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
+                .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
+            Text("MESH", color = Color(0xFF9BC8C0), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 8.dp, end = 4.dp))
             IconButton(onClick = { NativeBridge.undo(); refresh() }, enabled = canUndo) {
                 Icon(Icons.Outlined.Undo, "Desfazer", tint = if (canUndo) Color.White else Color.Gray)
             }
@@ -235,7 +237,7 @@ fun EditorScreen() {
                 Icon(Icons.Outlined.FileDownload, "Export OBJ", tint = Color(0xFFBFC7D1))
             }
             IconButton(onClick = { showAi = !showAi }) {
-                Icon(Icons.Outlined.SmartToy, "Assistente IA", tint = Color(0xFF75C8F2))
+                Icon(Icons.Outlined.SmartToy, "Assistente IA", tint = Color(0xFF9BC8C0))
             }
         }
 
@@ -247,8 +249,8 @@ fun EditorScreen() {
         )
         if (!showAi) {
             Column(
-                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                    .background(Color(0xD917191E)).systemBarsPadding().padding(8.dp),
+                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(0.96f)
+                    .background(Color(0xE91B1E23), androidx.compose.foundation.shape.RoundedCornerShape(22.dp)).systemBarsPadding().padding(10.dp),
                 verticalArrangement = Arrangement.spacedBy(7.dp)
             ) {
                 if (selected >= 0) SelectionTools(selected, refresh)
@@ -262,10 +264,14 @@ fun EditorScreen() {
 private fun ToolButton(label: String, onClick: () -> Unit) {
     FilledTonalButton(
         onClick = onClick,
-        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)
+        contentPadding = PaddingValues(horizontal = 13.dp, vertical = 7.dp),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(13.dp),
+        colors = ButtonDefaults.filledTonalButtonColors(
+            containerColor = Color(0xFF2A3037),
+            contentColor = Color(0xFFE3E7EB)
+        )
     ) {
-        Icon(Icons.Outlined.Add, null, modifier = Modifier.size(16.dp))
-        Text(label, modifier = Modifier.padding(start = 3.dp))
+        Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1)
     }
 }
 
@@ -331,8 +337,10 @@ private fun SelectionTools(id: Int, refresh: () -> Unit) {
 private fun PrimitiveBar(refresh: () -> Unit) {
     Row(
         Modifier.horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(5.dp)
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp)
     ) {
+        Text("CRIAR", color = Color(0xFF9BC8C0), style = MaterialTheme.typography.labelSmall)
         PrimitiveType.values().forEach { type ->
             ToolButton(type.label) {
                 val size = 1f
