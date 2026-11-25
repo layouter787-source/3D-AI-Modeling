@@ -24,6 +24,8 @@ import androidx.compose.material.icons.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.FolderOpen
@@ -70,7 +72,7 @@ private val palette = listOf(
 )
 
 @Composable
-fun EditorScreen() {
+fun EditorScreen(isDarkTheme: Boolean = true, onToggleTheme: () -> Unit = {}) {
     val revision = remember { mutableIntStateOf(0) }
     val rev = revision.intValue
     val refresh: () -> Unit = { revision.intValue++ }
@@ -205,14 +207,14 @@ fun EditorScreen() {
 
         Row(
             modifier = Modifier.align(Alignment.TopCenter).systemBarsPadding().padding(8.dp)
-                .background(Color(0xE91B1E23), androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
+                .background(if (isDarkTheme) Color(0xE9000000) else Color(0xE9FFFFFF), androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Text("MESH", color = Color(0xFF9BC8C0), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 8.dp, end = 4.dp))
+            Text("MESH", color = if (isDarkTheme) Color(0xFF60A5FA) else Color(0xFF2563EB), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 8.dp, end = 4.dp))
             IconButton(onClick = { NativeBridge.undo(); refresh() }, enabled = canUndo) {
-                Icon(Icons.Outlined.Undo, "Desfazer", tint = if (canUndo) Color.White else Color.Gray)
+                Icon(Icons.Outlined.Undo, "Desfazer", tint = if (canUndo) MaterialTheme.colorScheme.onSurface else Color.Gray)
             }
             IconButton(onClick = { NativeBridge.redo(); refresh() }, enabled = canRedo) {
                 Icon(Icons.Outlined.Redo, "Refazer", tint = if (canRedo) Color.White else Color.Gray)
@@ -222,7 +224,7 @@ fun EditorScreen() {
                 projectExport = SceneProjectCodec.encode()
                 projectSaveLauncher.launch("untitled.3dproj")
             }) {
-                Icon(Icons.Outlined.Save, "Guardar projeto", tint = Color(0xFFBFC7D1))
+                Icon(Icons.Outlined.Save, "Guardar projeto", tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             IconButton(onClick = {
                 projectOpenLauncher.launch(arrayOf("*/*"))
