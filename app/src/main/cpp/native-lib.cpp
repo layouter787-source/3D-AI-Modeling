@@ -368,6 +368,19 @@ Java_com_layouter_aimodeling_NativeBridge_addPrimitive(JNIEnv*, jobject, jint ty
 }
 
 JNIEXPORT jint JNICALL
+Java_com_layouter_aimodeling_NativeBridge_createLoftMesh(JNIEnv* env, jobject, jfloatArray data,
+                                                        jint segments, jfloat x, jfloat y, jfloat z) {
+    if (data == nullptr) return -1;
+    const jsize length=env->GetArrayLength(data);
+    if (length < 12 || length > 96 || length % 4 != 0) return -1;
+    std::vector<float> profiles(static_cast<size_t>(length));
+    env->GetFloatArrayRegion(data,0,length,profiles.data());
+    if (env->ExceptionCheck()) { env->ExceptionClear(); return -1; }
+    std::lock_guard<std::mutex> lock(gMutex);
+    return gRenderer.editor.addLoftMesh(profiles,segments,Vec3{x,y,z});
+}
+
+JNIEXPORT jint JNICALL
 Java_com_layouter_aimodeling_NativeBridge_duplicateObject(JNIEnv*, jobject, jint id,
                                                           jfloat dx, jfloat dy, jfloat dz) {
     std::lock_guard<std::mutex> lock(gMutex);
