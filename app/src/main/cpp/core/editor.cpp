@@ -353,6 +353,12 @@ bool Editor::meshOperation(int id, const std::string& operation, const std::vect
             static_cast<size_t>(faces[1]) >= source.verts.size()) return false;
         result = loopCut(source, static_cast<uint32_t>(faces[0]), static_cast<uint32_t>(faces[1]),
                          std::clamp(parameter, 1, 32));
+    } else if (operation == "loop_cut") {
+        if (faces.size() != 2 || faces[0] < 0 || faces[1] < 0 ||
+            static_cast<size_t>(faces[0]) >= source.verts.size() ||
+            static_cast<size_t>(faces[1]) >= source.verts.size()) return false;
+        result = loopCut(source, static_cast<uint32_t>(faces[0]), static_cast<uint32_t>(faces[1]),
+                         std::clamp(parameter, 1, 32));
     } else if (operation == "triangulate") {
         result = triangulate(source);
     } else if (operation == "flip_normals") {
@@ -381,30 +387,48 @@ std::string Editor::describeMesh(int id, int offset, int limit) const {
     if (object == nullptr) return "{\\"error\\":\\"Object not found\\"}";
     offset = std::max(0, offset);
     limit = std::clamp(limit, 1, 1200);
-    const Mesh& mesh = object->mesh;
-    const size_t vertexCount = mesh.vertices.size();
-    const size_t faceCount = mesh.indices.size() / 3;
+    const PolyMesh& topology = object->topology;
+    const bool hasTopology = !topology.empty();
+    const Mesh& render = object->mesh;
+    const size_t vertexCount = hasTopology ? topology.verts.size() : render.vertices.size();
+    const size_t faceCount = hasTopology ? topology.faces.size() : render.indices.size()/3;
     const size_t vStart = std::min(static_cast<size_t>(offset), vertexCount);
     const size_t fStart = std::min(static_cast<size_t>(offset), faceCount);
     const size_t vEnd = std::min(vertexCount, vStart + static_cast<size_t>(limit));
     const size_t fEnd = std::min(faceCount, fStart + static_cast<size_t>(limit));
     std::string out = "{\\"object_id\\":" + std::to_string(id) +
+        ",\\"topology\\":" + (hasTopology ? "true" : "false") +
         ",\\"vertex_count\\":" + std::to_string(vertexCount) +
         ",\\"face_count\\":" + std::to_string(faceCount) +
         ",\\"offset\\":" + std::to_string(offset) + ",\\"vertices\\":[";
-    char buf[160];
+    char buf[192];
     for (size_t i = vStart; i < vEnd; ++i) {
         if (i > vStart) out += ",";
-        const Vertex& v = mesh.vertices[i];
-        std::snprintf(buf, sizeof(buf), "[%.6f,%.6f,%.6f]", v.px, v.py, v.pz);
+        if (hasTopology) {
+            const Vec3& v = topology.verts[i];
+            std::snprintf(buf, sizeof(buf), "[%.6f,%.6f,%.6f]", v.x, v.y, v.z);
+        } else {
+            const Vertex& v = render.vertices[i];
+            std::snprintf(buf, sizeof(buf), "[%.6f,%.6f,%.6f]", v.px, v.py, v.pz);
+        }
         out += buf;
     }
     out += "],\\"faces\\":[";
     for (size_t i = fStart; i < fEnd; ++i) {
         if (i > fStart) out += ",";
-        const size_t k = i * 3;
-        std::snprintf(buf, sizeof(buf), "[%u,%u,%u]", mesh.indices[k], mesh.indices[k+1], mesh.indices[k+2]);
-        out += buf;
+        if (hasTopology) {
+            out += "[";
+            const auto& face = topology.faces[i];
+            for (size_t k = 0; k < face.size(); ++k) {
+                if (k) out += ",";
+                out += std::to_string(face[k]);
+            }
+            out += "]";
+        } else {
+            const size_t k = i * 3;
+            std::snprintf(buf, sizeof(buf), "[%u,%u,%u]", render.indices[k], render.indices[k+1], render.indices[k+2]);
+            out += buf;
+        }
     }
     out += "]}";
     return out;
