@@ -147,6 +147,8 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
     }
     LaunchedEffect(Unit) { loadSavedChats() }
 
+    var routeStatus by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             try {
@@ -164,8 +166,6 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
             attachedMime = "image/jpeg"
         }
     }
-    var busy by remember { mutableStateOf(false) }
-    var routeStatus by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
 
     LaunchedEffect(lines.size) {
