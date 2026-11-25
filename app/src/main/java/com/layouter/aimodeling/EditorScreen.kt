@@ -294,6 +294,8 @@ private fun SelectionTools(id: Int, refresh: () -> Unit) {
             Icon(Icons.Outlined.ArrowDownward, "Mover para Y negativo", tint = Color.White)
         }
         ToolButton("Z−") { NativeBridge.moveBy(id, 0f, 0f, -MOVE_STEP); refresh() }
+        ToolButton("MOLDAR +") { NativeBridge.sculptMesh(id, 0f, 0f, 0f, 0.85f, 0f, 0.10f, 0f); refresh() }
+        ToolButton("MOLDAR −") { NativeBridge.sculptMesh(id, 0f, 0f, 0f, 0.85f, 0f, -0.10f, 0f); refresh() }
         ToolButton("Z+") { NativeBridge.moveBy(id, 0f, 0f, MOVE_STEP); refresh() }
     }
 
