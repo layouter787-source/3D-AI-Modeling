@@ -93,7 +93,7 @@ private val accent = Color(0xFF75C8F2)
 private val secondaryText = Color(0xFFA7ADB8)
 
 @Composable
-fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier = Modifier) {
+fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier = Modifier, visible: Boolean = true) {
     val context = LocalContext.current
     val settings = remember { AiSettings(context) }
     val secrets = remember { SecretStore(context) }
@@ -171,6 +171,8 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
     LaunchedEffect(lines.size) {
         if (lines.isNotEmpty()) listState.animateScrollToItem(lines.lastIndex)
     }
+
+    if (!visible) return
 
     fun loadModels() {
         if (apiKey.isBlank()) {
