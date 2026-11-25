@@ -171,6 +171,17 @@ bool Editor::setColor(int id, Color color) {
     return true;
 }
 
+void Editor::clearScene() {
+    scene_ = Scene{};
+    undo_.clear();
+    redo_.clear();
+}
+
+void Editor::clearHistory() {
+    undo_.clear();
+    redo_.clear();
+}
+
 bool Editor::undo() {
     if (undo_.empty()) return false;
     std::unique_ptr<Command> command = std::move(undo_.back());

@@ -34,6 +34,8 @@ object NativeBridge {
     external fun redo(): Boolean
     external fun canUndo(): Boolean
     external fun canRedo(): Boolean
+    external fun clearScene()
+    external fun clearHistory()
 
     // Seleção e consulta
     external fun select(id: Int)

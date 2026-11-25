@@ -32,6 +32,8 @@ public:
     bool scaleBy(int id, Vec3 factor);
     bool setColor(int id, Color color);
 
+    void clearScene();
+    void clearHistory();
     bool undo();
     bool redo();
     bool canUndo() const { return !undo_.empty(); }

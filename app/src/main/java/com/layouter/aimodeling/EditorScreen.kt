@@ -25,6 +25,8 @@ import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Redo
 import androidx.compose.material.icons.outlined.RotateLeft
@@ -50,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -71,6 +74,7 @@ fun EditorScreen() {
     val refresh: () -> Unit = { revision.intValue++ }
     var showAi by remember { mutableStateOf(false) }
     var objExport by remember { mutableStateOf("") }
+    var projectExport by remember { mutableStateOf("") }
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val exportLauncher = rememberLauncherForActivityResult(
@@ -85,6 +89,68 @@ fun EditorScreen() {
                     }
                 }
                 Toast.makeText(context, if (saved.isSuccess) "OBJ exported" else "OBJ export failed", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    val projectSaveLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null && projectExport.isNotBlank()) {
+            scope.launch {
+                val saved = withContext(Dispatchers.IO) {
+                    runCatching {
+                        context.contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use {
+                            it.write(projectExport)
+                        } ?: error("Could not open project file")
+                    }
+                }
+                Toast.makeText(
+                    context,
+                    if (saved.isSuccess) "Projeto guardado" else "Falha ao guardar o projeto",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+
+    val projectOpenLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val opened = try {
+                    val projectText = withContext(Dispatchers.IO) {
+                        context.contentResolver.openInputStream(uri)?.use { input ->
+                            val output = ByteArrayOutputStream()
+                            val buffer = ByteArray(8192)
+                            var total = 0
+                            while (true) {
+                                val count = input.read(buffer)
+                                if (count < 0) break
+                                total += count
+                                require(total <= SceneProjectCodec.MAX_PROJECT_BYTES) {
+                                    "O ficheiro excede o limite de 2 MB"
+                                }
+                                output.write(buffer, 0, count)
+                            }
+                            String(output.toByteArray(), Charsets.UTF_8)
+                        } ?: error("Não foi possível abrir o ficheiro")
+                    }
+                    withContext(Dispatchers.Default) { SceneProjectCodec.load(projectText) }
+                } catch (error: Exception) {
+                    Toast.makeText(
+                        context,
+                        "Falha ao abrir: " + (error.message ?: "ficheiro inválido"),
+                        Toast.LENGTH_LONG
+                    ).show()
+                    null
+                }
+
+                if (opened != null) {
+                    refresh()
+                    Toast.makeText(context, "Projeto aberto: " + opened + " objetos", Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
@@ -113,6 +179,17 @@ fun EditorScreen() {
                 Icon(Icons.Outlined.Redo, "Refazer", tint = if (canRedo) Color.White else Color.Gray)
             }
             Box(Modifier.size(1.dp, 25.dp).background(Color(0xFF454B54)))
+            IconButton(onClick = {
+                projectExport = SceneProjectCodec.encode()
+                projectSaveLauncher.launch("untitled.3dproj")
+            }) {
+                Icon(Icons.Outlined.Save, "Guardar projeto", tint = Color(0xFFBFC7D1))
+            }
+            IconButton(onClick = {
+                projectOpenLauncher.launch(arrayOf("*/*"))
+            }) {
+                Icon(Icons.Outlined.FolderOpen, "Abrir projeto", tint = Color(0xFFBFC7D1))
+            }
             IconButton(onClick = {
                 objExport = NativeBridge.exportObj()
                 if (objExport.isBlank()) Toast.makeText(context, "Scene is empty", Toast.LENGTH_SHORT).show()

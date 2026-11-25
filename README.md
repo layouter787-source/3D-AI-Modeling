@@ -7,6 +7,8 @@ Aplicativo Android de modelagem 3D com assistente de IA integrado. A interface �
 - Viewport 3D com grelha, eixos e câmera orbital por toque.
 - Objetos básicos: cubo, esfera, cilindro, cone, toro e plano.
 - Seleção, transformações, cor, remoção e histórico undo/redo.
+- Guardar e abrir projetos editáveis `.3dproj` (JSON versionado, com validação e limite de 500 objetos).
+- Exportar geometria transformada para OBJ.
 - Assistente de IA que pode chamar ferramentas limitadas para modificar a cena.
 - OpenAI, Claude/Anthropic, Google Gemini e NVIDIA NIM.
 - Chaves cifradas no Android Keystore.
@@ -43,6 +45,7 @@ O GitHub Actions compila um APK debug em cada push. Ver a aba Actions do reposit
 ## Documentação
 
 - [Arquitetura](docs/ARCHITECTURE.md)
+- [Formato de projeto](docs/PROJECT_FORMAT.md)
 - [Provedores e modelos](docs/AI_PROVIDERS.md)
 
 ## Licença
