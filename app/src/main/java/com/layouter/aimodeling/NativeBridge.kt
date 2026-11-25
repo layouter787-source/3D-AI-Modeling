@@ -40,4 +40,5 @@ object NativeBridge {
     external fun getSelected(): Int
     external fun pickAt(x: Float, y: Float): Int
     external fun describeScene(): String
+    external fun exportObj(): String
 }

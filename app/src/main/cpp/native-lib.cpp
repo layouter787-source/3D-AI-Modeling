@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdio>
 #include <mutex>
 #include <unordered_map>
 #include <vector>
@@ -25,27 +26,39 @@ const char* kObjectVertexShader = R"(#version 300 es
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aNormal;
 uniform mat4 uMvp;
+uniform mat4 uModel;
 uniform mat3 uNormalMat;
 out vec3 vNormal;
+out vec3 vWorldPos;
 void main() {
-    vNormal = uNormalMat * aNormal;
+    vNormal = normalize(uNormalMat * aNormal);
+    vWorldPos = (uModel * vec4(aPos, 1.0)).xyz;
     gl_Position = uMvp * vec4(aPos, 1.0);
 }
 )";
 
 const char* kObjectFragmentShader = R"(#version 300 es
-precision mediump float;
+precision highp float;
 in vec3 vNormal;
+in vec3 vWorldPos;
 uniform vec3 uColor;
+uniform vec3 uCameraPosition;
 uniform float uSelected;
 out vec4 outColor;
 void main() {
     vec3 n = normalize(vNormal);
-    vec3 lightDir = normalize(vec3(0.4, 0.8, 0.6));
-    float diff = max(dot(n, lightDir), 0.0);
-    vec3 c = uColor * (0.25 + 0.75 * diff);
-    c = mix(c, vec3(1.0, 0.6, 0.1), 0.35 * uSelected);
-    outColor = vec4(c, 1.0);
+    vec3 lightDir = normalize(vec3(-0.45, 0.82, 0.36));
+    vec3 viewDir = normalize(uCameraPosition - vWorldPos);
+    vec3 halfDir = normalize(lightDir + viewDir);
+    float diffuse = max(dot(n, lightDir), 0.0);
+    float specular = pow(max(dot(n, halfDir), 0.0), 48.0) * 0.28;
+    float fresnel = pow(1.0 - max(dot(n, viewDir), 0.0), 3.0) * 0.10;
+    float rim = pow(1.0 - max(dot(n, viewDir), 0.0), 2.0) * 0.07;
+    vec3 base = uColor * (0.20 + 0.72 * diffuse);
+    vec3 lit = base + vec3(specular + fresnel);
+    lit += uColor * rim;
+    lit = mix(lit, vec3(1.0, 0.58, 0.16), 0.42 * uSelected);
+    outColor = vec4(lit, 1.0);
 }
 )";
 
@@ -151,7 +164,9 @@ void destroy(GpuMesh& g) {
 struct Renderer {
     GLuint objectProgram = 0;
     GLint objMvp = -1;
+    GLint objModel = -1;
     GLint objNormal = -1;
+    GLint objCamera = -1;
     GLint objColor = -1;
     GLint objSelected = -1;
 
@@ -232,6 +247,8 @@ Java_com_layouter_aimodeling_NativeBridge_onSurfaceCreated(JNIEnv*, jobject) {
 
     r.objectProgram = linkProgram(kObjectVertexShader, kObjectFragmentShader);
     r.objMvp = glGetUniformLocation(r.objectProgram, "uMvp");
+    r.objModel = glGetUniformLocation(r.objectProgram, "uModel");
+    r.objCamera = glGetUniformLocation(r.objectProgram, "uCameraPosition");
     r.objNormal = glGetUniformLocation(r.objectProgram, "uNormalMat");
     r.objColor = glGetUniformLocation(r.objectProgram, "uColor");
     r.objSelected = glGetUniformLocation(r.objectProgram, "uSelected");
@@ -290,6 +307,10 @@ Java_com_layouter_aimodeling_NativeBridge_onDrawFrame(JNIEnv*, jobject) {
         normalMatrix(o.transform, nm);
 
         glUniformMatrix4fv(r.objMvp, 1, GL_FALSE, mvp.m);
+        glUniformMatrix4fv(r.objModel, 1, GL_FALSE, o.transform.matrix().m);
+        const Mat4 cameraRotation = multiply(rotateY(-r.camera.yaw), rotateX(-r.camera.pitch));
+        const Vec3 cameraPosition = transformPoint(cameraRotation, Vec3{-r.camera.panX, -r.camera.panY, r.camera.distance});
+        glUniform3f(r.objCamera, cameraPosition.x, cameraPosition.y, cameraPosition.z);
         glUniformMatrix3fv(r.objNormal, 1, GL_FALSE, nm);
         glUniform3f(r.objColor, o.color.r, o.color.g, o.color.b);
         glUniform1f(r.objSelected, o.id == scene.selectedId ? 1.0f : 0.0f);
@@ -438,6 +459,53 @@ JNIEXPORT jint JNICALL
 Java_com_layouter_aimodeling_NativeBridge_pickAt(JNIEnv*, jobject, jfloat x, jfloat y) {
     std::lock_guard<std::mutex> lock(gMutex);
     return gRenderer.editor.pick(cameraRay(gRenderer, x, y));
+}
+
+
+JNIEXPORT jstring JNICALL
+Java_com_layouter_aimodeling_NativeBridge_exportObj(JNIEnv* env, jobject) {
+    std::string output;
+    {
+        std::lock_guard<std::mutex> lock(gMutex);
+        const Scene& scene = gRenderer.editor.scene();
+        output.reserve(scene.objects.size() * 2048);
+        output += "# 3D-AI-Modeling OBJ export\n";
+        size_t vertexOffset = 1;
+        for (const Object& object : scene.objects) {
+            output += "o " + object.name + "\n";
+            const Mat4 model = object.transform.matrix();
+            for (const Vertex& vertex : object.mesh.vertices) {
+                const Vec3 p = transformPoint(model, Vec3{vertex.px, vertex.py, vertex.pz});
+                char line[160];
+                std::snprintf(line, sizeof(line), "v %.6f %.6f %.6f\n", p.x, p.y, p.z);
+                output += line;
+            }
+            float nm[9];
+            normalMatrix(object.transform, nm);
+            for (const Vertex& vertex : object.mesh.vertices) {
+                const Vec3 n = normalize(Vec3{
+                    nm[0] * vertex.nx + nm[3] * vertex.ny + nm[6] * vertex.nz,
+                    nm[1] * vertex.nx + nm[4] * vertex.ny + nm[7] * vertex.nz,
+                    nm[2] * vertex.nx + nm[5] * vertex.ny + nm[8] * vertex.nz
+                });
+                char line[160];
+                std::snprintf(line, sizeof(line), "vn %.6f %.6f %.6f\n", n.x, n.y, n.z);
+                output += line;
+            }
+            const size_t base = vertexOffset;
+            for (size_t i = 0; i + 2 < object.mesh.indices.size(); i += 3) {
+                char line[128];
+                const size_t a = base + object.mesh.indices[i];
+                const size_t b = base + object.mesh.indices[i + 1];
+                const size_t d = base + object.mesh.indices[i + 2];
+                std::snprintf(line, sizeof(line), "f %zu//%zu %zu//%zu %zu//%zu\n",
+                              a, a, b, b, d, d);
+                output += line;
+            }
+            vertexOffset += object.mesh.vertices.size();
+        }
+    }
+    return env->NewStringUTF(output.c_str());
 }
 
 JNIEXPORT jstring JNICALL

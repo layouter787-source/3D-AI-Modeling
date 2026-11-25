@@ -1,5 +1,8 @@
 package com.layouter.aimodeling
 
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -10,16 +13,36 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.ArrowDownward
+import androidx.compose.material.icons.outlined.ArrowForward
+import androidx.compose.material.icons.outlined.ArrowUpward
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Redo
+import androidx.compose.material.icons.outlined.RotateLeft
+import androidx.compose.material.icons.outlined.RotateRight
+import androidx.compose.material.icons.outlined.SmartToy
+import androidx.compose.material.icons.outlined.Undo
+import androidx.compose.material.icons.outlined.ZoomIn
+import androidx.compose.material.icons.outlined.ZoomOut
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -27,6 +50,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private const val MOVE_STEP = 0.25f
 
@@ -40,11 +66,28 @@ private val palette = listOf(
 
 @Composable
 fun EditorScreen() {
-    // Muda sempre que algo na cena muda; força a UI a reler o estado do núcleo nativo.
     val revision = remember { mutableIntStateOf(0) }
     val rev = revision.intValue
-    val refresh: () -> Unit = { revision.intValue = revision.intValue + 1 }
+    val refresh: () -> Unit = { revision.intValue++ }
     var showAi by remember { mutableStateOf(false) }
+    var objExport by remember { mutableStateOf("") }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/plain")
+    ) { uri ->
+        if (uri != null && objExport.isNotBlank()) {
+            scope.launch {
+                val saved = withContext(Dispatchers.IO) {
+                    runCatching {
+                        context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(objExport) }
+                            ?: error("Could not open file")
+                    }
+                }
+                Toast.makeText(context, if (saved.isSuccess) "OBJ exported" else "OBJ export failed", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     val selected = remember(rev) { NativeBridge.getSelected() }
     val canUndo = remember(rev) { NativeBridge.canUndo() }
@@ -57,19 +100,29 @@ fun EditorScreen() {
         )
 
         Row(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .systemBarsPadding()
-                .padding(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.align(Alignment.TopCenter).systemBarsPadding().padding(8.dp)
+                .background(Color(0xCC17191E), androidx.compose.foundation.shape.RoundedCornerShape(18.dp))
+                .padding(horizontal = 5.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            FilledTonalButton(onClick = { NativeBridge.undo(); refresh() }, enabled = canUndo) {
-                Text("Desfazer")
+            IconButton(onClick = { NativeBridge.undo(); refresh() }, enabled = canUndo) {
+                Icon(Icons.Outlined.Undo, "Desfazer", tint = if (canUndo) Color.White else Color.Gray)
             }
-            FilledTonalButton(onClick = { NativeBridge.redo(); refresh() }, enabled = canRedo) {
-                Text("Refazer")
+            IconButton(onClick = { NativeBridge.redo(); refresh() }, enabled = canRedo) {
+                Icon(Icons.Outlined.Redo, "Refazer", tint = if (canRedo) Color.White else Color.Gray)
             }
-            Button(onClick = { showAi = !showAi }) { Text("IA") }
+            Box(Modifier.size(1.dp, 25.dp).background(Color(0xFF454B54)))
+            IconButton(onClick = {
+                objExport = NativeBridge.exportObj()
+                if (objExport.isBlank()) Toast.makeText(context, "Scene is empty", Toast.LENGTH_SHORT).show()
+                else exportLauncher.launch("3d-model.obj")
+            }) {
+                Icon(Icons.Outlined.FileDownload, "Export OBJ", tint = Color(0xFFBFC7D1))
+            }
+            IconButton(onClick = { showAi = !showAi }) {
+                Icon(Icons.Outlined.SmartToy, "Assistente IA", tint = Color(0xFF75C8F2))
+            }
         }
 
         if (showAi) {
@@ -80,13 +133,9 @@ fun EditorScreen() {
             )
         } else {
             Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .background(Color(0xCC1E1E24))
-                    .systemBarsPadding()
-                    .padding(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    .background(Color(0xD917191E)).systemBarsPadding().padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp)
             ) {
                 if (selected >= 0) SelectionTools(selected, refresh)
                 PrimitiveBar(refresh)
@@ -99,40 +148,60 @@ fun EditorScreen() {
 private fun ToolButton(label: String, onClick: () -> Unit) {
     FilledTonalButton(
         onClick = onClick,
-        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-    ) { Text(label) }
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 5.dp)
+    ) {
+        Icon(Icons.Outlined.Add, null, modifier = Modifier.size(16.dp))
+        Text(label, modifier = Modifier.padding(start = 3.dp))
+    }
 }
 
 @Composable
 private fun SelectionTools(id: Int, refresh: () -> Unit) {
     val scroll1 = rememberScrollState()
     val scroll2 = rememberScrollState()
-    val scroll3 = rememberScrollState()
 
-    Row(Modifier.horizontalScroll(scroll1), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        ToolButton("X-") { NativeBridge.moveBy(id, -MOVE_STEP, 0f, 0f); refresh() }
-        ToolButton("X+") { NativeBridge.moveBy(id, MOVE_STEP, 0f, 0f); refresh() }
-        ToolButton("Y-") { NativeBridge.moveBy(id, 0f, -MOVE_STEP, 0f); refresh() }
-        ToolButton("Y+") { NativeBridge.moveBy(id, 0f, MOVE_STEP, 0f); refresh() }
-        ToolButton("Z-") { NativeBridge.moveBy(id, 0f, 0f, -MOVE_STEP); refresh() }
+    Row(Modifier.horizontalScroll(scroll1), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        IconButton(onClick = { NativeBridge.moveBy(id, -MOVE_STEP, 0f, 0f); refresh() }) {
+            Icon(Icons.Outlined.ArrowBack, "Mover para X negativo", tint = Color.White)
+        }
+        IconButton(onClick = { NativeBridge.moveBy(id, MOVE_STEP, 0f, 0f); refresh() }) {
+            Icon(Icons.Outlined.ArrowForward, "Mover para X positivo", tint = Color.White)
+        }
+        IconButton(onClick = { NativeBridge.moveBy(id, 0f, MOVE_STEP, 0f); refresh() }) {
+            Icon(Icons.Outlined.ArrowUpward, "Mover para Y positivo", tint = Color.White)
+        }
+        IconButton(onClick = { NativeBridge.moveBy(id, 0f, -MOVE_STEP, 0f); refresh() }) {
+            Icon(Icons.Outlined.ArrowDownward, "Mover para Y negativo", tint = Color.White)
+        }
+        ToolButton("Z−") { NativeBridge.moveBy(id, 0f, 0f, -MOVE_STEP); refresh() }
         ToolButton("Z+") { NativeBridge.moveBy(id, 0f, 0f, MOVE_STEP); refresh() }
     }
 
-    Row(Modifier.horizontalScroll(scroll2), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        ToolButton("Rodar -15") { NativeBridge.rotateBy(id, 0f, -15f, 0f); refresh() }
-        ToolButton("Rodar +15") { NativeBridge.rotateBy(id, 0f, 15f, 0f); refresh() }
-        ToolButton("Maior") { NativeBridge.scaleBy(id, 1.1f, 1.1f, 1.1f); refresh() }
-        ToolButton("Menor") { NativeBridge.scaleBy(id, 0.9f, 0.9f, 0.9f); refresh() }
-        ToolButton("Apagar") { NativeBridge.deleteObject(id); refresh() }
-    }
-
-    Row(Modifier.horizontalScroll(scroll3), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    Row(Modifier.horizontalScroll(scroll2), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        IconButton(onClick = { NativeBridge.rotateBy(id, 0f, -15f, 0f); refresh() }) {
+            Icon(Icons.Outlined.RotateLeft, "Rodar -15 graus", tint = Color.White)
+        }
+        IconButton(onClick = { NativeBridge.rotateBy(id, 0f, 15f, 0f); refresh() }) {
+            Icon(Icons.Outlined.RotateRight, "Rodar +15 graus", tint = Color.White)
+        }
+        IconButton(onClick = { NativeBridge.scaleBy(id, 1.1f, 1.1f, 1.1f); refresh() }) {
+            Icon(Icons.Outlined.ZoomIn, "Aumentar", tint = Color.White)
+        }
+        IconButton(onClick = { NativeBridge.scaleBy(id, 0.9f, 0.9f, 0.9f); refresh() }) {
+            Icon(Icons.Outlined.ZoomOut, "Diminuir", tint = Color.White)
+        }
+        IconButton(onClick = { NativeBridge.deleteObject(id); refresh() }) {
+            Icon(Icons.Outlined.DeleteOutline, "Apagar objeto", tint = Color(0xFFFF8D8D))
+        }
+        Icon(Icons.Outlined.Palette, "Cores", tint = Color(0xFFBFC7D1), modifier = Modifier.align(Alignment.CenterVertically).padding(horizontal = 5.dp))
         palette.forEach { (r, g, b) ->
             Button(
                 onClick = { NativeBridge.setColor(id, r, g, b); refresh() },
                 colors = ButtonDefaults.buttonColors(containerColor = Color(r, g, b)),
-                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 6.dp)
-            ) { Text(" ") }
+                contentPadding = PaddingValues(0.dp),
+                modifier = Modifier.padding(vertical = 5.dp).size(30.dp),
+                shape = androidx.compose.foundation.shape.CircleShape
+            ) { }
         }
     }
 }
@@ -141,10 +210,10 @@ private fun SelectionTools(id: Int, refresh: () -> Unit) {
 private fun PrimitiveBar(refresh: () -> Unit) {
     Row(
         Modifier.horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+        horizontalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         PrimitiveType.values().forEach { type ->
-            ToolButton("+ ${type.label}") {
+            ToolButton(type.label) {
                 val size = 1f
                 val y = if (type == PrimitiveType.PLANE) 0f else size / 2f
                 val id = NativeBridge.addPrimitive(type.id, size, 0f, y, 0f)

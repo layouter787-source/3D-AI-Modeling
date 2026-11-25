@@ -20,10 +20,10 @@ const char* primitiveName(Primitive p) {
 Mesh makePrimitiveMesh(Primitive p, float size) {
     switch (p) {
         case Primitive::Cube: return makeCube(size);
-        case Primitive::Sphere: return makeSphere(size * 0.5f, 24, 16);
-        case Primitive::Cylinder: return makeCylinder(size * 0.5f, size, 24);
-        case Primitive::Cone: return makeCone(size * 0.5f, size, 24);
-        case Primitive::Torus: return makeTorus(size * 0.35f, size * 0.15f, 32, 16);
+        case Primitive::Sphere: return makeSphere(size * 0.5f, 48, 32);
+        case Primitive::Cylinder: return makeCylinder(size * 0.5f, size, 48);
+        case Primitive::Cone: return makeCone(size * 0.5f, size, 48);
+        case Primitive::Torus: return makeTorus(size * 0.35f, size * 0.15f, 64, 24);
         case Primitive::Plane: return makePlane(size);
     }
     return makeCube(size);

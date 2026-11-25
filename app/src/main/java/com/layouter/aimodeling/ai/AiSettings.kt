@@ -2,38 +2,33 @@ package com.layouter.aimodeling.ai
 
 import android.content.Context
 
-/**
- * Serviços suportados. O utilizador só cola a chave de API: a base URL já vem preenchida.
- * O nome do modelo é só uma sugestão e pode ser mudado nas definições, porque os modelos mudam.
- */
+/** Provedores com integração efetivamente implementada no aplicativo. */
 enum class ProviderKind(
     val label: String,
-    val defaultModel: String,
     val keyHint: String,
     val keySource: String,
     val baseUrl: String
 ) {
     OPENAI(
-        "OpenAI", "gpt-5.4-mini", "sk-...", "platform.openai.com/api-keys",
+        "OpenAI", "sk-...", "platform.openai.com/api-keys",
         "https://api.openai.com/v1"
     ),
     ANTHROPIC(
-        "Claude", "claude-haiku-5-5", "sk-ant-...", "console.anthropic.com",
+        "Claude", "sk-ant-...", "console.anthropic.com",
         "https://api.anthropic.com/v1"
     ),
     GEMINI(
-        "Gemini", "gemini-3.8-flash", "AIza...", "aistudio.google.com/apikey",
+        "Gemini", "AIza...", "aistudio.google.com/apikey",
         "https://generativelanguage.googleapis.com/v1beta/openai"
     ),
     NVIDIA(
-        "NVIDIA NIM", "nvidia/nemotron-3-super-120b-a12b", "nvapi-...", "build.nvidia.com",
+        "NVIDIA NIM", "nvapi-...", "build.nvidia.com",
         "https://integrate.api.nvidia.com/v1"
     )
 }
 
-/** Definições não secretas (provedor e modelo). A chave de API fica no [SecretStore]. */
+/** Preferências de provedor/modelo. Nenhum modelo é pré-selecionado ou inventado. */
 class AiSettings(context: Context) {
-
     private val prefs = context.getSharedPreferences("ai_settings", Context.MODE_PRIVATE)
 
     var kind: ProviderKind
@@ -44,10 +39,15 @@ class AiSettings(context: Context) {
         }
 
     fun model(kind: ProviderKind): String =
-        prefs.getString("model_${kind.name}", null)?.takeIf { it.isNotBlank() } ?: kind.defaultModel
+        prefs.getString("model_${kind.name}", null)?.trim().orEmpty()
 
     fun setModel(kind: ProviderKind, model: String) {
-        prefs.edit().putString("model_${kind.name}", model).apply()
+        val value = model.trim()
+        if (value.isBlank()) {
+            prefs.edit().remove("model_${kind.name}").apply()
+        } else {
+            prefs.edit().putString("model_${kind.name}", value).apply()
+        }
     }
 
     companion object {

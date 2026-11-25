@@ -1,30 +1,50 @@
 # 3D-AI-Modeling
 
-Aplicativo Android de modelagem 3D com assistente de IA integrado. O utilizador cola a própria chave de API (OpenAI, Claude, Google Gemini ou NVIDIA NIM) e a IA ajuda a modelar chamando as ferramentas do motor 3D. Não há login com conta: só chave de API, com a base URL de cada serviço já predefinida.
+Aplicativo Android de modelagem 3D com assistente de IA integrado. A interface é Kotlin + Jetpack Compose; o núcleo de cena e geometria é C++17/NDK com renderização OpenGL ES 3.0.
 
-## Estado
-Em desenvolvimento inicial (ainda não testado em dispositivo).
+## O que já existe
 
-Já existe:
-- Viewport OpenGL ES 3.0 com grelha e eixos, câmera orbital por toque (1 dedo roda, 2 dedos deslocam, pinça aproxima).
-- Cena com vários objetos: cubo, esfera, cilindro, cone, torus e plano.
-- Seleção por toque, mover, rodar, escalar, cor e apagar, com desfazer/refazer.
-- Painel de chat com IA (botão "IA"): OpenAI, Claude, Gemini e NVIDIA NIM por chave de API, ciclo de conversa com chamadas de ferramentas e chave guardada cifrada.
+- Viewport 3D com grelha, eixos e câmera orbital por toque.
+- Objetos básicos: cubo, esfera, cilindro, cone, toro e plano.
+- Seleção, transformações, cor, remoção e histórico undo/redo.
+- Assistente de IA que pode chamar ferramentas limitadas para modificar a cena.
+- OpenAI, Claude/Anthropic, Google Gemini e NVIDIA NIM.
+- Chaves cifradas no Android Keystore.
+- Chat renovado com composer compacto, mensagens separadas, ícones vetoriais e configuração em painel próprio.
+- Descoberta de modelos em tempo real a partir da API do provedor: não existem modelos predefinidos no seletor.
 
-Falta: edição de malha (extrudir, bevel, boolean), importar/exportar, testes.
+## Modelos por API
 
-Documentação: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) e [docs/AI_PROVIDERS.md](docs/AI_PROVIDERS.md).
+Abre o assistente → Configurações → escolhe o provedor → introduz a chave → **Consultar modelos** → escolhe um ID devolvido pelo serviço → Guardar.
+
+A disponibilidade depende da chave, região, conta e permissões do provedor. O app mostra os modelos anunciados pela API; o próprio endpoint de conversa confirma se o modelo suporta as ferramentas usadas pelo editor.
 
 ## Base técnica
-- Interface: Kotlin + Jetpack Compose
-- Núcleo 3D: C++17 (NDK): malha, cena, `Editor` com histórico de comandos
-- Render: OpenGL ES 3.0 (Vulkan numa fase posterior)
-- IA: provedores por chave de API (OpenAI, Claude, Gemini, NVIDIA NIM)
+
+- Android: Kotlin, Jetpack Compose, Material 3
+- Ícones: vetoriais Compose/Android
+- Motor: C++17, Android NDK
+- Renderização: OpenGL ES 3.0
+- APIs de IA: HTTP JSON, chamadas de ferramentas
 
 ## Compilar
-Abrir a pasta no Android Studio (ele gera o Gradle wrapper e instala o NDK e o CMake pedidos) e executar o módulo `app`. Também funciona com `gradle wrapper` seguido de `./gradlew assembleDebug`.
 
-Requisitos: JDK 17, Android SDK 35, NDK e CMake 3.22.1 (instalados pelo SDK Manager).
+Abrir no Android Studio ou executar:
+
+```bash
+gradle wrapper
+./gradlew assembleDebug
+```
+
+Requisitos: JDK 17, Android SDK 35, NDK e CMake 3.22.1.
+
+O GitHub Actions compila um APK debug em cada push. Ver a aba Actions do repositório para descarregar o artefacto.
+
+## Documentação
+
+- [Arquitetura](docs/ARCHITECTURE.md)
+- [Provedores e modelos](docs/AI_PROVIDERS.md)
 
 ## Licença
-Apache-2.0. Ver [LICENSE](LICENSE).
+
+Apache-2.0.
