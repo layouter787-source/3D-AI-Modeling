@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowBack
@@ -288,6 +289,100 @@ fun EditorScreen() {
             }
         }
     }
+}
+
+
+@Composable
+private fun MeshWorkbenchDialog(
+    selected: Int,
+    faceIndex: String,
+    onFaceIndex: (String) -> Unit,
+    onClose: () -> Unit,
+    onChanged: () -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    fun apply(operation: String, parameter: Int = 1, value: Float = 0.15f, faces: IntArray = intArrayOf()) {
+        if (selected < 0) {
+            Toast.makeText(context, "Seleciona primeiro um objeto", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val ok = NativeBridge.meshOperation(selected, operation, faces, parameter, value)
+        Toast.makeText(context, if (ok) "Operação aplicada · Undo disponível" else "Falhou: verifica a topologia/face", Toast.LENGTH_SHORT).show()
+        if (ok) onChanged()
+    }
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Mesh Workbench") },
+        text = {
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                Text("Ferramentas nativas da malha selecionada. Todas são editáveis e reversíveis.")
+                Text("Para Extrude/Inset, consulta os IDs com a IA: get_mesh_topology.")
+                OutlinedTextField(value = faceIndex, onValueChange = onFaceIndex, label = { Text("Índice da face") }, singleLine = true)
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Button(onClick = { apply("extrude", value = 0.2f, faces = intArrayOf(faceIndex.toIntOrNull() ?: 0)) }) { Text("Extrude") }
+                    Button(onClick = { apply("inset", value = 0.08f, faces = intArrayOf(faceIndex.toIntOrNull() ?: 0)) }) { Text("Inset") }
+                }
+                Text("Refinar")
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Button(onClick = { apply("subdivide", parameter = 1) }) { Text("Subdividir") }
+                    Button(onClick = { apply("smooth", parameter = 3, value = 0.35f) }) { Text("Suavizar") }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Button(onClick = { apply("solidify", value = 0.08f) }) { Text("Espessura") }
+                    Button(onClick = { apply("weld", value = 0.0001f) }) { Text("Soldar") }
+                }
+                Text("Topologia")
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Button(onClick = { apply("triangulate") }) { Text("Triangular") }
+                    Button(onClick = { apply("flip_normals") }) { Text("Inverter normais") }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Button(onClick = { apply("crease_by_angle", value = 30f) }) { Text("Crease 30°") }
+                    Button(onClick = { apply("mirror", parameter = 0) }) { Text("Mirror X") }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Button(onClick = { apply("mirror", parameter = 1) }) { Text("Mirror Y") }
+                    Button(onClick = { apply("mirror", parameter = 2) }) { Text("Mirror Z") }
+                }
+                Text("Boolean e Loop Cut também existem no núcleo e podem ser solicitados à IA após inspeção de malha e identificação do objeto/arestas.")
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text("Fechar") } }
+    )
+}
+
+private data class PluginReference(val title: String, val details: String, val url: String)
+
+@Composable
+private fun ExtensionLibraryDialog(onClose: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val refs = listOf(
+        PluginReference("Terrain3D · Godot", "Sculpt de terreno, heightmaps, pintura, clipmap/LOD. Addon Godot não é plug-in binário deste app; os recursos são referências para portar ao motor nativo.", "https://github.com/TokisanGames/Terrain3D"),
+        PluginReference("Polyforge · Godot", "Edit Mode: extrude, inset, bevel, loop cut, merge, mirror, Boolean, seleção de componentes.", "https://github.com/Seba313/polyforge"),
+        PluginReference("GoBuild · Godot", "Edição de vértices, arestas e faces com ferramentas de transform.", "https://github.com/marcel-b-roodt/gobuild"),
+        PluginReference("Blender BMesh", "Referência técnica de conectividade e operações robustas de topologia.", "https://developer.blender.org/docs/features/objects/mesh/bmesh/"),
+        PluginReference("Materializr CAD", "CAD paramétrico, operações sólidas e formatos de intercâmbio.", "https://github.com/materializr-cad/materializr"),
+        PluginReference("Strata:3D Android", "Referência para visualização/importação de formatos e meshes densas.", "https://github.com/damzenquis/Strata-3D")
+    )
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Plugins & ferramentas") },
+        text = {
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Fontes pesquisadas. Plugins Godot são incompatíveis diretamente com o app Android nativo. O caminho correto é adaptar funcionalidades em Kotlin/C++/OpenGL, respeitando licenças.")
+                refs.forEach { ref ->
+                    Text(ref.title, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleSmall)
+                    Text(ref.details, style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = {
+                        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(ref.url))) }
+                            .onFailure { Toast.makeText(context, "Não foi possível abrir o endereço", Toast.LENGTH_SHORT).show() }
+                    }) { Text("Abrir projeto/documentação") }
+                    androidx.compose.material3.HorizontalDivider()
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text("Concluir") } }
+    )
 }
 
 @Composable
