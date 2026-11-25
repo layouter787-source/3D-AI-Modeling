@@ -227,7 +227,7 @@ fun EditorScreen() {
         ) {
             Text("MESH", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 8.dp, end = 4.dp))
             IconButton(onClick = { NativeBridge.undo(); refresh() }, enabled = canUndo) {
-                Icon(Icons.Outlined.Undo, "Desfazer", tint = if (canUndo) Color.White else Color.Gray)
+                Icon(Icons.Outlined.Undo, "Desfazer", tint = if (canUndo) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
             }
             IconButton(onClick = { NativeBridge.redo(); refresh() }, enabled = canRedo) {
                 Icon(Icons.Outlined.Redo, "Refazer", tint = if (canRedo) Color.White else Color.Gray)
@@ -242,7 +242,7 @@ fun EditorScreen() {
             IconButton(onClick = {
                 projectOpenLauncher.launch(arrayOf("*/*"))
             }) {
-                Icon(Icons.Outlined.FolderOpen, "Abrir projeto", tint = Color(0xFFBFC7D1))
+                Icon(Icons.Outlined.FolderOpen, "Abrir projeto", tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             IconButton(onClick = {
                 objExport = NativeBridge.exportObj()
@@ -281,7 +281,7 @@ fun EditorScreen() {
         if (!showAi) {
             Column(
                 modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(0.96f)
-                    .background(Color(0xE91B1E23), androidx.compose.foundation.shape.RoundedCornerShape(22.dp)).systemBarsPadding().padding(10.dp),
+                    .background(MaterialTheme.colorScheme.surface, androidx.compose.foundation.shape.RoundedCornerShape(22.dp)).systemBarsPadding().padding(10.dp),
                 verticalArrangement = Arrangement.spacedBy(7.dp)
             ) {
                 if (selected >= 0) SelectionTools(selected, refresh)
@@ -467,7 +467,7 @@ private fun PrimitiveBar(refresh: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(7.dp)
     ) {
-        Text("CRIAR", color = Color(0xFF9BC8C0), style = MaterialTheme.typography.labelSmall)
+        Text("CRIAR", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
         PrimitiveType.values().forEach { type ->
             ToolButton(type.label) {
                 val size = 1f
