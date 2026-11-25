@@ -85,9 +85,9 @@ object InternetTools {
     }
 
     private fun String.stripHtml(): String = this
-        .replace(Regex("""(?is)<(script|style|svg|noscript).*?</\\1>"""), " ")
+        .replace(Regex("""(?is)<(script|style|svg|noscript).*?</\1>"""), " ")
         .replace(Regex("""(?s)<[^>]+>"""), " ")
         .replace("&amp;", "&").replace("&quot;", "\"").replace("&#39;", "'")
         .replace("&lt;", "<").replace("&gt;", ">")
-        .replace(Regex("""\\s+"""), " ").trim()
+        .replace(Regex("""\s+"""), " ").trim()
 }
