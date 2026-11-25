@@ -11,7 +11,8 @@ enum class PrimitiveType(val id: Int, val apiName: String, val label: String) {
     PYRAMID(6, "pyramid", "Pirâmide"),
     CAPSULE(7, "capsule", "Cápsula"),
     OCTAHEDRON(8, "octahedron", "Octaedro"),
-    HEX_PRISM(9, "hex_prism", "Prisma hexagonal");
+    HEX_PRISM(9, "hex_prism", "Prisma hexagonal"),
+    CUSTOM_MESH(10, "custom_mesh", "Malha personalizada");
 
     companion object {
         fun fromApiName(name: String): PrimitiveType? = values().firstOrNull { it.apiName == name }
