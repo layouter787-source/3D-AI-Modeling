@@ -1,4 +1,5 @@
 #include "core/editor.h"
+#include "core/polymesh.h"
 
 #include <algorithm>
 #include <cmath>
@@ -248,6 +249,105 @@ bool Editor::sculptMesh(int id, Vec3 center, float radius, Vec3 offset) {
  for(size_t i=0;i+2<after.indices.size();i+=3){const Vertex&a=after.vertices[after.indices[i]],&b=after.vertices[after.indices[i+1]],&c=after.vertices[after.indices[i+2]];Vec3 n=cross(Vec3{b.px-a.px,b.py-a.py,b.pz-a.pz},Vec3{c.px-a.px,c.py-a.py,c.pz-a.pz});for(uint32_t ix:{after.indices[i],after.indices[i+1],after.indices[i+2]}){const Vertex&v=after.vertices[ix];sums[{std::llround(v.px*10000),std::llround(v.py*10000),std::llround(v.pz*10000)}]+=n;}}
  for(Vertex&v:after.vertices){Vec3 n=normalize(sums[{std::llround(v.px*10000),std::llround(v.py*10000),std::llround(v.pz*10000)}]);if(length(n)>0.5f){v.nx=n.x;v.ny=n.y;v.nz=n.z;}}
  execute(std::make_unique<MeshCommand>(id,std::move(before),std::move(after)));return true;
+}
+
+
+bool Editor::meshOperation(int id, const std::string& operation, const std::vector<int>& faces,
+                            int parameter, float value) {
+    Object* object = scene_.find(id);
+    if (object == nullptr || object->mesh.vertices.empty() || object->mesh.indices.size() < 3 ||
+        !std::isfinite(value)) return false;
+
+    // O renderer guarda vértices duplicados por canto. Reconstruímos topologia triangular
+    // e soldamos posições coincidentes antes de operar sobre faces/arestas.
+    PolyMesh source;
+    source.verts.reserve(object->mesh.vertices.size());
+    for (const Vertex& v : object->mesh.vertices) source.verts.push_back({v.px, v.py, v.pz});
+    for (size_t i = 0; i + 2 < object->mesh.indices.size(); i += 3) {
+        const uint32_t a = object->mesh.indices[i], b = object->mesh.indices[i + 1],
+                       c = object->mesh.indices[i + 2];
+        if (a >= source.verts.size() || b >= source.verts.size() || c >= source.verts.size()) return false;
+        source.faces.push_back({a, b, c});
+    }
+    source = weldVertices(source, 1e-5f);
+    if (source.empty() || source.faces.size() > 250000 || source.verts.size() > 250000) return false;
+
+    PolyMesh result;
+    if (operation == "subdivide") {
+        const int levels = std::clamp(parameter, 1, 3);
+        if (estimateSubdividedFaces(source, levels) > 180000) return false;
+        result = catmullClark(source, levels);
+    } else if (operation == "extrude") {
+        if (faces.empty() || faces.size() > source.faces.size()) return false;
+        std::vector<int> valid;
+        valid.reserve(faces.size());
+        for (int face : faces) {
+            if (face < 0 || static_cast<size_t>(face) >= source.faces.size()) return false;
+            valid.push_back(face);
+        }
+        result = extrudeFaces(source, valid, std::clamp(value, -100.0f, 100.0f), true, Vec3{}, 1.0f);
+    } else if (operation == "inset") {
+        if (faces.empty() || faces.size() > source.faces.size()) return false;
+        for (int face : faces) if (face < 0 || static_cast<size_t>(face) >= source.faces.size()) return false;
+        result = insetFaces(source, faces, std::clamp(value, 0.0001f, 100.0f));
+    } else if (operation == "smooth") {
+        result = smoothMesh(source, std::clamp(parameter, 1, 100), std::clamp(value, 0.0f, 1.0f));
+    } else if (operation == "solidify") {
+        result = solidify(source, std::clamp(value, -20.0f, 20.0f));
+    } else if (operation == "mirror") {
+        result = mirrorMesh(source, std::clamp(parameter, 0, 2), 1e-4f);
+    } else if (operation == "triangulate") {
+        result = triangulate(source);
+    } else if (operation == "flip_normals") {
+        result = flipFaces(source);
+    } else if (operation == "weld") {
+        result = weldVertices(source, std::clamp(value, 1e-6f, 1.0f));
+    } else if (operation == "crease_by_angle") {
+        result = creaseByAngle(source, std::clamp(value, 0.0f, 180.0f));
+    } else {
+        return false;
+    }
+
+    if (result.empty() || result.verts.size() > 250000 || result.faces.size() > 250000) return false;
+    Mesh after = buildRenderMesh(result, 35.0f);
+    if (after.vertices.empty() || after.indices.empty() || after.vertices.size() > 500000 ||
+        after.indices.size() > 1500000) return false;
+    execute(std::make_unique<MeshCommand>(id, object->mesh, std::move(after)));
+    return true;
+}
+
+std::string Editor::describeMesh(int id, int offset, int limit) const {
+    const Object* object = scene_.find(id);
+    if (object == nullptr) return "{\\"error\\":\\"Object not found\\"}";
+    offset = std::max(0, offset);
+    limit = std::clamp(limit, 1, 1200);
+    const Mesh& mesh = object->mesh;
+    const size_t vertexCount = mesh.vertices.size();
+    const size_t faceCount = mesh.indices.size() / 3;
+    const size_t vStart = std::min(static_cast<size_t>(offset), vertexCount);
+    const size_t fStart = std::min(static_cast<size_t>(offset), faceCount);
+    const size_t vEnd = std::min(vertexCount, vStart + static_cast<size_t>(limit));
+    const size_t fEnd = std::min(faceCount, fStart + static_cast<size_t>(limit));
+    std::string out = "{\\"object_id\\":" + std::to_string(id) +
+        ",\\"vertex_count\\":" + std::to_string(vertexCount) +
+        ",\\"face_count\\":" + std::to_string(faceCount) +
+        ",\\"offset\\":" + std::to_string(offset) + ",\\"vertices\\":[";
+    char buf[160];
+    for (size_t i = vStart; i < vEnd; ++i) {
+        if (i > vStart) out += ",";
+        const Vertex& v = mesh.vertices[i];
+        std::snprintf(buf, sizeof(buf), "[%.6f,%.6f,%.6f]", v.px, v.py, v.pz);
+        out += buf;
+    }
+    out += "],\\"faces\\":[";
+    for (size_t i = fStart; i < fEnd; ++i) {
+        if (i > fStart) out += ",";
+        const size_t k = i * 3;
+        std::snprintf(buf, sizeof(buf), "[%u,%u,%u]", mesh.indices[k], mesh.indices[k+1], mesh.indices[k+2]);
+        out += buf;
+    }
+    out += "]}";
+    return out;
 }
 
 bool Editor::snapToGround(int id) {
