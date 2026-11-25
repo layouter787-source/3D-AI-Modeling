@@ -2,7 +2,6 @@ package com.layouter.aimodeling.ai
 
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -15,6 +14,7 @@ class AiOrchestrator(
     private val credentials: Map<ProviderKind, String>,
     private val preferredProvider: ProviderKind,
     private val preferredModel: String,
+    private val savedModels: Map<ProviderKind, String> = emptyMap(),
     private val modelLookup: suspend (ProviderKind, String) -> List<AiModel> = ModelCatalog::load,
     private val providerFactory: (ProviderKind, String, String) -> AiProvider = ::buildProvider,
     private val onRoute: (RouteEvent) -> Unit = {}
@@ -46,8 +46,10 @@ class AiOrchestrator(
 
         var lastError: Exception? = null
         val errors = mutableListOf<String>()
-        for ((index, candidate) in candidates.withIndex()) {
-            val attempt = index + 1
+        var attempt = 0
+        for (candidate in candidates) {
+            if (candidate.provider in failedCredentials) continue
+            attempt++
             val fallback = attempt > 1
             onRoute(
                 RouteEvent(
@@ -77,7 +79,7 @@ class AiOrchestrator(
                 if (e is AiException && (e.httpCode == 401 || e.httpCode == 403)) {
                     // Other models using the same invalid credential are not useful; candidates
                     // for the same provider are skipped below.
-                    skipProvider(candidate.provider, candidates, index)
+                    failedCredentials.add(candidate.provider)
                 }
             }
         }
@@ -86,12 +88,6 @@ class AiOrchestrator(
             "Todos os modelos configurados falharam. ${errors.takeLast(5).joinToString(" | ")}",
             lastError
         )
-    }
-
-    private fun skipProvider(provider: ProviderKind, candidates: List<Candidate>, index: Int) {
-        // Mutating a shared candidate list while iterating is unsafe. The marker is handled
-        // by the provider failure cache; remaining attempts are still bounded per request.
-        failedCredentials.add(provider)
     }
 
     private val failedCredentials = ConcurrentHashMap.newKeySet<ProviderKind>()
@@ -112,8 +108,8 @@ class AiOrchestrator(
             val key = credentials[provider]?.trim().orEmpty()
             if (key.isBlank()) continue
 
-            val selected = if (provider == preferredProvider) preferredModel.trim()
-                else ""
+            val selected = (if (provider == preferredProvider) preferredModel else savedModels[provider]).orEmpty().trim()
+            val previousModel = lastSuccessful?.takeIf { it.provider == provider }?.model.orEmpty()
 
             val models = try {
                 cachedModels(provider, key)
@@ -125,6 +121,7 @@ class AiOrchestrator(
             // the service omits it from discovery.
             val ids = buildList {
                 if (selected.isNotBlank()) add(selected)
+                if (previousModel.isNotBlank() && previousModel !in this) add(previousModel)
                 models.forEach { if (it.id.isNotBlank() && it.id !in this) add(it.id) }
             }
 
