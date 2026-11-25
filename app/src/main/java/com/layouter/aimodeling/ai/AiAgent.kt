@@ -44,6 +44,18 @@ class AiAgent(private val provider: AiProvider) {
         onText("(Parei por limite de passos. Peça para continuar se faltar algo.)")
     }
 
+
+    fun restoreConversation(messages: List<Pair<String, String>>) {
+        history.clear()
+        messages.forEach { (role, text) ->
+            when (role) {
+                "user" -> history.add(AiMessage.User(text))
+                "assistant" -> history.add(AiMessage.Assistant(text, emptyList()))
+            }
+        }
+        trimHistory()
+    }
+
     private fun systemPrompt(): String =
         """
         You are a senior real-time 3D asset artist and technical artist working inside a touch-first Android modeling editor.
