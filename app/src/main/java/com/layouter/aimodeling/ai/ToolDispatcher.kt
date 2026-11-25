@@ -98,7 +98,7 @@ object ToolDispatcher {
             packed[i*4] = x; packed[i*4+1] = width
             packed[i*4+2] = centerY; packed[i*4+3] = height
         }
-        val segments = a.optInt("segments", 16).coerceIn(8, 32)
+        val segments = a.optInt("segments", 24).coerceIn(8, 32)
         val position = a.optJSONArray("position")?.let { a.vec3("position") } ?: floatArrayOf(0f,0f,0f)
         val id = NativeBridge.createLoftMesh(packed, segments, position[0], position[1], position[2])
         if (id < 0) return ToolResult(false, "Mesh creation failed: invalid profile or object limit")
@@ -238,7 +238,7 @@ object ToolDispatcher {
             )
             .put(tool(
                 "create_loft_mesh",
-                "Create ONE continuous, closed, smooth custom mesh by lofting cross-sections along X. Use for car bodies, vehicle shells, helmets, organic elongated forms and shaped hulls—not primitive piles. profiles are ordered front-to-rear and each profile has x, half_width (along Z), center_y and half_height (along Y). Shape the silhouette by changing width/height at each section. 3..24 profiles; segments 8..32. Optional position and RGB color.",
+                "Create ONE continuous, closed, smooth custom mesh by lofting cross-sections along X. Use for car bodies, vehicle shells, helmets, organic elongated forms and shaped hulls—not primitive piles. profiles are ordered front-to-rear and each profile has x, half_width (along Z), center_y and half_height (along Y). Shape the silhouette by changing width/height at each section. 3..24 profiles; segments 8..32 (use 24..32 for smooth automotive surfaces). For detailed vehicles, use 16..24 carefully shaped profiles. Optional position and RGB color.",
                 JSONObject()
                     .put("profiles", JSONObject().put("type","array").put("minItems",3).put("maxItems",24)
                         .put("items",JSONObject().put("type","object").put("properties",JSONObject()
