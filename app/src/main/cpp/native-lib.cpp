@@ -367,6 +367,13 @@ Java_com_layouter_aimodeling_NativeBridge_addPrimitive(JNIEnv*, jobject, jint ty
     return gRenderer.editor.addPrimitive(static_cast<Primitive>(type), size, Vec3{x, y, z});
 }
 
+JNIEXPORT jint JNICALL
+Java_com_layouter_aimodeling_NativeBridge_duplicateObject(JNIEnv*, jobject, jint id,
+                                                          jfloat dx, jfloat dy, jfloat dz) {
+    std::lock_guard<std::mutex> lock(gMutex);
+    return gRenderer.editor.duplicateObject(id, Vec3{dx, dy, dz});
+}
+
 JNIEXPORT jboolean JNICALL
 Java_com_layouter_aimodeling_NativeBridge_deleteObject(JNIEnv*, jobject, jint id) {
     std::lock_guard<std::mutex> lock(gMutex);
@@ -482,9 +489,11 @@ Java_com_layouter_aimodeling_NativeBridge_exportObj(JNIEnv* env, jobject) {
         const Scene& scene = gRenderer.editor.scene();
         output.reserve(scene.objects.size() * 2048);
         output += "# 3D-AI-Modeling OBJ export\n";
+        output += "mtllib 3d-model.mtl\n";
         size_t vertexOffset = 1;
         for (const Object& object : scene.objects) {
             output += "o " + object.name + "\n";
+            output += "usemtl material_" + std::to_string(object.id) + "\n";
             const Mat4 model = object.transform.matrix();
             for (const Vertex& vertex : object.mesh.vertices) {
                 const Vec3 p = transformPoint(model, Vec3{vertex.px, vertex.py, vertex.pz});
@@ -515,6 +524,25 @@ Java_com_layouter_aimodeling_NativeBridge_exportObj(JNIEnv* env, jobject) {
                 output += line;
             }
             vertexOffset += object.mesh.vertices.size();
+        }
+    }
+    return env->NewStringUTF(output.c_str());
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_layouter_aimodeling_NativeBridge_exportMtl(JNIEnv* env, jobject) {
+    std::string output = "# Material library for 3d-model.obj\\n";
+    {
+        std::lock_guard<std::mutex> lock(gMutex);
+        const Scene& scene = gRenderer.editor.scene();
+        for (const Object& object : scene.objects) {
+            char line[320];
+            std::snprintf(
+                line, sizeof(line),
+                "newmtl material_%d\\nKa 0.080000 0.080000 0.080000\\nKd %.6f %.6f %.6f\\nKs 0.180000 0.180000 0.180000\\nNs 32.000000\\nillum 2\\n\\n",
+                object.id, object.color.r, object.color.g, object.color.b
+            );
+            output += line;
         }
     }
     return env->NewStringUTF(output.c_str());

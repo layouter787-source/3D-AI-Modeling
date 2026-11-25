@@ -116,6 +116,22 @@ int Editor::addPrimitive(Primitive type, float size, Vec3 position) {
     return id;
 }
 
+int Editor::duplicateObject(int id, Vec3 offset) {
+    if (scene_.objects.size() >= kMaxObjects || !finite3(offset)) return -1;
+    const Object* source = scene_.find(id);
+    if (source == nullptr) return -1;
+
+    Object duplicate = *source;
+    duplicate.id = scene_.nextId++;
+    duplicate.name = std::string(primitiveName(duplicate.type)) + "_" + std::to_string(duplicate.id);
+    duplicate.transform.position = duplicate.transform.position + offset;
+    if (!finite3(duplicate.transform.position)) return -1;
+
+    const int newId = duplicate.id;
+    execute(std::make_unique<AddCommand>(std::move(duplicate)));
+    return newId;
+}
+
 bool Editor::deleteObject(int id) {
     if (scene_.find(id) == nullptr) return false;
     execute(std::make_unique<DeleteCommand>(id));

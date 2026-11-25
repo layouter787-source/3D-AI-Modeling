@@ -17,6 +17,7 @@ object NativeBridge {
 
     // Edição da cena (seguras em qualquer thread). Rotações em graus.
     external fun addPrimitive(type: Int, size: Float, x: Float, y: Float, z: Float): Int
+    external fun duplicateObject(id: Int, dx: Float, dy: Float, dz: Float): Int
     external fun deleteObject(id: Int): Boolean
     external fun setTransform(
         id: Int,
@@ -43,4 +44,5 @@ object NativeBridge {
     external fun pickAt(x: Float, y: Float): Int
     external fun describeScene(): String
     external fun exportObj(): String
+    external fun exportMtl(): String
 }

@@ -21,4 +21,4 @@ O leitor verifica a identificação e a versão, limita o ficheiro a 2 MB e a ce
 ## Diferença entre projeto e exportação
 
 - `.3dproj`: dados editáveis específicos desta aplicação.
-- `.obj`: geometria triangulada com vértices, normais, faces e transformações aplicadas; não guarda os parâmetros originais das primitivas nem materiais PBR.
+- `.obj` + `.mtl`: geometria triangulada com vértices, normais, faces e transformações aplicadas; o MTL transporta cores difusas básicas. Não guarda os parâmetros originais das primitivas, mapas de textura ou materiais PBR.

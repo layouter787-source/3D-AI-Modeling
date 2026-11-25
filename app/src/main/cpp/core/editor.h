@@ -24,6 +24,7 @@ public:
 
     // Devolve o id do novo objeto, ou -1 se os valores forem inválidos ou o limite foi atingido.
     int addPrimitive(Primitive type, float size, Vec3 position);
+    int duplicateObject(int id, Vec3 offset);
     bool deleteObject(int id);
 
     bool setTransform(int id, const Transform& transform);

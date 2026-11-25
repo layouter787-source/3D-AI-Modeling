@@ -100,16 +100,15 @@ object ToolDispatcher {
     }
 
     private fun duplicateObject(a: JSONObject): ToolResult {
-        val id=a.getInt("object_id"); val objects=JSONObject(NativeBridge.describeScene()).getJSONArray("objects")
-        val source=(0 until objects.length()).map { objects.getJSONObject(it) }.firstOrNull { it.getInt("id")==id } ?: return ToolResult(false,"Object not found")
-        val type=PrimitiveType.fromApiName(source.getString("type")) ?: return ToolResult(false,"Unsupported type")
-        val p=source.getJSONArray("position"); val off=a.optJSONArray("offset")?.let { a.vec3("offset") } ?: floatArrayOf(1f,0f,0f)
-        val x=p.getDouble(0).toFloat()+off[0]; val y=p.getDouble(1).toFloat()+off[1]; val z=p.getDouble(2).toFloat()+off[2]
-        val newId=NativeBridge.addPrimitive(type.id,source.getDouble("size").toFloat(),x,y,z); if(newId<0) return ToolResult(false,"Object limit reached")
-        val r=source.getJSONArray("rotation"); val sc=source.getJSONArray("scale"); val c=source.getJSONArray("color")
-        NativeBridge.setTransform(newId,x,y,z,r.getDouble(0).toFloat(),r.getDouble(1).toFloat(),r.getDouble(2).toFloat(),sc.getDouble(0).toFloat(),sc.getDouble(1).toFloat(),sc.getDouble(2).toFloat())
-        NativeBridge.setColor(newId,c.getDouble(0).toFloat(),c.getDouble(1).toFloat(),c.getDouble(2).toFloat())
-        return ToolResult(true,"Duplicated " + id + " as " + newId)
+        val id = a.getInt("object_id")
+        val offset = a.optJSONArray("offset")?.let { a.vec3("offset") }
+            ?: floatArrayOf(1f, 0f, 0f)
+        val duplicateId = NativeBridge.duplicateObject(id, offset[0], offset[1], offset[2])
+        return if (duplicateId < 0) {
+            ToolResult(false, "Object not found or object limit reached")
+        } else {
+            ToolResult(true, "Duplicated " + id + " as " + duplicateId)
+        }
     }
 
     private fun getObjectDetails(id: Int): ToolResult {

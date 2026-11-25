@@ -24,6 +24,7 @@ import androidx.compose.material.icons.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Save
@@ -75,8 +76,30 @@ fun EditorScreen() {
     var showAi by remember { mutableStateOf(false) }
     var objExport by remember { mutableStateOf("") }
     var projectExport by remember { mutableStateOf("") }
+    var mtlExport by remember { mutableStateOf("") }
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val mtlExportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/plain")
+    ) { uri ->
+        if (uri != null && mtlExport.isNotBlank()) {
+            scope.launch {
+                val saved = withContext(Dispatchers.IO) {
+                    runCatching {
+                        context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use {
+                            it.write(mtlExport)
+                        } ?: error("Could not open MTL file")
+                    }
+                }
+                Toast.makeText(
+                    context,
+                    if (saved.isSuccess) "Materiais MTL exportados" else "Falha ao exportar MTL",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/plain")
     ) { uri ->
@@ -88,7 +111,21 @@ fun EditorScreen() {
                             ?: error("Could not open file")
                     }
                 }
-                Toast.makeText(context, if (saved.isSuccess) "OBJ exported" else "OBJ export failed", Toast.LENGTH_LONG).show()
+                if (saved.isSuccess) {
+                    mtlExport = NativeBridge.exportMtl()
+                    if (mtlExport.isNotBlank()) {
+                        Toast.makeText(
+                            context,
+                            "OBJ guardado. Guarda o MTL na mesma pasta para manter as cores.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        mtlExportLauncher.launch("3d-model.mtl")
+                    } else {
+                        Toast.makeText(context, "OBJ guardado; não foi possível gerar MTL", Toast.LENGTH_LONG).show()
+                    }
+                } else {
+                    Toast.makeText(context, "OBJ export failed", Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
@@ -266,6 +303,13 @@ private fun SelectionTools(id: Int, refresh: () -> Unit) {
         }
         IconButton(onClick = { NativeBridge.scaleBy(id, 0.9f, 0.9f, 0.9f); refresh() }) {
             Icon(Icons.Outlined.ZoomOut, "Diminuir", tint = Color.White)
+        }
+        IconButton(onClick = {
+            val duplicate = NativeBridge.duplicateObject(id, 1f, 0f, 0f)
+            if (duplicate >= 0) NativeBridge.select(duplicate)
+            refresh()
+        }) {
+            Icon(Icons.Outlined.ContentCopy, "Duplicar objeto", tint = Color.White)
         }
         IconButton(onClick = { NativeBridge.deleteObject(id); refresh() }) {
             Icon(Icons.Outlined.DeleteOutline, "Apagar objeto", tint = Color(0xFFFF8D8D))
