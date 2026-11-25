@@ -57,3 +57,33 @@ O router não inventa nomes de modelos. O catálogo pode falhar por indisponibil
 O failover é limitado a 12 chamadas de modelo por turno (até 4 modelos por provedor integrado). Chaves com erro HTTP 401/403 são excluídas do restante desse turno. Cancelamento do utilizador não é tratado como falha de provedor.
 
 A resposta só é processada e as ferramentas da cena só são executadas depois de uma chamada ao modelo ser concluída com sucesso. Assim, o router não repete uma operação 3D apenas porque a conexão caiu antes de uma resposta válida. Se todos os modelos falharem, o chat mostra a causa resumida e pode ser usado novamente quando a rede/API voltar.
+
+
+## Capacidades adicionais do agente (branch de desenvolvimento)
+
+### Ferramentas 3D atuais
+
+- `create_batch`: cria até 30 malhas primitivas numa chamada, com posição, escala, rotação e cor.
+- `create_asset_preset`: kits paramétricos editáveis de árvore, mesa, casa, robô, barril, escadas e candeeiro.
+- `duplicate_object`: duplica mantendo transformação e cor.
+- `get_object_details`: consulta propriedades completas de um objeto.
+- ferramentas existentes: criar primitiva, mover, rodar, escalar, transformar, colorir, apagar, seleção, undo/redo e estado da cena.
+- Tesselação procedural aumentada para esfera (48x32), cilindro/cone (48 segmentos) e toro (64x24), mantendo índices dentro do limite atual de 16 bits.
+
+Estes recursos aumentam a densidade geométrica e permitem composições mais complexas. **Não equivalem ainda a escultura orgânica, retopologia, materiais PBR, texturas, rigging, importação GLB ou renderização fotorealista**; essas funcionalidades exigem novos sistemas de malha, materiais, importador e renderizador.
+
+### Pesquisa na Internet
+
+- `web_search`: pesquisa referências e documentação pública via HTTPS.
+- `read_webpage`: lê páginas públicas HTTPS, com limites de tempo/tamanho e bloqueio básico de hosts locais.
+- O conteúdo externo é tratado como dados não confiáveis: não pode substituir instruções do sistema nem autorizar operações.
+
+### Limites deliberados
+
+A versão atual **não executa código arbitrário descarregado da Internet**, não instala extensões silenciosamente e ainda não possui um cliente MCP configurável pelo utilizador, importador de modelos GLB/glTF nem ferramenta de download/importação de assets. Para isso será necessário implementar:
+1. Gestor MCP com configuração manual do servidor, descoberta `tools/list`, confirmação do utilizador e permissões por conector.
+2. Download de assets 3D com licença, domínio, tamanho, formato e verificação de ficheiro.
+3. Importador glTF/GLB e validação de malha antes de inserir no projeto.
+4. Execução de scripts em sandbox, sem acesso direto a chaves, armazenamento privado ou rede arbitrária.
+
+Não se deve prometer “autonomia infinita”: chamadas têm limites para evitar ciclos, custos descontrolados e alterações massivas acidentais.
