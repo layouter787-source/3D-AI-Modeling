@@ -134,7 +134,9 @@ object ToolDispatcher {
             "barrel" -> { add("cylinder",1f,0f,0.5f,0f,color=wood); add("torus",1f,0f,0.2f,0f,0.55f,0.12f,0.55f,gray); add("torus",1f,0f,0.8f,0f,0.55f,0.12f,0.55f,gray) }
             "stairs" -> for(i in 0..5) add("cube",1f,-0.5f+i*0.2f,0.1f+i*0.18f,0f,1.2f,0.2f+i*0.36f,1f)
             "lamp" -> { add("cylinder",0.18f,0f,0.12f,0f,2f,1f,2f,gray); add("cylinder",0.12f,0f,0.8f,0f,0.35f,5f,0.35f,gray); add("cone",0.8f,0f,1.5f,0f,1f,0.6f,1f,JSONArray(listOf(0.9,0.75,0.35))) }
-            else -> return ToolResult(false,"Preset unsupported: tree, table, house, robot, barrel, stairs, lamp")
+            "crystal" -> { add("octahedron",0.9f,0f,0.55f,0f,0.7f,1.5f,0.7f,JSONArray(listOf(0.25,0.75,0.95))); add("octahedron",0.45f,0.55f,0.45f,0.15f,0.45f,1.1f,0.45f,JSONArray(listOf(0.65,0.35,0.95))); add("octahedron",0.4f,-0.45f,0.35f,-0.1f,0.4f,0.9f,0.4f,JSONArray(listOf(0.2,0.9,0.7))) }
+            "sci_fi_crate" -> { add("cube",1.4f,0f,0.7f,0f,1.2f,1f,1.2f,gray); add("cube",1.45f,0f,0.7f,0.55f,1.1f,0.85f,0.12f,JSONArray(listOf(0.15,0.55,0.7))); add("hex_prism",0.25f,0f,0.72f,-0.62f,1f,1f,0.5f,JSONArray(listOf(0.85,0.65,0.2))); for(x in listOf(-0.52f,0.52f)) for(y in listOf(0.25f,1.15f)) add("cube",0.12f,x,y,-0.62f,1f,1f,1f,JSONArray(listOf(0.85,0.65,0.2))) }
+            else -> return ToolResult(false,"Preset unsupported: tree, table, house, robot, barrel, stairs, lamp, crystal, sci_fi_crate")
         }
         return createBatch(JSONObject().put("items",pieces))
     }
@@ -236,7 +238,7 @@ object ToolDispatcher {
             .put(tool("delete_object", "Delete an object.", JSONObject().put("object_id", objectId), listOf("object_id")))
 
             .put(tool("create_batch", "Create 1..30 primitive meshes in one call. Each item: type, size, position and optional color, scale, rotation_degrees.", JSONObject().put("items", JSONObject().put("type","array").put("minItems",1).put("maxItems",30).put("items",JSONObject().put("type","object").put("properties",JSONObject().put("type",JSONObject().put("type","string").put("enum",primitiveTypes)).put("size",JSONObject().put("type","number")).put("position",number3("[x,y,z]")).put("color",number3("RGB 0..1")).put("scale",number3("XYZ")).put("rotation_degrees",number3("Euler degrees"))).put("required",JSONArray(listOf("type","size","position"))))), listOf("items")))
-            .put(tool("create_asset_preset", "Generate editable, multi-part scene asset: tree, table, house, robot, barrel, stairs or lamp.", JSONObject().put("preset",JSONObject().put("type","string").put("enum",JSONArray(listOf("tree","table","house","robot","barrel","stairs","lamp")))).put("position",number3("World origin")).put("scale",JSONObject().put("type","number")), listOf("preset")))
+            .put(tool("create_asset_preset", "Generate editable, multi-part scene asset: tree, table, house, robot, barrel, stairs, lamp, crystal or sci_fi_crate.", JSONObject().put("preset",JSONObject().put("type","string").put("enum",JSONArray(listOf("tree","table","house","robot","barrel","stairs","lamp","crystal","sci_fi_crate")))).put("position",number3("World origin")).put("scale",JSONObject().put("type","number")), listOf("preset")))
             .put(tool("duplicate_object", "Duplicate an object, retaining its scale, rotation and color. Offset optional.", JSONObject().put("object_id",objectId).put("offset",number3("XYZ offset")), listOf("object_id")))
             .put(tool("get_object_details", "Get the complete scene properties for one object id.", JSONObject().put("object_id",objectId), listOf("object_id")))
 

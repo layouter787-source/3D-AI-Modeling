@@ -16,8 +16,11 @@ enum class Primitive : int {
     Torus = 4,
     Plane = 5,
     Pyramid = 6,
+    Capsule = 7,
+    Octahedron = 8,
+    HexPrism = 9,
 };
-constexpr int kPrimitiveCount = 7;
+constexpr int kPrimitiveCount = 10;
 
 const char* primitiveName(Primitive p);
 Mesh makePrimitiveMesh(Primitive p, float size);

@@ -105,6 +105,66 @@ Mesh makePyramid(float size) {
     return mesh;
 }
 
+
+Mesh makeCapsule(float radius, float height, int segments, int hemisphereRings) {
+    segments = std::clamp(segments, 8, 96);
+    hemisphereRings = std::clamp(hemisphereRings, 4, 24);
+    radius = std::max(radius, 0.001f);
+    height = std::max(height, radius * 2.0f);
+    const float bodyHalf = height * 0.5f - radius;
+    struct Profile { float y; float r; float ny; };
+    std::vector<Profile> profile;
+    profile.reserve(static_cast<size_t>(2 * hemisphereRings + 2));
+    for (int i = 0; i <= hemisphereRings; ++i) {
+        const float angle = -0.5f * kPi + 0.5f * kPi * i / hemisphereRings;
+        profile.push_back({-bodyHalf + radius * std::sin(angle), radius * std::cos(angle), std::sin(angle)});
+    }
+    for (int i = 1; i <= hemisphereRings; ++i) {
+        const float angle = 0.5f * kPi * i / hemisphereRings;
+        profile.push_back({bodyHalf + radius * std::sin(angle), radius * std::cos(angle), std::sin(angle)});
+    }
+    Mesh mesh;
+    for (const Profile& ring : profile) {
+        const float radialNormal = std::sqrt(std::max(0.0f, 1.0f - ring.ny * ring.ny));
+        for (int j = 0; j <= segments; ++j) {
+            const float phi = 2.0f * kPi * j / segments;
+            const float c = std::cos(phi), s = std::sin(phi);
+            addVertex(mesh, ring.r * c, ring.y, ring.r * s, radialNormal * c, ring.ny, radialNormal * s);
+        }
+    }
+    const size_t stride = static_cast<size_t>(segments + 1);
+    for (size_t row = 0; row + 1 < profile.size(); ++row) {
+        const size_t base = row * stride, next = base + stride;
+        for (int j = 0; j < segments; ++j) {
+            const size_t a = base + static_cast<size_t>(j), b = next + static_cast<size_t>(j);
+            addTri(mesh, a, a + 1, b);
+            addTri(mesh, a + 1, b + 1, b);
+        }
+    }
+    return mesh;
+}
+
+Mesh makeOctahedron(float size) {
+    const float h = size * 0.5f;
+    const Vec3 top{0,h,0}, bottom{0,-h,0}, px{h,0,0}, nx{-h,0,0}, pz{0,0,h}, nz{0,0,-h};
+    const Vec3 faces[8][3] = {
+        {top,px,pz},{top,pz,nx},{top,nx,nz},{top,nz,px},
+        {bottom,pz,px},{bottom,nx,pz},{bottom,nz,nx},{bottom,px,nz}
+    };
+    Mesh mesh;
+    for (const auto& face : faces) {
+        Vec3 a=face[0], b=face[1], c=face[2];
+        Vec3 normal=normalize(cross(b-a,c-a));
+        if (dot(normal,(a+b+c)*(1.0f/3.0f))<0.0f) { std::swap(b,c); normal=normal*-1.0f; }
+        const size_t base=mesh.vertices.size();
+        addVertex(mesh,a.x,a.y,a.z,normal.x,normal.y,normal.z);
+        addVertex(mesh,b.x,b.y,b.z,normal.x,normal.y,normal.z);
+        addVertex(mesh,c.x,c.y,c.z,normal.x,normal.y,normal.z);
+        addTri(mesh,base,base+1,base+2);
+    }
+    return mesh;
+}
+
 Mesh makeSphere(float radius, int segments, int rings) {
     segments = std::max(3, segments);
     rings = std::max(2, rings);

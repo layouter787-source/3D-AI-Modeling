@@ -14,6 +14,9 @@ const char* primitiveName(Primitive p) {
         case Primitive::Torus: return "torus";
         case Primitive::Plane: return "plane";
         case Primitive::Pyramid: return "pyramid";
+        case Primitive::Capsule: return "capsule";
+        case Primitive::Octahedron: return "octahedron";
+        case Primitive::HexPrism: return "hex_prism";
     }
     return "cube";
 }
@@ -27,6 +30,9 @@ Mesh makePrimitiveMesh(Primitive p, float size) {
         case Primitive::Torus: return makeTorus(size * 0.35f, size * 0.15f, 64, 24);
         case Primitive::Plane: return makePlane(size);
         case Primitive::Pyramid: return makePyramid(size);
+        case Primitive::Capsule: return makeCapsule(size * 0.25f, size, 40, 12);
+        case Primitive::Octahedron: return makeOctahedron(size);
+        case Primitive::HexPrism: return makeCylinder(size * 0.5f, size, 6);
     }
     return makeCube(size);
 }
