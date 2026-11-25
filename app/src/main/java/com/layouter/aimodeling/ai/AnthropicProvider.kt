@@ -42,7 +42,15 @@ class AnthropicProvider(
                     }
                     is AiMessage.User -> {
                         flushResults()
-                        msgs.put(JSONObject().put("role", "user").put("content", m.text))
+                        if (m.imageBase64.isNullOrBlank()) {
+                            msgs.put(JSONObject().put("role", "user").put("content", m.text))
+                        } else {
+                            val blocks = JSONArray()
+                            blocks.put(JSONObject().put("type", "text").put("text", m.text.ifBlank { "Analyze this reference image and follow my instruction." }))
+                            blocks.put(JSONObject().put("type", "image").put("source",
+                                JSONObject().put("type", "base64").put("media_type", m.imageMimeType).put("data", m.imageBase64)))
+                            msgs.put(JSONObject().put("role", "user").put("content", blocks))
+                        }
                     }
                     is AiMessage.Assistant -> {
                         flushResults()
