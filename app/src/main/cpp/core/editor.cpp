@@ -389,7 +389,7 @@ bool Editor::meshOperation(int id, const std::string& operation, const std::vect
 
 std::string Editor::describeMesh(int id, int offset, int limit) const {
     const Object* object = scene_.find(id);
-    if (object == nullptr) return "{\\"error\\":\\"Object not found\\"}";
+    if (object == nullptr) return "{\"error\":\"Object not found\"}";
     offset = std::max(0, offset);
     limit = std::clamp(limit, 1, 1200);
     const PolyMesh& topology = object->topology;
@@ -401,11 +401,11 @@ std::string Editor::describeMesh(int id, int offset, int limit) const {
     const size_t fStart = std::min(static_cast<size_t>(offset), faceCount);
     const size_t vEnd = std::min(vertexCount, vStart + static_cast<size_t>(limit));
     const size_t fEnd = std::min(faceCount, fStart + static_cast<size_t>(limit));
-    std::string out = "{\\"object_id\\":" + std::to_string(id) +
-        ",\\"topology\\":" + (hasTopology ? "true" : "false") +
-        ",\\"vertex_count\\":" + std::to_string(vertexCount) +
-        ",\\"face_count\\":" + std::to_string(faceCount) +
-        ",\\"offset\\":" + std::to_string(offset) + ",\\"vertices\\":[";
+    std::string out = "{\"object_id\":" + std::to_string(id) +
+        ",\"topology\":" + (hasTopology ? "true" : "false") +
+        ",\"vertex_count\":" + std::to_string(vertexCount) +
+        ",\"face_count\":" + std::to_string(faceCount) +
+        ",\"offset\":" + std::to_string(offset) + ",\"vertices\":[";
     char buf[192];
     for (size_t i = vStart; i < vEnd; ++i) {
         if (i > vStart) out += ",";
@@ -418,7 +418,7 @@ std::string Editor::describeMesh(int id, int offset, int limit) const {
         }
         out += buf;
     }
-    out += "],\\"faces\\":[";
+    out += "],\"faces\":[";
     for (size_t i = fStart; i < fEnd; ++i) {
         if (i > fStart) out += ",";
         if (hasTopology) {
