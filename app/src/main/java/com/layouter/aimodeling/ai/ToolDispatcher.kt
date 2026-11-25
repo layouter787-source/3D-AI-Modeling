@@ -62,7 +62,19 @@ object ToolDispatcher {
             "delete_object" -> report(NativeBridge.deleteObject(a.getInt("object_id")), "Object deleted")
             "undo" -> report(NativeBridge.undo(), "Undone", "Nothing to undo")
             "redo" -> report(NativeBridge.redo(), "Redone", "Nothing to redo")
-            "get_scene" -> ToolResult(true, NativeBridge.describeScene())
+            "get_scene", "inspect_meshes", "analyze_scene" -> ToolResult(true, NativeBridge.describeScene())
+            "select_object" -> {
+                val id = a.getInt("object_id")
+                val scene = JSONObject(NativeBridge.describeScene())
+                val objects = scene.getJSONArray("objects")
+                val exists = (0 until objects.length()).any { objects.getJSONObject(it).getInt("id") == id }
+                if (!exists) ToolResult(false, "Object not found")
+                else {
+                    NativeBridge.select(id)
+                    ToolResult(true, "Selected object $id. Scene: ${NativeBridge.describeScene()}")
+                }
+            }
+            "search_modeling_reference" -> ToolResult(true, InternetTools.search(a.getString("query")))
             else -> ToolResult(false, "Unknown tool: ${call.name}")
         }
     }
@@ -250,6 +262,10 @@ object ToolDispatcher {
             .put(tool("read_webpage", "Read a public HTTPS page as text. Local/private hosts are blocked and page size is limited.", JSONObject().put("url",JSONObject().put("type","string").put("description","Public HTTPS URL")), listOf("url")))
             .put(tool("undo", "Undo the last change.", JSONObject(), emptyList()))
             .put(tool("redo", "Redo the last undone change.", JSONObject(), emptyList()))
-            .put(tool("get_scene", "Return the current scene as JSON.", JSONObject(), emptyList()))
+            .put(tool("get_scene", "Read the scene state, object transforms, materials/colors and object IDs.", JSONObject(), emptyList()))
+            .put(tool("inspect_meshes", "Inspect all editable scene meshes, including vertex and triangle counts, type, transforms and color. The workspace grid is not mesh geometry.", JSONObject(), emptyList()))
+            .put(tool("analyze_scene", "Analyze the current scene structure and mesh/object data before editing.", JSONObject(), emptyList()))
+            .put(tool("select_object", "Select an existing object by its scene ID so subsequent operations can focus on it.", JSONObject().put("object_id", objectId), listOf("object_id")))
+            .put(tool("search_modeling_reference", "Research modeling methods, mesh workflows or technical references on the public web.", JSONObject().put("query", JSONObject().put("type","string").put("description","Search query")), listOf("query")))
     }
 }
