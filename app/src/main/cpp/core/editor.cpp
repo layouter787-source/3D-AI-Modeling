@@ -329,9 +329,10 @@ bool Editor::meshOperation(int id, const std::string& operation, const std::vect
         if (!operand || operand->id == object->id || operand->topology.empty()) return false;
         const int op = operation == "boolean_union" ? 0 : (operation == "boolean_difference" ? 1 : 2);
         // Boolean operands are converted into the selected object's local space.
-        const Mat4 inverseSelected = inverse(object->transform.matrix());
+        const Mat4 inverseSelected = inverseAffine(object->transform.matrix());
         const Mat4 operandWorld = operand->transform.matrix();
-        PolyMesh other = transformed(operand->topology, inverseSelected * operandWorld);
+        PolyMesh other = operand->topology;
+        for (Vec3& vertex : other.verts) vertex = transformPoint(inverseSelected, transformPoint(operandWorld, vertex));
         result = booleanOp(source, other, op);
     } else if (operation == "subdivide") {
         const int levels = std::clamp(parameter, 1, 3);
