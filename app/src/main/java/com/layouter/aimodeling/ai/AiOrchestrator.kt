@@ -86,7 +86,7 @@ class AiOrchestrator(
 
         throw AiException(
             "Todos os modelos configurados falharam. ${errors.takeLast(5).joinToString(" | ")}",
-            lastError
+            cause = lastError
         )
     }
 
