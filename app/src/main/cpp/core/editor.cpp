@@ -116,6 +116,58 @@ int Editor::addPrimitive(Primitive type, float size, Vec3 position) {
     return id;
 }
 
+int Editor::addLoftMesh(const std::vector<float>& profiles, int segments, Vec3 position) {
+    if (scene_.objects.size() >= kMaxObjects || profiles.size() < 12 || profiles.size() > 96 ||
+        profiles.size() % 4 != 0 || segments < 8 || segments > 32 || !finite3(position)) return -1;
+    const size_t rings = profiles.size() / 4;
+    for (size_t i = 0; i < rings; ++i) {
+        const float x = profiles[i*4], width = profiles[i*4+1];
+        const float cy = profiles[i*4+2], height = profiles[i*4+3];
+        if (!std::isfinite(x) || !std::isfinite(width) || !std::isfinite(cy) ||
+            !std::isfinite(height) || width <= 0.01f || height <= 0.01f) return -1;
+        if (i && x <= profiles[(i-1)*4]) return -1;
+    }
+    const size_t vertexCount = rings * static_cast<size_t>(segments) + 2;
+    if (vertexCount > 16000 || vertexCount > 65535) return -1;
+    Mesh mesh;
+    mesh.vertices.reserve(vertexCount);
+    mesh.indices.reserve((rings-1)*static_cast<size_t>(segments)*6 + static_cast<size_t>(segments)*6);
+    for (size_t i=0;i<rings;++i) {
+        const float x=profiles[i*4], w=profiles[i*4+1], cy=profiles[i*4+2], h=profiles[i*4+3];
+        for(int j=0;j<segments;++j) {
+            const float a=2.0f*kPi*static_cast<float>(j)/segments;
+            const float c=std::cos(a), sn=std::sin(a);
+            Vec3 n=normalize({0.0f,c/std::max(h,0.001f),sn/std::max(w,0.001f)});
+            mesh.vertices.push_back({x,cy+h*c,w*sn,n.x,n.y,n.z});
+        }
+    }
+    for(size_t i=0;i+1<rings;++i) for(int j=0;j<segments;++j) {
+        const uint16_t a=static_cast<uint16_t>(i*segments+j);
+        const uint16_t b=static_cast<uint16_t>(i*segments+(j+1)%segments);
+        const uint16_t c=static_cast<uint16_t>((i+1)*segments+j);
+        const uint16_t d=static_cast<uint16_t>((i+1)*segments+(j+1)%segments);
+        mesh.indices.insert(mesh.indices.end(),{a,b,c,b,d,c});
+    }
+    // Flat end caps close the shell; normals point along +/-X.
+    const uint16_t leftCenter=static_cast<uint16_t>(mesh.vertices.size());
+    mesh.vertices.push_back({profiles[0],profiles[2],0,-1,0,0});
+    const size_t last=(rings-1)*static_cast<size_t>(segments);
+    const uint16_t rightCenter=static_cast<uint16_t>(mesh.vertices.size());
+    mesh.vertices.push_back({profiles[(rings-1)*4],profiles[(rings-1)*4+2],0,1,0,0});
+    for(int j=0;j<segments;++j) {
+        const uint16_t l0=static_cast<uint16_t>(j), l1=static_cast<uint16_t>((j+1)%segments);
+        const uint16_t r0=static_cast<uint16_t>(last+j), r1=static_cast<uint16_t>(last+(j+1)%segments);
+        mesh.indices.insert(mesh.indices.end(),{leftCenter,l1,l0,rightCenter,r0,r1});
+    }
+    Object object;
+    object.id=scene_.nextId++; object.type=Primitive::CustomMesh; object.size=1.0f;
+    object.name="loft_mesh_"+std::to_string(object.id); object.mesh=std::move(mesh);
+    object.transform.position=position;
+    const int id=object.id;
+    execute(std::make_unique<AddCommand>(std::move(object)));
+    return id;
+}
+
 int Editor::duplicateObject(int id, Vec3 offset) {
     if (scene_.objects.size() >= kMaxObjects || !finite3(offset)) return -1;
     const Object* source = scene_.find(id);
