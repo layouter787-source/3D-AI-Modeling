@@ -41,3 +41,19 @@ A IA só altera a cena através destas ferramentas. Os parâmetros são validado
 A interface utiliza ícones vetoriais consistentes e escaláveis em vez de símbolos Unicode usados como botões. O estilo é compacto, escuro e de alto contraste, com conversa, composer e configurações separadas.
 
 Referência de desenho SVG consultada: [Lucide Icons](https://lucide.dev/icons/). O projeto Android usa ícones vetoriais Compose/Android para manter renderização nativa e acessibilidade.
+
+## Orquestrador e recuperação automática
+
+`AiOrchestrator` coordena os provedores integrados:
+
+1. Tenta primeiro o provedor/modelo escolhido na configuração.
+2. Se a chamada falhar, tenta outros modelos anunciados pela API autenticada desse provedor.
+3. Se não recuperar, muda para os outros provedores integrados que tenham uma chave guardada e modelo disponível.
+4. Prioriza o último provedor/modelo que respondeu com sucesso.
+5. Cacheia a descoberta por 10 minutos para não consultar os catálogos em cada mensagem.
+
+O router não inventa nomes de modelos. O catálogo pode falhar por indisponibilidade; nesse caso, ainda pode tentar o ID selecionado manualmente, mas não fabrica alternativas.
+
+O failover é limitado a 12 chamadas de modelo por turno (até 4 modelos por provedor integrado). Chaves com erro HTTP 401/403 são excluídas do restante desse turno. Cancelamento do utilizador não é tratado como falha de provedor.
+
+A resposta só é processada e as ferramentas da cena só são executadas depois de uma chamada ao modelo ser concluída com sucesso. Assim, o router não repete uma operação 3D apenas porque a conexão caiu antes de uma resposta válida. Se todos os modelos falharem, o chat mostra a causa resumida e pode ser usado novamente quando a rede/API voltar.
