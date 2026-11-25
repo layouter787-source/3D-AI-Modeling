@@ -6,7 +6,7 @@ import com.layouter.aimodeling.NativeBridge
  * Ciclo de conversa: envia o pedido à IA, executa as ferramentas que ela pedir, devolve os
  * resultados e repete até a IA responder só com texto (ou até aos limites abaixo).
  */
-class AiAgent(private val provider: AiProvider) {
+class AiAgent(private val orchestrator: AiOrchestrator) {
 
     private val history = mutableListOf<AiMessage>()
 
@@ -21,7 +21,7 @@ class AiAgent(private val provider: AiProvider) {
 
         var toolCallsUsed = 0
         for (round in 0 until MAX_ROUNDS) {
-            val turn = provider.send(systemPrompt(), history, ToolDispatcher.toolDefinitions())
+            val turn = orchestrator.send(systemPrompt(), history, ToolDispatcher.toolDefinitions())
             history.add(AiMessage.Assistant(turn.text, turn.toolCalls))
             if (turn.text.isNotBlank()) onText(turn.text.trim())
             if (turn.toolCalls.isEmpty()) return
