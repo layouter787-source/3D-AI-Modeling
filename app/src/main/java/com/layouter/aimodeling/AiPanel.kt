@@ -88,10 +88,6 @@ private data class ChatLine(val role: String, val text: String)
 private data class SavedChat(val id: String, val title: String, val messages: List<ChatLine>)
 private val AiWorkScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-private val panelBg = Color(0xFF15171B)
-private val surfaceBg = Color(0xFF202329)
-private val accent = Color(0xFF9BC8C0)
-private val secondaryText = Color(0xFFA9AFB8)
 
 @Composable
 fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier = Modifier, visible: Boolean = true) {
@@ -271,7 +267,7 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Surface(shape = RoundedCornerShape(13.dp), color = Color(0xFF2A3439)) {
+            Surface(shape = RoundedCornerShape(13.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
                 Icon(Icons.Filled.SmartToy, null, tint = accent, modifier = Modifier.padding(9.dp).size(23.dp))
             }
             Column(Modifier.weight(1f).padding(start = 10.dp)) {
@@ -415,7 +411,7 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
                     Button(
                         onClick = { loadModels() },
                         enabled = !loadingModels && apiKey.isNotBlank(),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF314B5C))
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
                         Icon(Icons.Outlined.Refresh, null, modifier = Modifier.size(18.dp))
                         Text(if (loadingModels) "A consultar…" else "Consultar modelos", modifier = Modifier.padding(start = 6.dp))
@@ -458,7 +454,7 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Surface(shape = CircleShape, color = Color(0xFF27333D)) {
+                            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {
                                 Icon(Icons.Filled.SmartToy, null, tint = accent, modifier = Modifier.padding(19.dp).size(38.dp))
                             }
                             Text("O que vamos criar?", color = Color.White, style = MaterialTheme.typography.titleLarge)
@@ -520,9 +516,9 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
                     IconButton(
                         onClick = { send() },
                         enabled = !busy && (input.isNotBlank() || attachedImage != null),
-                        modifier = Modifier.background(if (!busy && input.isNotBlank()) accent else Color(0xFF3A414B), CircleShape)
+                        modifier = Modifier.background(if (!busy && input.isNotBlank()) accent else MaterialTheme.colorScheme.surfaceVariant, CircleShape)
                     ) {
-                        Icon(Icons.Outlined.Send, "Enviar", tint = Color(0xFF10151A))
+                        Icon(Icons.Outlined.Send, "Enviar", tint = MaterialTheme.colorScheme.onPrimary)
                     }
                 }
             }
@@ -581,7 +577,7 @@ private fun ChatBubble(line: ChatLine) {
             modifier = Modifier.fillMaxWidth().padding(start = 34.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Outlined.CheckCircle, null, tint = Color(0xFF79CDA4), modifier = Modifier.size(15.dp))
+            Icon(Icons.Outlined.CheckCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(15.dp))
             Text(line.text, color = secondaryText, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 6.dp))
         }
         return
@@ -604,8 +600,8 @@ private fun ChatBubble(line: ChatLine) {
         }
         Surface(
             color = when {
-                isUser -> Color(0xFF30424F)
-                isError -> Color(0xFF492D2D)
+                isUser -> MaterialTheme.colorScheme.primaryContainer
+                isError -> MaterialTheme.colorScheme.errorContainer
                 else -> surfaceBg
             },
             shape = RoundedCornerShape(
@@ -617,7 +613,7 @@ private fun ChatBubble(line: ChatLine) {
         ) {
             Text(
                 line.text,
-                color = Color(0xFFF0F2F5),
+                color = MaterialTheme.colorScheme.onSurface,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp)
             )
