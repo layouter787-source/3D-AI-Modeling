@@ -33,6 +33,7 @@ public:
     bool moveBy(int id, Vec3 offset);
     bool rotateBy(int id, Vec3 degrees);
     bool scaleBy(int id, Vec3 factor);
+    bool sculptMesh(int id, Vec3 center, float radius, Vec3 offset);
     bool setColor(int id, Color color);
     bool snapToGround(int id);
     bool snapToGrid(int id, float step);
