@@ -31,6 +31,8 @@ object NativeBridge {
     external fun scaleBy(id: Int, fx: Float, fy: Float, fz: Float): Boolean
     external fun setColor(id: Int, r: Float, g: Float, b: Float): Boolean
     external fun sculptMesh(id: Int, centerX: Float, centerY: Float, centerZ: Float, radius: Float, offsetX: Float, offsetY: Float, offsetZ: Float): Boolean
+    external fun meshOperation(id: Int, operation: String, faceIds: IntArray, parameter: Int, value: Float): Boolean
+    external fun getMeshTopology(id: Int, offset: Int = 0, limit: Int = 300): String
     external fun snapToGround(id: Int): Boolean
     external fun snapToGrid(id: Int, step: Float): Boolean
 
