@@ -27,6 +27,17 @@ object ToolDispatcher {
             "create_primitive" -> createPrimitive(a)
             "create_loft_mesh" -> createLoftMesh(a)
             "sculpt_mesh" -> { val c=a.vec3("center"); val d=a.vec3("offset"); report(NativeBridge.sculptMesh(a.getInt("object_id"),c[0],c[1],c[2],a.getDouble("radius").toFloat(),d[0],d[1],d[2]),"Native mesh sculpt applied","No vertices in range or invalid sculpt parameters") }
+            "get_mesh_topology" -> ToolResult(true, NativeBridge.getMeshTopology(a.getInt("object_id"), a.optInt("offset", 0), a.optInt("limit", 300)))
+            "mesh_operation" -> {
+                val op = a.getString("operation")
+                val faceArray = if (op == "loop_cut") a.optJSONArray("edge_vertices") ?: JSONArray()
+                    else a.optJSONArray("face_ids") ?: JSONArray()
+                require(faceArray.length() <= 1200) { "Use smaller face batches (maximum 1200 faces per operation)" }
+                val ids = IntArray(faceArray.length()) { faceArray.getInt(it) }
+                val ok = NativeBridge.meshOperation(a.getInt("object_id"), op, ids, a.optInt("parameter", 1), a.optDouble("value", 0.1).toFloat())
+                report(ok, "Native topology operation '$op' completed and entered undo history",
+                    "Mesh operation '$op' failed: invalid face indices, unsupported topology, or complexity/resource guard")
+            }
             "create_batch" -> createBatch(a)
             "create_asset_preset" -> createPreset(a)
             "duplicate_object" -> duplicateObject(a)
@@ -254,6 +265,8 @@ object ToolDispatcher {
                 listOf("profiles")
             ))
             .put(tool("sculpt_mesh","Deform the existing native mesh vertices with smooth radial falloff; local mesh-space center, radius and offset. Use repeated small strokes to shape the body shell, hood, roof and fenders. This is real vertex geometry, not object scaling or added primitives; undoable.",JSONObject().put("object_id",objectId).put("center",number3("Local center [x,y,z]")).put("radius",JSONObject().put("type","number").put("minimum",0.001).put("maximum",1000)).put("offset",number3("Local displacement [dx,dy,dz]")),listOf("object_id","center","radius","offset")))
+            .put(tool("get_mesh_topology", "Inspect the selected object's native mesh topology. Returns vertex positions and triangle face indices in pages; use the reported face IDs for face-edit operations. Keep pages small for dense meshes.", JSONObject().put("object_id",objectId).put("offset",JSONObject().put("type","integer").put("minimum",0)).put("limit",JSONObject().put("type","integer").put("minimum",1).put("maximum",1200).put("default",300)), listOf("object_id")))
+            .put(tool("mesh_operation", "Edit the existing mesh data natively, Blender-style; never replace it with a code-generated description or primitive assembly. Operations: subdivide (Catmull-Clark, parameter=levels 1..3), extrude (face_ids + value=distance), inset (face_ids + value=offset), smooth (parameter=iterations, value=factor 0..1), solidify (value=thickness), mirror (parameter axis 0=X 1=Y 2=Z), triangulate, flip_normals, weld (value=tolerance), crease_by_angle (value=degrees). Inspect topology first for face IDs. Changes are undoable; use repeated independent calls and continue refining until done.", JSONObject().put("object_id",objectId).put("operation",JSONObject().put("type","string").put("enum",JSONArray(listOf("subdivide","extrude","inset","smooth","solidify","mirror","loop_cut","triangulate","flip_normals","weld","crease_by_angle")))).put("face_ids",JSONObject().put("type","array").put("items",JSONObject().put("type","integer")).put("maxItems",1200)).put("edge_vertices",JSONObject().put("type","array").put("items",JSONObject().put("type","integer")).put("minItems",2).put("maxItems",2).put("description","Two mesh vertex IDs defining the starting edge for loop_cut")).put("parameter",JSONObject().put("type","integer").put("description","Subdivision level, smooth iteration count, or mirror axis depending on operation")).put("value",JSONObject().put("type","number").put("description","Extrude distance, inset amount, smooth factor, thickness, weld tolerance, or crease angle depending on operation")), listOf("object_id","operation")))
             .put(
                 tool(
                     "set_transform",

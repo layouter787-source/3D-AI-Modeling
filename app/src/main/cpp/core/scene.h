@@ -5,6 +5,7 @@
 
 #include "core/math.h"
 #include "core/mesh.h"
+#include "core/polymesh.h"
 
 namespace core {
 
@@ -24,6 +25,8 @@ enum class Primitive : int {
 constexpr int kPrimitiveCount = 11;
 
 const char* primitiveName(Primitive p);
+PolyMesh makePrimitivePolyMesh(Primitive p, float size);
+float primitiveSmoothAngle(Primitive p);
 Mesh makePrimitiveMesh(Primitive p, float size);
 
 struct Transform {
@@ -49,7 +52,8 @@ struct Object {
     std::string name;
     Primitive type = Primitive::Cube;
     float size = 1.0f;
-    Mesh mesh;
+    Mesh mesh;                 // malha triangulada de renderização
+    PolyMesh topology;          // malha poligonal editável (quads/ngons)
     Transform transform;
     Color color;
 };

@@ -23,7 +23,7 @@ const char* primitiveName(Primitive p) {
     return "cube";
 }
 
-Mesh makePrimitiveMesh(Primitive p, float size) {
+PolyMesh makePrimitivePolyMesh(Primitive p, float size) {
     PolyMesh poly;
     float smoothAngle = 35.0f;
     switch (p) {
@@ -61,7 +61,22 @@ Mesh makePrimitiveMesh(Primitive p, float size) {
         case Primitive::CustomMesh:
             poly=makeBoxPoly({size,size,size},1,1,1); break;
     }
-    return buildRenderMesh(poly,smoothAngle);
+    return poly;
+}
+
+
+float primitiveSmoothAngle(Primitive p) {
+    switch (p) {
+        case Primitive::Sphere:
+        case Primitive::Torus:
+        case Primitive::Capsule: return 180.0f;
+        case Primitive::Plane: return 0.0f;
+        default: return 35.0f;
+    }
+}
+
+Mesh makePrimitiveMesh(Primitive p, float size) {
+    return buildRenderMesh(makePrimitivePolyMesh(p, size), primitiveSmoothAngle(p));
 }
 
 namespace {

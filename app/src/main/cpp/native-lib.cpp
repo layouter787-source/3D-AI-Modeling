@@ -440,6 +440,37 @@ Java_com_layouter_aimodeling_NativeBridge_setColor(JNIEnv*, jobject, jint id, jf
 JNIEXPORT jboolean JNICALL
 Java_com_layouter_aimodeling_NativeBridge_sculptMesh(JNIEnv*, jobject, jint id, jfloat cx,jfloat cy,jfloat cz,jfloat radius,jfloat dx,jfloat dy,jfloat dz){std::lock_guard<std::mutex> lock(gMutex);return toJ(gRenderer.editor.sculptMesh(id,Vec3{cx,cy,cz},radius,Vec3{dx,dy,dz}));}
 
+
+JNIEXPORT jboolean JNICALL
+Java_com_layouter_aimodeling_NativeBridge_meshOperation(JNIEnv* env, jobject, jint id, jstring operation,
+                                                        jintArray faceIds, jint parameter, jfloat value) {
+    if (operation == nullptr) return JNI_FALSE;
+    const char* raw = env->GetStringUTFChars(operation, nullptr);
+    if (raw == nullptr) return JNI_FALSE;
+    std::string op(raw);
+    env->ReleaseStringUTFChars(operation, raw);
+    std::vector<int> faces;
+    if (faceIds != nullptr) {
+        const jsize count = env->GetArrayLength(faceIds);
+        if (count > 1200) return JNI_FALSE;
+        faces.resize(static_cast<size_t>(count));
+        env->GetIntArrayRegion(faceIds, 0, count, reinterpret_cast<jint*>(faces.data()));
+        if (env->ExceptionCheck()) { env->ExceptionClear(); return JNI_FALSE; }
+    }
+    std::lock_guard<std::mutex> lock(gMutex);
+    return toJ(gRenderer.editor.meshOperation(id, op, faces, parameter, value));
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_layouter_aimodeling_NativeBridge_getMeshTopology(JNIEnv* env, jobject, jint id, jint offset, jint limit) {
+    std::string output;
+    {
+        std::lock_guard<std::mutex> lock(gMutex);
+        output = gRenderer.editor.describeMesh(id, offset, limit);
+    }
+    return env->NewStringUTF(output.c_str());
+}
+
 JNIEXPORT jboolean JNICALL
 Java_com_layouter_aimodeling_NativeBridge_snapToGround(JNIEnv*, jobject, jint id) {
     std::lock_guard<std::mutex> lock(gMutex);

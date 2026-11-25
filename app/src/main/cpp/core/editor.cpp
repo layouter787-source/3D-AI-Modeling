@@ -1,4 +1,5 @@
 #include "core/editor.h"
+#include "core/polymesh.h"
 
 #include <algorithm>
 #include <cmath>
@@ -83,10 +84,19 @@ private:
 
 class MeshCommand : public Command {
 public:
- MeshCommand(int id, Mesh before, Mesh after):id_(id),before_(std::move(before)),after_(std::move(after)){}
- void apply(Scene& s) override { if(Object* o=s.find(id_)) o->mesh=after_; }
- void revert(Scene& s) override { if(Object* o=s.find(id_)) o->mesh=before_; }
-private: int id_; Mesh before_; Mesh after_;
+    MeshCommand(int id, Mesh before, Mesh after, PolyMesh beforeTopology, PolyMesh afterTopology)
+        : id_(id), before_(std::move(before)), after_(std::move(after)),
+          beforeTopology_(std::move(beforeTopology)), afterTopology_(std::move(afterTopology)) {}
+    void apply(Scene& s) override {
+        if (Object* o = s.find(id_)) { o->mesh = after_; o->topology = afterTopology_; }
+    }
+    void revert(Scene& s) override {
+        if (Object* o = s.find(id_)) { o->mesh = before_; o->topology = beforeTopology_; }
+    }
+private:
+    int id_;
+    Mesh before_, after_;
+    PolyMesh beforeTopology_, afterTopology_;
 };
 
 class ColorCommand : public Command {
@@ -117,7 +127,8 @@ int Editor::addPrimitive(Primitive type, float size, Vec3 position) {
     object.id = scene_.nextId++;
     object.type = type;
     object.size = size;
-    object.mesh = makePrimitiveMesh(type, size);
+    object.topology = makePrimitivePolyMesh(type, size);
+    object.mesh = buildRenderMesh(object.topology, primitiveSmoothAngle(type));
     object.transform.position = position;
     object.name = std::string(primitiveName(type)) + "_" + std::to_string(object.id);
 
@@ -169,9 +180,31 @@ int Editor::addLoftMesh(const std::vector<float>& profiles, int segments, Vec3 p
         const uint16_t r0=static_cast<uint16_t>(last+j), r1=static_cast<uint16_t>(last+(j+1)%segments);
         mesh.indices.insert(mesh.indices.end(),{leftCenter,l1,l0,rightCenter,r0,r1});
     }
+    // Preserve the loft's quad rings as editable topology. The render mesh is a separate
+    // triangulated copy generated only for OpenGL.
+    PolyMesh topology;
+    topology.verts.reserve(rings * static_cast<size_t>(segments) + 2);
+    for (size_t i = 0; i < rings; ++i) {
+        const float x=profiles[i*4], w=profiles[i*4+1], cy=profiles[i*4+2], h=profiles[i*4+3];
+        for (int j=0;j<segments;++j) {
+            const float a=2.0f*kPi*static_cast<float>(j)/segments;
+            topology.verts.push_back({x,cy+h*std::cos(a),w*std::sin(a)});
+        }
+    }
+    auto vid=[&](size_t ring,int j){return static_cast<uint32_t>(ring*static_cast<size_t>(segments)+static_cast<size_t>((j+segments)%segments));};
+    for(size_t i=0;i+1<rings;++i) for(int j=0;j<segments;++j)
+        topology.faces.push_back({vid(i,j),vid(i,j+1),vid(i+1,j+1),vid(i+1,j)});
+    std::vector<uint32_t> left,right;
+    for(int j=segments;j-- >0;) left.push_back(vid(0,j));
+    for(int j=0;j<segments;++j) right.push_back(vid(rings-1,j));
+    topology.faces.push_back(std::move(left));
+    topology.faces.push_back(std::move(right));
+    mesh=buildRenderMesh(topology,35.0f);
+
     Object object;
     object.id=scene_.nextId++; object.type=Primitive::CustomMesh; object.size=1.0f;
     object.name="loft_mesh_"+std::to_string(object.id); object.mesh=std::move(mesh);
+    object.topology=std::move(topology);
     object.transform.position=position;
     const int id=object.id;
     execute(std::make_unique<AddCommand>(std::move(object)));
@@ -239,15 +272,166 @@ bool Editor::scaleBy(int id, Vec3 factor) {
 }
 
 bool Editor::sculptMesh(int id, Vec3 center, float radius, Vec3 offset) {
- Object* o=scene_.find(id);
- if(!o||o->mesh.vertices.empty()||!finite3(center)||!finite3(offset)||!std::isfinite(radius)||radius<0.001f||radius>1000.0f)return false;
- Mesh before=o->mesh, after=before; bool changed=false;
- for(Vertex& v:after.vertices){Vec3 delta=Vec3{v.px,v.py,v.pz}-center;float d=length(delta);if(d>=radius)continue;float t=std::clamp(1.0f-d/radius,0.0f,1.0f);float w=t*t*(3.0f-2.0f*t);v.px+=offset.x*w;v.py+=offset.y*w;v.pz+=offset.z*w;changed|=w>0.0001f;}
- if(!changed)return false;
- std::map<std::tuple<long long,long long,long long>,Vec3> sums;
- for(size_t i=0;i+2<after.indices.size();i+=3){const Vertex&a=after.vertices[after.indices[i]],&b=after.vertices[after.indices[i+1]],&c=after.vertices[after.indices[i+2]];Vec3 n=cross(Vec3{b.px-a.px,b.py-a.py,b.pz-a.pz},Vec3{c.px-a.px,c.py-a.py,c.pz-a.pz});for(uint32_t ix:{after.indices[i],after.indices[i+1],after.indices[i+2]}){const Vertex&v=after.vertices[ix];sums[{std::llround(v.px*10000),std::llround(v.py*10000),std::llround(v.pz*10000)}]+=n;}}
- for(Vertex&v:after.vertices){Vec3 n=normalize(sums[{std::llround(v.px*10000),std::llround(v.py*10000),std::llround(v.pz*10000)}]);if(length(n)>0.5f){v.nx=n.x;v.ny=n.y;v.nz=n.z;}}
- execute(std::make_unique<MeshCommand>(id,std::move(before),std::move(after)));return true;
+    Object* object = scene_.find(id);
+    if (!object || !finite3(center) || !finite3(offset) || !std::isfinite(radius) ||
+        radius < 0.001f || radius > 1000.0f) return false;
+
+    PolyMesh beforeTopology = object->topology;
+    if (beforeTopology.empty()) {
+        for (const Vertex& v : object->mesh.vertices) beforeTopology.verts.push_back({v.px,v.py,v.pz});
+        for (size_t i=0;i+2<object->mesh.indices.size();i+=3)
+            beforeTopology.faces.push_back({object->mesh.indices[i],object->mesh.indices[i+1],object->mesh.indices[i+2]});
+        beforeTopology = weldVertices(beforeTopology, 1e-5f);
+    }
+    PolyMesh afterTopology = beforeTopology;
+    bool changed = false;
+    for (Vec3& vertex : afterTopology.verts) {
+        const float distance = length(vertex - center);
+        if (distance >= radius) continue;
+        const float t = std::clamp(1.0f - distance / radius, 0.0f, 1.0f);
+        const float weight = t * t * (3.0f - 2.0f * t);
+        vertex += offset * weight;
+        changed = changed || weight > 0.0001f;
+    }
+    if (!changed) return false;
+    Mesh afterMesh = buildRenderMesh(afterTopology, primitiveSmoothAngle(object->type));
+    Mesh beforeMesh = object->mesh;
+    execute(std::make_unique<MeshCommand>(id, std::move(beforeMesh), std::move(afterMesh),
+                                          std::move(beforeTopology), std::move(afterTopology)));
+    return true;
+}
+
+bool Editor::meshOperation(int id, const std::string& operation, const std::vector<int>& faces,
+                            int parameter, float value) {
+    Object* object = scene_.find(id);
+    if (object == nullptr || object->mesh.vertices.empty() || object->mesh.indices.size() < 3 ||
+        !std::isfinite(value)) return false;
+
+    // O renderer guarda vértices duplicados por canto. Reconstruímos topologia triangular
+    // e soldamos posições coincidentes antes de operar sobre faces/arestas.
+    PolyMesh source = object->topology;
+    if (source.empty()) {
+        source.verts.reserve(object->mesh.vertices.size());
+        for (const Vertex& v : object->mesh.vertices) source.verts.push_back({v.px, v.py, v.pz});
+        for (size_t i = 0; i + 2 < object->mesh.indices.size(); i += 3) {
+            const uint32_t a = object->mesh.indices[i], b = object->mesh.indices[i + 1],
+                           c = object->mesh.indices[i + 2];
+            if (a >= source.verts.size() || b >= source.verts.size() || c >= source.verts.size()) return false;
+            source.faces.push_back({a, b, c});
+        }
+        source = weldVertices(source, 1e-5f);
+    }
+    if (source.empty() || source.faces.size() > 250000 || source.verts.size() > 250000) return false;
+
+    PolyMesh result;
+    if (operation == "subdivide") {
+        const int levels = std::clamp(parameter, 1, 3);
+        if (estimateSubdividedFaces(source, levels) > 180000) return false;
+        result = catmullClark(source, levels);
+    } else if (operation == "extrude") {
+        if (faces.empty() || faces.size() > source.faces.size()) return false;
+        std::vector<int> valid;
+        valid.reserve(faces.size());
+        for (int face : faces) {
+            if (face < 0 || static_cast<size_t>(face) >= source.faces.size()) return false;
+            valid.push_back(face);
+        }
+        result = extrudeFaces(source, valid, std::clamp(value, -100.0f, 100.0f), true, Vec3{}, 1.0f);
+    } else if (operation == "inset") {
+        if (faces.empty() || faces.size() > source.faces.size()) return false;
+        for (int face : faces) if (face < 0 || static_cast<size_t>(face) >= source.faces.size()) return false;
+        result = insetFaces(source, faces, std::clamp(value, 0.0001f, 100.0f));
+    } else if (operation == "smooth") {
+        result = smoothMesh(source, std::clamp(parameter, 1, 100), std::clamp(value, 0.0f, 1.0f));
+    } else if (operation == "solidify") {
+        result = solidify(source, std::clamp(value, -20.0f, 20.0f));
+    } else if (operation == "mirror") {
+        result = mirrorMesh(source, std::clamp(parameter, 0, 2), 1e-4f);
+    } else if (operation == "loop_cut") {
+        if (faces.size() != 2 || faces[0] < 0 || faces[1] < 0 ||
+            static_cast<size_t>(faces[0]) >= source.verts.size() ||
+            static_cast<size_t>(faces[1]) >= source.verts.size()) return false;
+        result = loopCut(source, static_cast<uint32_t>(faces[0]), static_cast<uint32_t>(faces[1]),
+                         std::clamp(parameter, 1, 32));
+    } else if (operation == "loop_cut") {
+        if (faces.size() != 2 || faces[0] < 0 || faces[1] < 0 ||
+            static_cast<size_t>(faces[0]) >= source.verts.size() ||
+            static_cast<size_t>(faces[1]) >= source.verts.size()) return false;
+        result = loopCut(source, static_cast<uint32_t>(faces[0]), static_cast<uint32_t>(faces[1]),
+                         std::clamp(parameter, 1, 32));
+    } else if (operation == "triangulate") {
+        result = triangulate(source);
+    } else if (operation == "flip_normals") {
+        result = flipFaces(source);
+    } else if (operation == "weld") {
+        result = weldVertices(source, std::clamp(value, 1e-6f, 1.0f));
+    } else if (operation == "crease_by_angle") {
+        result = creaseByAngle(source, std::clamp(value, 0.0f, 180.0f));
+    } else {
+        return false;
+    }
+
+    if (result.empty() || result.verts.size() > 250000 || result.faces.size() > 250000) return false;
+    Mesh after = buildRenderMesh(result, primitiveSmoothAngle(object->type));
+    if (after.vertices.empty() || after.indices.empty() || after.vertices.size() > 500000 ||
+        after.indices.size() > 1500000) return false;
+    Mesh beforeMesh = object->mesh;
+    PolyMesh beforeTopology = object->topology;
+    execute(std::make_unique<MeshCommand>(id, std::move(beforeMesh), std::move(after),
+                                          std::move(beforeTopology), std::move(result)));
+    return true;
+}
+
+std::string Editor::describeMesh(int id, int offset, int limit) const {
+    const Object* object = scene_.find(id);
+    if (object == nullptr) return "{\\"error\\":\\"Object not found\\"}";
+    offset = std::max(0, offset);
+    limit = std::clamp(limit, 1, 1200);
+    const PolyMesh& topology = object->topology;
+    const bool hasTopology = !topology.empty();
+    const Mesh& render = object->mesh;
+    const size_t vertexCount = hasTopology ? topology.verts.size() : render.vertices.size();
+    const size_t faceCount = hasTopology ? topology.faces.size() : render.indices.size()/3;
+    const size_t vStart = std::min(static_cast<size_t>(offset), vertexCount);
+    const size_t fStart = std::min(static_cast<size_t>(offset), faceCount);
+    const size_t vEnd = std::min(vertexCount, vStart + static_cast<size_t>(limit));
+    const size_t fEnd = std::min(faceCount, fStart + static_cast<size_t>(limit));
+    std::string out = "{\\"object_id\\":" + std::to_string(id) +
+        ",\\"topology\\":" + (hasTopology ? "true" : "false") +
+        ",\\"vertex_count\\":" + std::to_string(vertexCount) +
+        ",\\"face_count\\":" + std::to_string(faceCount) +
+        ",\\"offset\\":" + std::to_string(offset) + ",\\"vertices\\":[";
+    char buf[192];
+    for (size_t i = vStart; i < vEnd; ++i) {
+        if (i > vStart) out += ",";
+        if (hasTopology) {
+            const Vec3& v = topology.verts[i];
+            std::snprintf(buf, sizeof(buf), "[%.6f,%.6f,%.6f]", v.x, v.y, v.z);
+        } else {
+            const Vertex& v = render.vertices[i];
+            std::snprintf(buf, sizeof(buf), "[%.6f,%.6f,%.6f]", v.px, v.py, v.pz);
+        }
+        out += buf;
+    }
+    out += "],\\"faces\\":[";
+    for (size_t i = fStart; i < fEnd; ++i) {
+        if (i > fStart) out += ",";
+        if (hasTopology) {
+            out += "[";
+            const auto& face = topology.faces[i];
+            for (size_t k = 0; k < face.size(); ++k) {
+                if (k) out += ",";
+                out += std::to_string(face[k]);
+            }
+            out += "]";
+        } else {
+            const size_t k = i * 3;
+            std::snprintf(buf, sizeof(buf), "[%u,%u,%u]", render.indices[k], render.indices[k+1], render.indices[k+2]);
+            out += buf;
+        }
+    }
+    out += "]}";
+    return out;
 }
 
 bool Editor::snapToGround(int id) {
