@@ -1,5 +1,8 @@
 package com.layouter.aimodeling
 
+import android.app.Activity
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -36,6 +39,13 @@ import androidx.compose.material.icons.outlined.SmartToy
 import androidx.compose.material.icons.outlined.Undo
 import androidx.compose.material.icons.outlined.ZoomIn
 import androidx.compose.material.icons.outlined.ZoomOut
+import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.LightMode
+import androidx.compose.material.icons.outlined.Extension
+import androidx.compose.material.icons.outlined.Build
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -75,6 +85,10 @@ fun EditorScreen() {
     val rev = revision.intValue
     val refresh: () -> Unit = { revision.intValue++ }
     var showAi by remember { mutableStateOf(false) }
+    var showMeshTools by remember { mutableStateOf(false) }
+    var showExtensions by remember { mutableStateOf(false) }
+    var faceIndex by remember { mutableStateOf("0") }
+    val darkTheme = remember { context.getSharedPreferences("app_theme", android.content.Context.MODE_PRIVATE).getBoolean("dark", true) }
     var objExport by remember { mutableStateOf("") }
     var projectExport by remember { mutableStateOf("") }
     var mtlExport by remember { mutableStateOf("") }
@@ -205,24 +219,24 @@ fun EditorScreen() {
 
         Row(
             modifier = Modifier.align(Alignment.TopCenter).systemBarsPadding().padding(8.dp)
-                .background(Color(0xE91B1E23), androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
+                .background(MaterialTheme.colorScheme.surface, androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Text("MESH", color = Color(0xFF9BC8C0), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 8.dp, end = 4.dp))
+            Text("MESH", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 8.dp, end = 4.dp))
             IconButton(onClick = { NativeBridge.undo(); refresh() }, enabled = canUndo) {
                 Icon(Icons.Outlined.Undo, "Desfazer", tint = if (canUndo) Color.White else Color.Gray)
             }
             IconButton(onClick = { NativeBridge.redo(); refresh() }, enabled = canRedo) {
                 Icon(Icons.Outlined.Redo, "Refazer", tint = if (canRedo) Color.White else Color.Gray)
             }
-            Box(Modifier.size(1.dp, 25.dp).background(Color(0xFF454B54)))
+            Box(Modifier.size(1.dp, 25.dp).background(MaterialTheme.colorScheme.outlineVariant))
             IconButton(onClick = {
                 projectExport = SceneProjectCodec.encode()
                 projectSaveLauncher.launch("untitled.3dproj")
             }) {
-                Icon(Icons.Outlined.Save, "Guardar projeto", tint = Color(0xFFBFC7D1))
+                Icon(Icons.Outlined.Save, "Guardar projeto", tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             IconButton(onClick = {
                 projectOpenLauncher.launch(arrayOf("*/*"))
@@ -237,10 +251,26 @@ fun EditorScreen() {
                 Icon(Icons.Outlined.FileDownload, "Export OBJ", tint = Color(0xFFBFC7D1))
             }
             IconButton(onClick = { showAi = !showAi }) {
-                Icon(Icons.Outlined.SmartToy, "Assistente IA", tint = Color(0xFF9BC8C0))
+                Icon(Icons.Outlined.SmartToy, "Assistente IA", tint = MaterialTheme.colorScheme.primary)
+            }
+            IconButton(onClick = { showMeshTools = true }) {
+                Icon(Icons.Outlined.Build, "Ferramentas de malha", tint = MaterialTheme.colorScheme.primary)
+            }
+            IconButton(onClick = { showExtensions = true }) {
+                Icon(Icons.Outlined.Extension, "Biblioteca de extensões", tint = MaterialTheme.colorScheme.onSurface)
+            }
+            IconButton(onClick = {
+                val next = !darkTheme
+                context.getSharedPreferences("app_theme", android.content.Context.MODE_PRIVATE).edit().putBoolean("dark", next).apply()
+                (context as? Activity)?.recreate()
+            }) {
+                Icon(if (darkTheme) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,
+                    if (darkTheme) "Tema claro" else "Tema escuro", tint = MaterialTheme.colorScheme.primary)
             }
         }
 
+        if (showMeshTools) MeshWorkbenchDialog(selected, faceIndex, { faceIndex = it }, { showMeshTools = false }, refresh)
+        if (showExtensions) ExtensionLibraryDialog { showExtensions = false }
         AiPanel(
             onClose = { showAi = false },
             onSceneChanged = refresh,
@@ -267,8 +297,8 @@ private fun ToolButton(label: String, onClick: () -> Unit) {
         contentPadding = PaddingValues(horizontal = 13.dp, vertical = 7.dp),
         shape = androidx.compose.foundation.shape.RoundedCornerShape(13.dp),
         colors = ButtonDefaults.filledTonalButtonColors(
-            containerColor = Color(0xFF2A3037),
-            contentColor = Color(0xFFE3E7EB)
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.onSurface
         )
     ) {
         Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1)
