@@ -38,7 +38,7 @@ internal object HttpJson {
             val code = connection.responseCode
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
             val text = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-            if (code !in 200..299) throw AiException("HTTP $code: ${errorMessage(text)}")
+            if (code !in 200..299) throw AiException("HTTP $code: ${errorMessage(text)}", httpCode = code)
             return JSONObject(text)
         } finally {
             connection.disconnect()
