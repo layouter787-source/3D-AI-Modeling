@@ -26,27 +26,39 @@ const char* kObjectVertexShader = R"(#version 300 es
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aNormal;
 uniform mat4 uMvp;
+uniform mat4 uModel;
 uniform mat3 uNormalMat;
 out vec3 vNormal;
+out vec3 vWorldPos;
 void main() {
-    vNormal = uNormalMat * aNormal;
+    vNormal = normalize(uNormalMat * aNormal);
+    vWorldPos = (uModel * vec4(aPos, 1.0)).xyz;
     gl_Position = uMvp * vec4(aPos, 1.0);
 }
 )";
 
 const char* kObjectFragmentShader = R"(#version 300 es
-precision mediump float;
+precision highp float;
 in vec3 vNormal;
+in vec3 vWorldPos;
 uniform vec3 uColor;
+uniform vec3 uCameraPosition;
 uniform float uSelected;
 out vec4 outColor;
 void main() {
     vec3 n = normalize(vNormal);
-    vec3 lightDir = normalize(vec3(0.4, 0.8, 0.6));
-    float diff = max(dot(n, lightDir), 0.0);
-    vec3 c = uColor * (0.25 + 0.75 * diff);
-    c = mix(c, vec3(1.0, 0.6, 0.1), 0.35 * uSelected);
-    outColor = vec4(c, 1.0);
+    vec3 lightDir = normalize(vec3(-0.45, 0.82, 0.36));
+    vec3 viewDir = normalize(uCameraPosition - vWorldPos);
+    vec3 halfDir = normalize(lightDir + viewDir);
+    float diffuse = max(dot(n, lightDir), 0.0);
+    float specular = pow(max(dot(n, halfDir), 0.0), 48.0) * 0.28;
+    float fresnel = pow(1.0 - max(dot(n, viewDir), 0.0), 3.0) * 0.10;
+    float rim = pow(1.0 - max(dot(n, viewDir), 0.0), 2.0) * 0.07;
+    vec3 base = uColor * (0.20 + 0.72 * diffuse);
+    vec3 lit = base + vec3(specular + fresnel);
+    lit += uColor * rim;
+    lit = mix(lit, vec3(1.0, 0.58, 0.16), 0.42 * uSelected);
+    outColor = vec4(lit, 1.0);
 }
 )";
 
@@ -152,7 +164,9 @@ void destroy(GpuMesh& g) {
 struct Renderer {
     GLuint objectProgram = 0;
     GLint objMvp = -1;
+    GLint objModel = -1;
     GLint objNormal = -1;
+    GLint objCamera = -1;
     GLint objColor = -1;
     GLint objSelected = -1;
 
@@ -233,6 +247,8 @@ Java_com_layouter_aimodeling_NativeBridge_onSurfaceCreated(JNIEnv*, jobject) {
 
     r.objectProgram = linkProgram(kObjectVertexShader, kObjectFragmentShader);
     r.objMvp = glGetUniformLocation(r.objectProgram, "uMvp");
+    r.objModel = glGetUniformLocation(r.objectProgram, "uModel");
+    r.objCamera = glGetUniformLocation(r.objectProgram, "uCameraPosition");
     r.objNormal = glGetUniformLocation(r.objectProgram, "uNormalMat");
     r.objColor = glGetUniformLocation(r.objectProgram, "uColor");
     r.objSelected = glGetUniformLocation(r.objectProgram, "uSelected");
@@ -291,6 +307,10 @@ Java_com_layouter_aimodeling_NativeBridge_onDrawFrame(JNIEnv*, jobject) {
         normalMatrix(o.transform, nm);
 
         glUniformMatrix4fv(r.objMvp, 1, GL_FALSE, mvp.m);
+        glUniformMatrix4fv(r.objModel, 1, GL_FALSE, o.transform.matrix().m);
+        const Mat4 cameraRotation = multiply(rotateY(-r.camera.yaw), rotateX(-r.camera.pitch));
+        const Vec3 cameraPosition = transformPoint(cameraRotation, Vec3{-r.camera.panX, -r.camera.panY, r.camera.distance});
+        glUniform3f(r.objCamera, cameraPosition.x, cameraPosition.y, cameraPosition.z);
         glUniformMatrix3fv(r.objNormal, 1, GL_FALSE, nm);
         glUniform3f(r.objColor, o.color.r, o.color.g, o.color.b);
         glUniform1f(r.objSelected, o.id == scene.selectedId ? 1.0f : 0.0f);
