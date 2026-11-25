@@ -84,10 +84,19 @@ private:
 
 class MeshCommand : public Command {
 public:
- MeshCommand(int id, Mesh before, Mesh after):id_(id),before_(std::move(before)),after_(std::move(after)){}
- void apply(Scene& s) override { if(Object* o=s.find(id_)) o->mesh=after_; }
- void revert(Scene& s) override { if(Object* o=s.find(id_)) o->mesh=before_; }
-private: int id_; Mesh before_; Mesh after_;
+    MeshCommand(int id, Mesh before, Mesh after, PolyMesh beforeTopology, PolyMesh afterTopology)
+        : id_(id), before_(std::move(before)), after_(std::move(after)),
+          beforeTopology_(std::move(beforeTopology)), afterTopology_(std::move(afterTopology)) {}
+    void apply(Scene& s) override {
+        if (Object* o = s.find(id_)) { o->mesh = after_; o->topology = afterTopology_; }
+    }
+    void revert(Scene& s) override {
+        if (Object* o = s.find(id_)) { o->mesh = before_; o->topology = beforeTopology_; }
+    }
+private:
+    int id_;
+    Mesh before_, after_;
+    PolyMesh beforeTopology_, afterTopology_;
 };
 
 class ColorCommand : public Command {
@@ -118,7 +127,8 @@ int Editor::addPrimitive(Primitive type, float size, Vec3 position) {
     object.id = scene_.nextId++;
     object.type = type;
     object.size = size;
-    object.mesh = makePrimitiveMesh(type, size);
+    object.topology = makePrimitivePolyMesh(type, size);
+    object.mesh = buildRenderMesh(object.topology, primitiveSmoothAngle(type));
     object.transform.position = position;
     object.name = std::string(primitiveName(type)) + "_" + std::to_string(object.id);
 
@@ -240,17 +250,34 @@ bool Editor::scaleBy(int id, Vec3 factor) {
 }
 
 bool Editor::sculptMesh(int id, Vec3 center, float radius, Vec3 offset) {
- Object* o=scene_.find(id);
- if(!o||o->mesh.vertices.empty()||!finite3(center)||!finite3(offset)||!std::isfinite(radius)||radius<0.001f||radius>1000.0f)return false;
- Mesh before=o->mesh, after=before; bool changed=false;
- for(Vertex& v:after.vertices){Vec3 delta=Vec3{v.px,v.py,v.pz}-center;float d=length(delta);if(d>=radius)continue;float t=std::clamp(1.0f-d/radius,0.0f,1.0f);float w=t*t*(3.0f-2.0f*t);v.px+=offset.x*w;v.py+=offset.y*w;v.pz+=offset.z*w;changed|=w>0.0001f;}
- if(!changed)return false;
- std::map<std::tuple<long long,long long,long long>,Vec3> sums;
- for(size_t i=0;i+2<after.indices.size();i+=3){const Vertex&a=after.vertices[after.indices[i]],&b=after.vertices[after.indices[i+1]],&c=after.vertices[after.indices[i+2]];Vec3 n=cross(Vec3{b.px-a.px,b.py-a.py,b.pz-a.pz},Vec3{c.px-a.px,c.py-a.py,c.pz-a.pz});for(uint32_t ix:{after.indices[i],after.indices[i+1],after.indices[i+2]}){const Vertex&v=after.vertices[ix];sums[{std::llround(v.px*10000),std::llround(v.py*10000),std::llround(v.pz*10000)}]+=n;}}
- for(Vertex&v:after.vertices){Vec3 n=normalize(sums[{std::llround(v.px*10000),std::llround(v.py*10000),std::llround(v.pz*10000)}]);if(length(n)>0.5f){v.nx=n.x;v.ny=n.y;v.nz=n.z;}}
- execute(std::make_unique<MeshCommand>(id,std::move(before),std::move(after)));return true;
-}
+    Object* object = scene_.find(id);
+    if (!object || !finite3(center) || !finite3(offset) || !std::isfinite(radius) ||
+        radius < 0.001f || radius > 1000.0f) return false;
 
+    PolyMesh beforeTopology = object->topology;
+    if (beforeTopology.empty()) {
+        for (const Vertex& v : object->mesh.vertices) beforeTopology.verts.push_back({v.px,v.py,v.pz});
+        for (size_t i=0;i+2<object->mesh.indices.size();i+=3)
+            beforeTopology.faces.push_back({object->mesh.indices[i],object->mesh.indices[i+1],object->mesh.indices[i+2]});
+        beforeTopology = weldVertices(beforeTopology, 1e-5f);
+    }
+    PolyMesh afterTopology = beforeTopology;
+    bool changed = false;
+    for (Vec3& vertex : afterTopology.verts) {
+        const float distance = length(vertex - center);
+        if (distance >= radius) continue;
+        const float t = std::clamp(1.0f - distance / radius, 0.0f, 1.0f);
+        const float weight = t * t * (3.0f - 2.0f * t);
+        vertex += offset * weight;
+        changed = changed || weight > 0.0001f;
+    }
+    if (!changed) return false;
+    Mesh afterMesh = buildRenderMesh(afterTopology, primitiveSmoothAngle(object->type));
+    Mesh beforeMesh = object->mesh;
+    execute(std::make_unique<MeshCommand>(id, std::move(beforeMesh), std::move(afterMesh),
+                                          std::move(beforeTopology), std::move(afterTopology)));
+    return true;
+}
 
 bool Editor::meshOperation(int id, const std::string& operation, const std::vector<int>& faces,
                             int parameter, float value) {
@@ -260,16 +287,18 @@ bool Editor::meshOperation(int id, const std::string& operation, const std::vect
 
     // O renderer guarda vértices duplicados por canto. Reconstruímos topologia triangular
     // e soldamos posições coincidentes antes de operar sobre faces/arestas.
-    PolyMesh source;
-    source.verts.reserve(object->mesh.vertices.size());
-    for (const Vertex& v : object->mesh.vertices) source.verts.push_back({v.px, v.py, v.pz});
-    for (size_t i = 0; i + 2 < object->mesh.indices.size(); i += 3) {
-        const uint32_t a = object->mesh.indices[i], b = object->mesh.indices[i + 1],
-                       c = object->mesh.indices[i + 2];
-        if (a >= source.verts.size() || b >= source.verts.size() || c >= source.verts.size()) return false;
-        source.faces.push_back({a, b, c});
+    PolyMesh source = object->topology;
+    if (source.empty()) {
+        source.verts.reserve(object->mesh.vertices.size());
+        for (const Vertex& v : object->mesh.vertices) source.verts.push_back({v.px, v.py, v.pz});
+        for (size_t i = 0; i + 2 < object->mesh.indices.size(); i += 3) {
+            const uint32_t a = object->mesh.indices[i], b = object->mesh.indices[i + 1],
+                           c = object->mesh.indices[i + 2];
+            if (a >= source.verts.size() || b >= source.verts.size() || c >= source.verts.size()) return false;
+            source.faces.push_back({a, b, c});
+        }
+        source = weldVertices(source, 1e-5f);
     }
-    source = weldVertices(source, 1e-5f);
     if (source.empty() || source.faces.size() > 250000 || source.verts.size() > 250000) return false;
 
     PolyMesh result;
@@ -296,6 +325,12 @@ bool Editor::meshOperation(int id, const std::string& operation, const std::vect
         result = solidify(source, std::clamp(value, -20.0f, 20.0f));
     } else if (operation == "mirror") {
         result = mirrorMesh(source, std::clamp(parameter, 0, 2), 1e-4f);
+    } else if (operation == "loop_cut") {
+        if (faces.size() != 2 || faces[0] < 0 || faces[1] < 0 ||
+            static_cast<size_t>(faces[0]) >= source.verts.size() ||
+            static_cast<size_t>(faces[1]) >= source.verts.size()) return false;
+        result = loopCut(source, static_cast<uint32_t>(faces[0]), static_cast<uint32_t>(faces[1]),
+                         std::clamp(parameter, 1, 32));
     } else if (operation == "triangulate") {
         result = triangulate(source);
     } else if (operation == "flip_normals") {
@@ -309,10 +344,13 @@ bool Editor::meshOperation(int id, const std::string& operation, const std::vect
     }
 
     if (result.empty() || result.verts.size() > 250000 || result.faces.size() > 250000) return false;
-    Mesh after = buildRenderMesh(result, 35.0f);
+    Mesh after = buildRenderMesh(result, primitiveSmoothAngle(object->type));
     if (after.vertices.empty() || after.indices.empty() || after.vertices.size() > 500000 ||
         after.indices.size() > 1500000) return false;
-    execute(std::make_unique<MeshCommand>(id, object->mesh, std::move(after)));
+    Mesh beforeMesh = object->mesh;
+    PolyMesh beforeTopology = object->topology;
+    execute(std::make_unique<MeshCommand>(id, std::move(beforeMesh), std::move(after),
+                                          std::move(beforeTopology), std::move(result)));
     return true;
 }
 
