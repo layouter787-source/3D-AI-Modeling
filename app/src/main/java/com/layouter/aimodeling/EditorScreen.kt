@@ -239,13 +239,13 @@ fun EditorScreen() {
             }
         }
 
-        if (showAi) {
-            AiPanel(
-                onClose = { showAi = false },
-                onSceneChanged = refresh,
-                modifier = Modifier.align(Alignment.BottomCenter)
-            )
-        } else {
+        AiPanel(
+            onClose = { showAi = false },
+            onSceneChanged = refresh,
+            modifier = Modifier.align(Alignment.BottomCenter),
+            visible = showAi
+        )
+        if (!showAi) {
             Column(
                 modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                     .background(Color(0xD917191E)).systemBarsPadding().padding(8.dp),
