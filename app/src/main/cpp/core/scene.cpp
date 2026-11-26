@@ -1,68 +1,21 @@
 #include "core/scene.h"
-#include "core/polymesh.h"
 
 #include <algorithm>
 #include <cmath>
 
 namespace core {
 
-const char* primitiveName(Primitive p) {
-    switch (p) {
-        case Primitive::Cube: return "cube";
-        case Primitive::Sphere: return "sphere";
-        case Primitive::Cylinder: return "cylinder";
-        case Primitive::Cone: return "cone";
-        case Primitive::Torus: return "torus";
-        case Primitive::Plane: return "plane";
-    }
-    return "cube";
-}
-
-Mesh makePrimitiveMesh(Primitive p, float size) {
-    PolyMesh poly;
-    float smoothAngle = 35.0f;
-    switch (p) {
-        case Primitive::Cube:
-            poly = makeBoxPoly({size, size, size}, 1, 1, 1);
-            break;
-        case Primitive::Sphere:
-            poly = makeSpherePoly(size * 0.5f, 24);
-            smoothAngle = 180.0f;
-            break;
-        case Primitive::Cylinder:
-            poly = makeCylinderPoly(size * 0.5f, size, 24, 1, true);
-            break;
-        case Primitive::Cone:
-            poly = makeConePoly(size * 0.5f, size, 24, true);
-            break;
-        case Primitive::Torus:
-            poly = makeTorusPoly(size * 0.35f, size * 0.15f, 32, 16);
-            smoothAngle = 180.0f;
-            break;
-        case Primitive::Plane:
-            poly = makePlanePoly(size, size, 1, 1);
-            smoothAngle = 0.0f;
-            break;
-    }
-    return buildRenderMesh(poly, smoothAngle);
-}
-
 namespace {
-
-Mat4 rotationMatrix(const Transform& t) {
-    return multiply(rotateZ(radians(t.rotationDeg.z)),
-                    multiply(rotateY(radians(t.rotationDeg.y)), rotateX(radians(t.rotationDeg.x))));
-}
 
 Vec3 toVec(const Vertex& v) { return {v.px, v.py, v.pz}; }
 
-// Möller-Trumbore, de dois lados.
+// Möller-Trumbore, de dois lados. A direção do raio não precisa de estar normalizada.
 bool rayTriangle(const Ray& ray, Vec3 a, Vec3 b, Vec3 c, float& t) {
     const Vec3 e1 = b - a;
     const Vec3 e2 = c - a;
     const Vec3 p = cross(ray.dir, e2);
     const float det = dot(e1, p);
-    if (std::fabs(det) < 1e-9f) return false;
+    if (std::fabs(det) < 1e-12f) return false;
     const float inv = 1.0f / det;
     const Vec3 s = ray.origin - a;
     const float u = dot(s, p) * inv;
@@ -77,19 +30,9 @@ bool rayTriangle(const Ray& ray, Vec3 a, Vec3 b, Vec3 c, float& t) {
 }  // namespace
 
 Mat4 Transform::matrix() const {
-    return multiply(translate(position.x, position.y, position.z),
-                    multiply(rotationMatrix(*this), scaleMatrix(scale)));
-}
-
-void normalMatrix(const Transform& t, float out[9]) {
-    const Mat4 r = rotationMatrix(t);
-    const float s[3] = {std::max(std::fabs(t.scale.x), 1e-4f), std::max(std::fabs(t.scale.y), 1e-4f),
-                        std::max(std::fabs(t.scale.z), 1e-4f)};
-    for (int col = 0; col < 3; ++col) {
-        for (int row = 0; row < 3; ++row) {
-            out[col * 3 + row] = r.m[col * 4 + row] / s[col];
-        }
-    }
+    const Mat4 rot = multiply(rotateZ(radians(rotationDeg.z)),
+                              multiply(rotateY(radians(rotationDeg.y)), rotateX(radians(rotationDeg.x))));
+    return multiply(translate(position.x, position.y, position.z), multiply(rot, scaleMatrix(scale)));
 }
 
 Object* Scene::find(int id) {
@@ -109,24 +52,89 @@ int Scene::indexOf(int id) const {
     return -1;
 }
 
+Light* Scene::findLight(int id) {
+    for (Light& l : lights) {
+        if (l.id == id) return &l;
+    }
+    return nullptr;
+}
+
+Mat4 worldMatrix(const Scene& scene, const Object& object) {
+    Mat4 m = object.transform.matrix();
+    int parent = object.parent;
+    for (int depth = 0; parent >= 0 && depth < 32; ++depth) {
+        const Object* p = scene.find(parent);
+        if (p == nullptr) break;
+        m = multiply(p->transform.matrix(), m);
+        parent = p->parent;
+    }
+    return m;
+}
+
+void normalMatrixFromWorld(const Mat4& w, float out[9]) {
+    const float A00 = w.m[0], A10 = w.m[1], A20 = w.m[2];
+    const float A01 = w.m[4], A11 = w.m[5], A21 = w.m[6];
+    const float A02 = w.m[8], A12 = w.m[9], A22 = w.m[10];
+    const float det = A00 * (A11 * A22 - A12 * A21) - A01 * (A10 * A22 - A12 * A20) +
+                      A02 * (A10 * A21 - A11 * A20);
+    const float inv = std::fabs(det) < 1e-20f ? 1.0f : 1.0f / det;
+    const float C00 = A11 * A22 - A12 * A21, C01 = A12 * A20 - A10 * A22, C02 = A10 * A21 - A11 * A20;
+    const float C10 = A02 * A21 - A01 * A22, C11 = A00 * A22 - A02 * A20, C12 = A01 * A20 - A00 * A21;
+    const float C20 = A01 * A12 - A02 * A11, C21 = A02 * A10 - A00 * A12, C22 = A00 * A11 - A01 * A10;
+    out[0] = C00 * inv; out[1] = C10 * inv; out[2] = C20 * inv;
+    out[3] = C01 * inv; out[4] = C11 * inv; out[5] = C21 * inv;
+    out[6] = C02 * inv; out[7] = C12 * inv; out[8] = C22 * inv;
+}
+
 int pickObject(const Scene& scene, const Ray& ray) {
     int bestId = -1;
     float bestT = 1e30f;
     for (const Object& o : scene.objects) {
-        const Mat4 model = o.transform.matrix();
-        const Mesh& mesh = o.mesh;
+        if (!o.visible || !o.render || o.render->indices.empty()) continue;
+        const Mat4 inv = inverseAffine(worldMatrix(scene, o));
+        Ray local;
+        local.origin = transformPoint(inv, ray.origin);
+        local.dir = transformDir(inv, ray.dir);
+        const Mesh& mesh = *o.render;
         for (size_t i = 0; i + 2 < mesh.indices.size(); i += 3) {
-            const Vec3 a = transformPoint(model, toVec(mesh.vertices[mesh.indices[i]]));
-            const Vec3 b = transformPoint(model, toVec(mesh.vertices[mesh.indices[i + 1]]));
-            const Vec3 c = transformPoint(model, toVec(mesh.vertices[mesh.indices[i + 2]]));
+            const Vec3 a = toVec(mesh.vertices[mesh.indices[i]]);
+            const Vec3 b = toVec(mesh.vertices[mesh.indices[i + 1]]);
+            const Vec3 c = toVec(mesh.vertices[mesh.indices[i + 2]]);
             float t = 0.0f;
-            if (rayTriangle(ray, a, b, c, t) && t < bestT) {
+            if (rayTriangle(local, a, b, c, t) && t < bestT) {
                 bestT = t;
                 bestId = o.id;
             }
         }
     }
     return bestId;
+}
+
+void objectBounds(const Object& object, Vec3& mn, Vec3& mx) {
+    if (!object.poly) {
+        mn = Vec3{};
+        mx = Vec3{};
+        return;
+    }
+    meshBounds(*object.poly, mn, mx);
+}
+
+void worldBounds(const Scene& scene, const Object& object, Vec3& mn, Vec3& mx) {
+    Vec3 lo, hi;
+    objectBounds(object, lo, hi);
+    const Mat4 w = worldMatrix(scene, object);
+    bool first = true;
+    for (int i = 0; i < 8; ++i) {
+        const Vec3 corner{(i & 1) ? hi.x : lo.x, (i & 2) ? hi.y : lo.y, (i & 4) ? hi.z : lo.z};
+        const Vec3 p = transformPoint(w, corner);
+        if (first) {
+            mn = mx = p;
+            first = false;
+        } else {
+            mn = vmin(mn, p);
+            mx = vmax(mx, p);
+        }
+    }
 }
 
 }  // namespace core
