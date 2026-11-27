@@ -6,12 +6,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_library(aimodeling SHARED
     native-lib.cpp
-    core/mesh.cpp
-    core/polymesh.cpp
     core/json.cpp
+    core/polymesh.cpp
     core/csg.cpp
+    core/mesh.cpp
     core/scene.cpp
-    core/editor.cpp)
+    core/editor.cpp
+    core/tools.cpp)
 
 target_include_directories(aimodeling PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
