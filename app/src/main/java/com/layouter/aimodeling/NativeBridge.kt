@@ -15,7 +15,11 @@ object NativeBridge {
     external fun onPan(dx: Float, dy: Float)
     external fun onZoom(factor: Float)
 
-    // Edição da cena (seguras em qualquer thread). Rotações em graus.
+    // Ferramentas da IA: definições (JSON array) e execução. Seguras em qualquer thread.
+    external fun toolDefinitions(): String
+    external fun callTool(name: String, argsJson: String): String
+
+    // Interface (botões e toques). Rotações em graus.
     external fun addPrimitive(type: Int, size: Float, x: Float, y: Float, z: Float): Int
     external fun deleteObject(id: Int): Boolean
     external fun setTransform(
