@@ -42,6 +42,7 @@ import com.layouter.aimodeling.ai.AiAgent
 import com.layouter.aimodeling.ai.AiSettings
 import com.layouter.aimodeling.ai.ProviderKind
 import com.layouter.aimodeling.ai.SecretStore
+import com.layouter.aimodeling.ai.ToolSettings
 import com.layouter.aimodeling.ai.buildProvider
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -76,7 +77,7 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
             showSettings = true
             return
         }
-        val current = agent ?: AiAgent(buildProvider(kind, apiKey, model)).also { agent = it }
+        val current = agent ?: AiAgent(buildProvider(kind, apiKey, model), ToolSettings(context).maxRounds).also { agent = it }
         input = ""
         lines.add(ChatLine("user", text))
         busy = true
