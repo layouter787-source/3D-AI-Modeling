@@ -116,6 +116,22 @@ int Editor::addPrimitive(Primitive type, float size, Vec3 position) {
     return id;
 }
 
+int Editor::cloneObject(int id) {
+    if (scene_.objects.size() >= kMaxObjects) return -1;
+    const Object* src = scene_.find(id);
+    if (src == nullptr) return -1;
+
+    Object object = *src;
+    object.id = scene_.nextId++;
+    object.name = src->name + "_clone_" + std::to_string(object.id);
+    // Small offset so the clone is visibly distinct.
+    object.transform.position.x += 0.15f;
+
+    const int newId = object.id;
+    execute(std::make_unique<AddCommand>(std::move(object)));
+    return newId;
+}
+
 bool Editor::deleteObject(int id) {
     if (scene_.find(id) == nullptr) return false;
     execute(std::make_unique<DeleteCommand>(id));
