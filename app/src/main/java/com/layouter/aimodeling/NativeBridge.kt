@@ -25,6 +25,7 @@ object NativeBridge {
 
     // Edição da cena (seguras em qualquer thread). Rotações em graus.
     external fun addPrimitive(type: Int, size: Float, x: Float, y: Float, z: Float): Int
+    external fun addPrimitiveDetailed(type: Int, size: Float, x: Float, y: Float, z: Float, detail: Int): Int
     external fun createLoftMesh(profiles: FloatArray, segments: Int, x: Float, y: Float, z: Float): Int
     external fun duplicateObject(id: Int, dx: Float, dy: Float, dz: Float): Int
     external fun deleteObject(id: Int): Boolean
