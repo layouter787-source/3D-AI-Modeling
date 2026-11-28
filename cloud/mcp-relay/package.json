@@ -1,0 +1,1 @@
+{"name":"manus-3d-mcp-relay","version":"0.1.0","private":true,"scripts":{"deploy":"wrangler deploy"},"devDependencies":{"wrangler":"^4.0.0"}}
