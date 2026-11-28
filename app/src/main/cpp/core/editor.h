@@ -8,7 +8,8 @@
 
 namespace core {
 
-// Operação reversível sobre a cena.
+enum class SelectMode : int { Object = 0, Face = 1, Edge = 2, Vertex = 3 };
+
 class Command {
 public:
     virtual ~Command() = default;
@@ -16,13 +17,10 @@ public:
     virtual void revert(Scene& scene) = 0;
 };
 
-// Fachada de edição: toda alteração da cena passa por aqui e entra no histórico (undo/redo).
-// Usada tanto pela interface quanto pelas chamadas de ferramentas da IA.
 class Editor {
 public:
     const Scene& scene() const { return scene_; }
 
-    // Devolve o id do novo objeto, ou -1 se os valores forem inválidos ou o limite foi atingido.
     int addPrimitive(Primitive type, float size, Vec3 position);
     int cloneObject(int id);
     bool deleteObject(int id);
@@ -33,6 +31,12 @@ public:
     bool scaleBy(int id, Vec3 factor);
     bool setColor(int id, Color color);
 
+    // Mesh operations (whole object or selected faces)
+    bool meshOp(int id, const std::string& op, float amount, int segments,
+                const std::vector<int>& faceIndices);
+    int combineObjects(int idA, int idB);  // merge B into A, delete B, return A
+    int separateFaces(int id, const std::vector<int>& faceIndices);  // new object id or -1
+
     bool undo();
     bool redo();
     bool canUndo() const { return !undo_.empty(); }
@@ -40,10 +44,13 @@ public:
 
     void select(int id);
     int selected() const { return scene_.selectedId; }
-    // Seleciona o objeto atingido pelo raio (ou limpa a seleção) e devolve o id.
     int pick(const Ray& ray);
 
-    // Resumo da cena em JSON, para dar contexto à IA.
+    void setSelectMode(SelectMode mode) { selectMode_ = mode; }
+    SelectMode selectMode() const { return selectMode_; }
+    void setSelectedFaces(const std::vector<int>& faces) { selectedFaces_ = faces; }
+    const std::vector<int>& selectedFaces() const { return selectedFaces_; }
+
     std::string describeScene() const;
 
 private:
@@ -53,6 +60,8 @@ private:
     Scene scene_;
     std::vector<std::unique_ptr<Command>> undo_;
     std::vector<std::unique_ptr<Command>> redo_;
+    SelectMode selectMode_ = SelectMode::Object;
+    std::vector<int> selectedFaces_;
 };
 
 }  // namespace core
