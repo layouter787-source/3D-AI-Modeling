@@ -443,7 +443,7 @@ private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 Button(onClick = { apply("extrude", value = 0.2f, faces = selectedFaceIds.toIntArray().takeIf { it.isNotEmpty() } ?: intArrayOf(faceIndex.toIntOrNull() ?: 0)) }) { Text("Extrude") }
                 Button(onClick = { apply("inset", value = 0.08f, faces = selectedFaceIds.toIntArray().takeIf { it.isNotEmpty() } ?: intArrayOf(faceIndex.toIntOrNull() ?: 0)) }) { Text("Inset") }
-                Button(onClick = { apply("bevel", value = 0.08f, faces = intArrayOf(faceIndex.toIntOrNull() ?: 0)) }) { Text("Bevel") }
+                Button(onClick = { apply("bevel", value = 0.08f, faces = selectedFaceIds.toIntArray().takeIf { it.isNotEmpty() } ?: intArrayOf(faceIndex.toIntOrNull() ?: 0)) }) { Text("Bevel") }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 Button(onClick = { apply("subdivide") }) { Text("Subdividir") }
