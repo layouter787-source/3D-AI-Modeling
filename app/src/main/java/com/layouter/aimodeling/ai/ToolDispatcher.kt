@@ -49,6 +49,22 @@ object ToolDispatcher {
                 val id=NativeBridge.detachFaces(a.getInt("object_id"),faces(a))
                 result(id>=0,"Detached faces into object "+id,"Detach failed")
             }
+            "get_edge_loop_faces" -> {
+                val loop = NativeBridge.getEdgeLoopFaces(
+                    a.getInt("object_id"), a.getInt("vertex_a"), a.getInt("vertex_b"))
+                ToolResult(loop.isNotEmpty(), JSONArray(loop.toList()).toString().ifEmpty { "[]" })
+            }
+            "knife_cut_face" -> {
+                val ok = NativeBridge.meshOperation(
+                    a.getInt("object_id"),
+                    "knife_cut_face",
+                    intArrayOf(a.getInt("face_id"), a.getInt("edge_a"), a.getInt("edge_b")),
+                    1,
+                    a.optDouble("t", 0.5).toFloat(),
+                    -1
+                )
+                report(ok, "Knife cut applied to face", "Knife cut failed: verify face and local edge indices")
+            }
             "get_face_shell" -> ToolResult(true,JSONArray(
                 NativeBridge.getFaceShell(a.getInt("object_id"),a.getInt("start_face")).toList()).toString())
             "paint_vertex_region" -> { val c=a.vec3("center")
@@ -174,7 +190,7 @@ object ToolDispatcher {
         .put("native_mesh_operations",JSONArray(listOf("subdivide","extrude","inset","bevel","delete_faces",
             "clone_faces","create_face","merge_vertices","target_merge","soft_normals","hard_normals","normal_angle",
             "smooth","solidify","mirror","loop_cut","connect","triangulate","flip_normals","weld","crease_by_angle",
-            "boolean_union","boolean_difference","boolean_intersection","draw_cut","split_edge")))
+            "boolean_union","boolean_difference","boolean_intersection","draw_cut","split_edge","knife_cut_face")))
         .put("native_tools",JSONArray(listOf("GLB import/export","component picking","wireframe display",
             "vertex paint","PBR materials","loft meshes","sculpt strokes","OBJ/MTL export")))
         .put("research_only",JSONArray(listOf("voxel remesh","QuadriFlow","UV editing","rigging","animation",
@@ -239,6 +255,11 @@ object ToolDispatcher {
         list.put(tool("get_face_shell","Get connected face indices.",JSONObject().put("object_id",id).put("start_face",id),listOf("object_id","start_face")))
         list.put(tool("paint_vertex_region","Paint vertex colors.",JSONObject().put("object_id",id).put("center",vecSchema("center"))
             .put("radius",num).put("r",num).put("g",num).put("b",num).put("opacity",num),listOf("object_id","center","radius","r","g","b")))
+        list.put(tool("get_edge_loop_faces","Return the face IDs along a quad edge loop seeded by two vertex IDs.",JSONObject()
+            .put("object_id",id).put("vertex_a",id).put("vertex_b",id),listOf("object_id","vertex_a","vertex_b")))
+        list.put(tool("knife_cut_face","Cut one polygon face by connecting points halfway along two of its boundary edges. edge_a and edge_b are local edge indices from get_mesh_topology; the cut is undoable.",JSONObject()
+            .put("object_id",id).put("face_id",id).put("edge_a",id).put("edge_b",id).put("t",num),
+            listOf("object_id","face_id","edge_a","edge_b")))
         list.put(tool("get_mesh_topology","Read topology with pagination.",JSONObject().put("object_id",id).put("offset",id).put("limit",id),listOf("object_id")))
         list.put(tool("get_object_details","Get object metadata.",JSONObject().put("object_id",id),listOf("object_id")))
         list.put(tool("snap_to_ground","Snap an object to the ground.",JSONObject().put("object_id",id),listOf("object_id")))

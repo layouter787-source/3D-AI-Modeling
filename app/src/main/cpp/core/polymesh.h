@@ -69,6 +69,8 @@ PolyMesh connectVertices(const PolyMesh& m, uint32_t a, uint32_t b);
 // Splits an existing topological edge at a normalized position (0..1), inserting
 // the new vertex into every incident polygon and splitting matching creases.
 PolyMesh splitEdge(const PolyMesh& m, uint32_t a, uint32_t b, float t = 0.5f);
+// Cuts one polygon between two boundary-edge points. edge indices are local to faceId.
+PolyMesh knifeCutFace(const PolyMesh& m, int faceId, int edgeA, int edgeB, float t = 0.5f);
 PolyMesh solidify(const PolyMesh& m, float thickness);
 PolyMesh smoothMesh(const PolyMesh& m, int iterations, float factor);
 PolyMesh creaseByAngle(const PolyMesh& m, float angleDegrees);

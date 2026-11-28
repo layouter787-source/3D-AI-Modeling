@@ -103,6 +103,18 @@ int main() {
     assertFinite(bevelFour);
     assert(bevelFaces(box, {}, 0.12f, 0.08f, 3).empty());
     assert(bevelFaces(box, {999}, 0.12f, 0.08f, 3).empty());
+    PolyMesh knife = knifeCutFace(box, 0, 0, 2, 0.5f);
+    assert(knife.verts.size() == box.verts.size() + 2);
+    assert(knife.faces.size() == box.faces.size() + 1);
+    for (const auto& edge : edgeUse(knife)) assert(edge.second == 2);
+    assertFinite(knife);
+    assert(knifeCutFace(box, 999, 0, 2, 0.5f).empty());
+    assert(knifeCutFace(box, 0, 0, 0, 0.5f).empty());
+    assert(knifeCutFace(box, 0, 0, 2, std::numeric_limits<float>::quiet_NaN()).empty());
+    PolyMesh adjacentEdgeKnife = knifeCutFace(box, 0, 0, 1, 0.5f);
+    assert(adjacentEdgeKnife.verts.size() == box.verts.size() + 2);
+    assert(adjacentEdgeKnife.faces.size() == box.faces.size() + 1);
+    for (const auto& edge : edgeUse(adjacentEdgeKnife)) assert(edge.second == 2);
 
     PolyMesh plane = makePlanePoly(2.0f, 2.0f, 1, 1);
     PolyMesh planeSub = catmullClark(plane, 1);

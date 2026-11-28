@@ -501,6 +501,9 @@ private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (
     var edgeB by remember { mutableStateOf("1") }
     var loopCutSegments by remember { mutableIntStateOf(1) }
     var bevelSegments by remember { mutableIntStateOf(1) }
+    var knifeEdgeA by remember { mutableStateOf("0") }
+    var knifeEdgeB by remember { mutableStateOf("2") }
+    var knifePosition by remember { mutableFloatStateOf(0.5f) }
     var booleanTarget by remember { mutableStateOf("") }
     var vertexIds by remember { mutableStateOf("0,1,2") }
     var topologySummary by remember { mutableStateOf("") }
@@ -626,6 +629,39 @@ private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (
                 OutlinedTextField(edgeA, { edgeA = it.filter(Char::isDigit) }, label = { Text("Vértice A") }, modifier = Modifier.weight(1f), singleLine = true)
                 OutlinedTextField(edgeB, { edgeB = it.filter(Char::isDigit) }, label = { Text("Vértice B") }, modifier = Modifier.weight(1f), singleLine = true)
             }
+            Text("Knife Cut · corta uma face entre duas arestas locais", style = MaterialTheme.typography.labelMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                OutlinedTextField(
+                    knifeEdgeA,
+                    { knifeEdgeA = it.filter(Char::isDigit) },
+                    label = { Text("Aresta A") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    knifeEdgeB,
+                    { knifeEdgeB = it.filter(Char::isDigit) },
+                    label = { Text("Aresta B") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true
+                )
+            }
+            Text("Posição nas duas arestas: ${(knifePosition * 100).toInt()}%", style = MaterialTheme.typography.labelSmall)
+            Slider(value = knifePosition, onValueChange = { knifePosition = it.coerceIn(0.05f, 0.95f) }, valueRange = 0.05f..0.95f)
+            Button(
+                onClick = {
+                    apply(
+                        "knife_cut_face",
+                        value = knifePosition,
+                        faces = intArrayOf(
+                            faceIndex.toIntOrNull() ?: 0,
+                            knifeEdgeA.toIntOrNull() ?: 0,
+                            knifeEdgeB.toIntOrNull() ?: 2
+                        )
+                    )
+                },
+                enabled = selected >= 0
+            ) { Text("Knife Cut Face") }
             Text("Segmentos do Loop Cut: $loopCutSegments", style = MaterialTheme.typography.labelMedium)
             Slider(value = loopCutSegments.toFloat(), onValueChange = { loopCutSegments = it.toInt().coerceIn(1, 8) }, valueRange = 1f..8f, steps = 6)
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -636,7 +672,7 @@ private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (
                 }, enabled = selected >= 0) { Text("Select Edge Loop") }
                 Button(onClick = { apply("loop_cut", parameter = loopCutSegments, faces = intArrayOf(edgeA.toIntOrNull() ?: 0, edgeB.toIntOrNull() ?: 1)) }) { Text("Loop Cut") }
                 Button(onClick = { apply("connect", parameter = 1, faces = intArrayOf(edgeA.toIntOrNull() ?: 0, edgeB.toIntOrNull() ?: 1)) }) { Text("Connect") }
-                Button(onClick = { apply("draw_cut", value = 0.5f, faces = intArrayOf(edgeA.toIntOrNull() ?: 0, edgeB.toIntOrNull() ?: 1)) }) { Text("Draw Cut / Split") }
+                Button(onClick = { apply("split_edge", value = 0.5f, faces = intArrayOf(edgeA.toIntOrNull() ?: 0, edgeB.toIntOrNull() ?: 1)) }) { Text("Split Edge") }
             }
             Text("Boolean · ID do segundo objeto", style = MaterialTheme.typography.labelMedium)
             OutlinedTextField(booleanTarget, { booleanTarget = it.filter(Char::isDigit) }, label = { Text("ID do objeto operand") }, singleLine = true)

@@ -738,6 +738,10 @@ bool Editor::meshOperation(int id, const std::string& operation, const std::vect
         result = solidify(source, std::clamp(value, -20.0f, 20.0f));
     } else if (operation == "mirror") {
         result = mirrorMesh(source, std::clamp(parameter, 0, 2), 1e-4f);
+    } else if (operation == "knife_cut_face") {
+        if (faces.size() != 3 || faces[0] < 0 || faces[1] < 0 || faces[2] < 0 ||
+            !std::isfinite(value) || static_cast<size_t>(faces[0]) >= source.faces.size()) return false;
+        result = knifeCutFace(source, faces[0], faces[1], faces[2], std::clamp(value, 0.001f, 0.999f));
     } else if (operation == "draw_cut" || operation == "split_edge") {
         if (faces.size() != 2 || faces[0] < 0 || faces[1] < 0 ||
             static_cast<size_t>(faces[0]) >= source.verts.size() ||

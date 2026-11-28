@@ -930,6 +930,65 @@ PolyMesh splitEdge(const PolyMesh& m, uint32_t a, uint32_t b, float t) {
     return out;
 }
 
+PolyMesh knifeCutFace(const PolyMesh& m, int faceId, int edgeA, int edgeB, float t) {
+    if (m.empty() || faceId < 0 || static_cast<size_t>(faceId) >= m.faces.size() ||
+        !std::isfinite(t) || m.verts.size() > 249998) return {};
+    const auto& sourceFace = m.faces[static_cast<size_t>(faceId)];
+    if (sourceFace.size() < 3 || sourceFace.size() > 4096 ||
+        edgeA < 0 || edgeB < 0 ||
+        static_cast<size_t>(edgeA) >= sourceFace.size() ||
+        static_cast<size_t>(edgeB) >= sourceFace.size() || edgeA == edgeB) return {};
+    for (uint32_t vertex : sourceFace) if (vertex >= m.verts.size()) return {};
+
+    // Resolve the original edge endpoints before inserting either cut point.
+    const uint32_t a0 = sourceFace[static_cast<size_t>(edgeA)];
+    const uint32_t a1 = sourceFace[(static_cast<size_t>(edgeA) + 1) % sourceFace.size()];
+    const uint32_t b0 = sourceFace[static_cast<size_t>(edgeB)];
+    const uint32_t b1 = sourceFace[(static_cast<size_t>(edgeB) + 1) % sourceFace.size()];
+    if (edgeKey(a0, a1) == edgeKey(b0, b1)) return {};
+    t = std::clamp(t, 0.001f, 0.999f);
+
+    PolyMesh afterA = splitEdge(m, a0, a1, t);
+    if (afterA.empty() || afterA.verts.size() != m.verts.size() + 1) return {};
+    const uint32_t cutA = static_cast<uint32_t>(m.verts.size());
+
+    PolyMesh afterB = splitEdge(afterA, b0, b1, t);
+    if (afterB.empty() || afterB.verts.size() != afterA.verts.size() + 1) return {};
+    const uint32_t cutB = static_cast<uint32_t>(afterA.verts.size());
+
+    // Face indices remain stable while splitEdge inserts vertices into incident face loops.
+    const auto& polygon = afterB.faces[static_cast<size_t>(faceId)];
+    auto findVertex = [&](uint32_t vertex) -> size_t {
+        const auto it = std::find(polygon.begin(), polygon.end(), vertex);
+        return it == polygon.end() ? polygon.size() : static_cast<size_t>(std::distance(polygon.begin(), it));
+    };
+    const size_t ia = findVertex(cutA);
+    const size_t ib = findVertex(cutB);
+    if (ia >= polygon.size() || ib >= polygon.size() || ia == ib) return {};
+
+    std::vector<uint32_t> first;
+    std::vector<uint32_t> second;
+    first.reserve(polygon.size());
+    second.reserve(polygon.size());
+    for (size_t i = ia;; i = (i + 1) % polygon.size()) {
+        first.push_back(polygon[i]);
+        if (i == ib) break;
+        if (first.size() > polygon.size()) return {};
+    }
+    for (size_t i = ib;; i = (i + 1) % polygon.size()) {
+        second.push_back(polygon[i]);
+        if (i == ia) break;
+        if (second.size() > polygon.size()) return {};
+    }
+    if (first.size() < 3 || second.size() < 3) return {};
+
+    PolyMesh out = std::move(afterB);
+    out.faces[static_cast<size_t>(faceId)] = std::move(first);
+    out.faces.push_back(std::move(second));
+    if (out.faces.size() > 250000) return {};
+    return out;
+}
+
 std::vector<int> edgeLoopFaces(const PolyMesh& m, uint32_t a, uint32_t b) {
     if (a == b || a >= m.verts.size() || b >= m.verts.size()) return {};
     std::unordered_map<uint64_t, std::vector<int>> edgeFaces;
