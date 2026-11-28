@@ -1043,6 +1043,12 @@ bool Editor::paintVertexRegion(int id, Vec3 center, float radius, Color paint, f
     return true;
 }
 
+std::vector<int> Editor::edgeLoopFaces(int id, uint32_t vertexA, uint32_t vertexB) const {
+    const Object* object = scene_.find(id);
+    if (object == nullptr || object->topology.empty()) return {};
+    return core::edgeLoopFaces(object->topology, vertexA, vertexB);
+}
+
 std::string Editor::describeMesh(int id, int offset, int limit) const {
     const Object* object = scene_.find(id);
     if (object == nullptr) return "{\"error\":\"Object not found\"}";
