@@ -135,7 +135,7 @@ private:
 
 }  // namespace
 
-int Editor::addPrimitive(Primitive type, float size, Vec3 position) {
+int Editor::addPrimitive(Primitive type, float size, Vec3 position, int detail) {
     if (!std::isfinite(size) || !finite3(position)) return -1;
     size = std::clamp(size, 0.01f, 100.0f);
 
@@ -143,7 +143,8 @@ int Editor::addPrimitive(Primitive type, float size, Vec3 position) {
     object.id = scene_.nextId++;
     object.type = type;
     object.size = size;
-    object.topology = makePrimitivePolyMesh(type, size);
+    object.detail = std::clamp(detail, 1, 64);
+    object.topology = makePrimitivePolyMesh(type, size, object.detail);
     object.mesh = buildRenderMesh(object.topology, primitiveSmoothAngle(type));
     object.transform.position = position;
     object.name = std::string(primitiveName(type)) + "_" + std::to_string(object.id);
@@ -561,8 +562,8 @@ std::string Editor::describeScene() const {
         if (!first) out += ",";
         first = false;
         std::snprintf(buf, sizeof(buf),
-                      R"JSON({"id":%d,"type":"%s","size":%.3f,"vertices":%zu,"triangles":%zu,"position":[%.3f,%.3f,%.3f],"rotation":[%.1f,%.1f,%.1f],"scale":[%.3f,%.3f,%.3f],"color":[%.2f,%.2f,%.2f],"material":{"metallic":%.2f,"roughness":%.2f,"clearcoat":%.2f,"emission":%.2f}})JSON",
-                      o.id, primitiveName(o.type), o.size, o.mesh.vertices.size(),
+                      R"JSON({"id":%d,"type":"%s","size":%.3f,"detail":%d,"vertices":%zu,"triangles":%zu,"position":[%.3f,%.3f,%.3f],"rotation":[%.1f,%.1f,%.1f],"scale":[%.3f,%.3f,%.3f],"color":[%.2f,%.2f,%.2f],"material":{"metallic":%.2f,"roughness":%.2f,"clearcoat":%.2f,"emission":%.2f}})JSON",
+                      o.id, primitiveName(o.type), o.size, o.detail, o.mesh.vertices.size(),
                       o.mesh.indices.size() / 3, o.transform.position.x,
                       o.transform.position.y, o.transform.position.z, o.transform.rotationDeg.x,
                       o.transform.rotationDeg.y, o.transform.rotationDeg.z, o.transform.scale.x,
