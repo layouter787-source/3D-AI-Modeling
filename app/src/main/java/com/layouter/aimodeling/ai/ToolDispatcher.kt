@@ -221,8 +221,8 @@ object ToolDispatcher {
         val preset=a.getString("preset"); val origin=a.optJSONArray("position")?.let { a.vec3("position") } ?: floatArrayOf(0f,0f,0f)
         val scale=a.optDouble("scale",1.0).toFloat(); require(scale.isFinite() && scale in 0.1f..20f)
         val pieces=JSONArray()
-        fun add(type:String,size:Float,x:Float,y:Float,z:Float,sx:Float=1f,sy:Float=1f,sz:Float=1f,color:JSONArray?=null) {
-            val item=JSONObject().put("type",type).put("size",size*scale).put("position",JSONArray(listOf(origin[0]+x*scale,origin[1]+y*scale,origin[2]+z*scale))).put("scale",JSONArray(listOf(sx,sy,sz)))
+        fun add(type:String,size:Float,x:Float,y:Float,z:Float,sx:Float=1f,sy:Float=1f,sz:Float=1f,color:JSONArray?=null,rx:Float=0f,ry:Float=0f,rz:Float=0f) {
+            val item=JSONObject().put("type",type).put("size",size*scale).put("position",JSONArray(listOf(origin[0]+x*scale,origin[1]+y*scale,origin[2]+z*scale))).put("scale",JSONArray(listOf(sx,sy,sz))).put("rotation_degrees",JSONArray(listOf(rx,ry,rz)))
             color?.let { item.put("color",it) }; pieces.put(item)
         }
         val wood=JSONArray(listOf(0.48,0.25,0.12)); val green=JSONArray(listOf(0.16,0.48,0.2)); val gray=JSONArray(listOf(0.5,0.52,0.55))
@@ -236,6 +236,48 @@ object ToolDispatcher {
             "lamp" -> { add("cylinder",0.18f,0f,0.12f,0f,2f,1f,2f,gray); add("cylinder",0.12f,0f,0.8f,0f,0.35f,5f,0.35f,gray); add("cone",0.8f,0f,1.5f,0f,1f,0.6f,1f,JSONArray(listOf(0.9,0.75,0.35))) }
             "crystal" -> { add("octahedron",0.9f,0f,0.55f,0f,0.7f,1.5f,0.7f,JSONArray(listOf(0.25,0.75,0.95))); add("octahedron",0.45f,0.55f,0.45f,0.15f,0.45f,1.1f,0.45f,JSONArray(listOf(0.65,0.35,0.95))); add("octahedron",0.4f,-0.45f,0.35f,-0.1f,0.4f,0.9f,0.4f,JSONArray(listOf(0.2,0.9,0.7))) }
             "sci_fi_crate" -> { add("cube",1.4f,0f,0.7f,0f,1.2f,1f,1.2f,gray); add("cube",1.45f,0f,0.7f,0.55f,1.1f,0.85f,0.12f,JSONArray(listOf(0.15,0.55,0.7))); add("hex_prism",0.25f,0f,0.72f,-0.62f,1f,1f,0.5f,JSONArray(listOf(0.85,0.65,0.2))); for(x in listOf(-0.52f,0.52f)) for(y in listOf(0.25f,1.15f)) add("cube",0.12f,x,y,-0.62f,1f,1f,1f,JSONArray(listOf(0.85,0.65,0.2))) }
+            "humanoid_blockout" -> {
+                val skin=JSONArray(listOf(0.66,0.48,0.36))
+                val suit=JSONArray(listOf(0.34,0.39,0.44))
+                add("capsule",1.15f,0f,1.52f,0f,1.12f,1.30f,0.78f,suit)
+                add("capsule",0.72f,0f,0.78f,0f,1.18f,0.78f,0.82f,suit)
+                add("cylinder",0.22f,0f,2.23f,0f,0.72f,1.2f,0.72f,skin)
+                add("sphere",0.66f,0f,2.64f,0f,0.82f,1.04f,0.78f,skin)
+                for (side in listOf(-1f,1f)) {
+                    add("sphere",0.42f,side*0.62f,1.91f,0f,1f,0.92f,1f,suit)
+                    add("capsule",0.84f,side*0.93f,1.48f,0f,0.56f,0.98f,0.56f,suit,rz=side*28f)
+                    add("capsule",0.78f,side*1.18f,0.88f,0f,0.48f,1.0f,0.48f,skin,rz=side*12f)
+                    add("sphere",0.22f,side*1.22f,0.38f,0f,1f,1.2f,0.9f,skin)
+                    add("capsule",0.92f,side*0.30f,0.24f,0f,0.62f,1.22f,0.68f,suit)
+                    add("capsule",0.82f,side*0.30f,-0.38f,0f,0.56f,1.04f,0.58f,suit)
+                    add("cube",0.38f,side*0.30f,0.08f,0.20f,1.15f,0.52f,1.65f,suit)
+                }
+            }
+            "ergonomic_mouse" -> {
+                val profiles = JSONArray()
+                val profileData = listOf(
+                    listOf(-0.76,0.12,0.18,0.10), listOf(-0.62,0.25,0.26,0.20),
+                    listOf(-0.38,0.34,0.31,0.28), listOf(-0.05,0.39,0.34,0.31),
+                    listOf(0.30,0.37,0.31,0.28), listOf(0.58,0.29,0.24,0.20),
+                    listOf(0.73,0.15,0.16,0.12)
+                )
+                profileData.forEach { p -> profiles.put(JSONObject().put("x",p[0]).put("half_width",p[1]).put("center_y",p[2]).put("half_height",p[3])) }
+                val body = createLoftMesh(JSONObject().put("profiles",profiles).put("segments",48).put("position",JSONArray(listOf(origin[0],origin[1],origin[2]))).put("color",JSONArray(listOf(0.16,0.18,0.21))))
+                if (!body.ok) return body
+                val parts = JSONArray()
+                fun addPart(type:String,size:Float,x:Float,y:Float,z:Float,sx:Float,sy:Float,sz:Float,rz:Float=0f) {
+                    parts.put(JSONObject().put("type",type).put("size",size*scale)
+                        .put("position",JSONArray(listOf(origin[0]+x*scale,origin[1]+y*scale,origin[2]+z*scale)))
+                        .put("scale",JSONArray(listOf(sx,sy,sz))).put("rotation_degrees",JSONArray(listOf(0,0,rz))))
+                }
+                addPart("cylinder",0.17f,0.12f,0.57f,0f,0.62f,0.55f,0.75f,90f)
+                addPart("cube",0.48f,-0.26f,0.57f,0.18f,1.0f,0.12f,0.68f)
+                addPart("cube",0.48f,-0.26f,0.57f,-0.18f,1.0f,0.12f,0.68f)
+                addPart("cube",0.20f,0.25f,0.39f,-0.31f,0.8f,0.55f,0.28f)
+                val details = createBatch(JSONObject().put("items",parts))
+                val bodyId = Regex("id (\\d+)").find(body.message)?.groupValues?.get(1) ?: "?"
+                return ToolResult(details.ok,"Created ergonomic mouse shell " + bodyId + "; " + details.message)
+            }
             else -> return ToolResult(false,"Preset unsupported: tree, table, house, robot, barrel, stairs, lamp, crystal, sci_fi_crate, humanoid_blockout, ergonomic_mouse")
         }
         return createBatch(JSONObject().put("items",pieces))
