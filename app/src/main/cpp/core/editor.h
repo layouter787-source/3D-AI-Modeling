@@ -8,8 +8,6 @@
 
 namespace core {
 
-enum class SelectMode : int { Object = 0, Face = 1, Edge = 2, Vertex = 3 };
-
 class Command {
 public:
     virtual ~Command() = default;
@@ -31,11 +29,12 @@ public:
     bool scaleBy(int id, Vec3 factor);
     bool setColor(int id, Color color);
 
-    // Mesh operations (whole object or selected faces)
-    bool meshOp(int id, const std::string& op, float amount, int segments,
-                const std::vector<int>& faceIndices);
-    int combineObjects(int idA, int idB);  // merge B into A, delete B, return A
-    int separateFaces(int id, const std::vector<int>& faceIndices);  // new object id or -1
+    // Mesh operations (soft/hard normals, divide, smooth, mirror, weld, extrude, ...)
+    // Returns empty string on failure, or success message.
+    std::string meshOperation(int id, const std::string& op, float amount, int iterations);
+
+    // Combine object b into a (a keeps id, b is deleted).
+    bool combineObjects(int idA, int idB);
 
     bool undo();
     bool redo();
@@ -46,11 +45,6 @@ public:
     int selected() const { return scene_.selectedId; }
     int pick(const Ray& ray);
 
-    void setSelectMode(SelectMode mode) { selectMode_ = mode; }
-    SelectMode selectMode() const { return selectMode_; }
-    void setSelectedFaces(const std::vector<int>& faces) { selectedFaces_ = faces; }
-    const std::vector<int>& selectedFaces() const { return selectedFaces_; }
-
     std::string describeScene() const;
 
 private:
@@ -60,8 +54,6 @@ private:
     Scene scene_;
     std::vector<std::unique_ptr<Command>> undo_;
     std::vector<std::unique_ptr<Command>> redo_;
-    SelectMode selectMode_ = SelectMode::Object;
-    std::vector<int> selectedFaces_;
 };
 
 }  // namespace core
