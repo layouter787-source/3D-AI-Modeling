@@ -35,6 +35,8 @@ public:
     bool rotateBy(int id, Vec3 degrees);
     bool scaleBy(int id, Vec3 factor);
     bool sculptMesh(int id, Vec3 center, float radius, Vec3 offset);
+    // Brush IDs: 0 draw, 1 inflate, 2 grab, 3 smooth, 4 flatten, 5 pinch, 6 crease.
+    bool sculptMeshBrush(int id, Vec3 center, float radius, Vec3 stroke, int brush, float strength);
     // Blender-inspired polygon operations applied to the existing editable triangle topology.
     bool meshOperation(int id, const std::string& operation, const std::vector<int>& faces,
                        int parameter, float value, int otherObjectId = -1);
