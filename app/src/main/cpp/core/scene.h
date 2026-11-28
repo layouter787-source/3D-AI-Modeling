@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <cstdint>
 #include <vector>
 
 #include "core/math.h"
@@ -68,6 +69,7 @@ struct Object {
     Primitive type = Primitive::Cube;
     float size = 1.0f;
     int detail = 8;
+    uint64_t meshRevision = 1;
     Mesh mesh;                 // malha triangulada de renderização
     PolyMesh topology;          // malha poligonal editável (quads/ngons)
     Transform transform;
