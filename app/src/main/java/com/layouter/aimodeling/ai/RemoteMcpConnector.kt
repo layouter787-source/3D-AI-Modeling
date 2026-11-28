@@ -108,9 +108,8 @@ object RemoteMcpConnector {
             if (part.optString("type") == "text") parts.add(part.optString("text"))
             else if (part.has("data")) parts.add("[MCP content: " + part.optString("mimeType") + "]")
         }
-        if (response.optBoolean("isError")) "MCP tool returned error: " + parts.joinToString("\n")
-        else if (parts.isNotEmpty()) parts.joinToString("\n")
-        else response.toString()
+        if (response.optBoolean("isError")) ToolResult(false, "MCP tool returned error: " + parts.joinToString("\n"))
+        else ToolResult(true, if (parts.isNotEmpty()) parts.joinToString("\n") else response.toString())
     }
 
     private fun parseServers(raw: String): List<Server> {
