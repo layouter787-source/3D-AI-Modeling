@@ -40,7 +40,6 @@ Vec3Key quantize(Vec3 p, float scale) {
 
 void recomputeSmoothNormals(Mesh& mesh) {
     if (mesh.vertices.empty() || mesh.indices.size() < 3) return;
-
     std::map<Vec3Key, Vec3> accum;
     for (size_t i = 0; i + 2 < mesh.indices.size(); i += 3) {
         Vec3 a = posOf(mesh.vertices[mesh.indices[i]]);
@@ -49,8 +48,7 @@ void recomputeSmoothNormals(Mesh& mesh) {
         Vec3 n = normalize(cross(b - a, c - a));
         for (int k = 0; k < 3; ++k) {
             Vec3 p = posOf(mesh.vertices[mesh.indices[i + static_cast<size_t>(k)]]);
-            Vec3Key key = quantize(p, 10000.0f);
-            accum[key] = accum[key] + n;
+            accum[quantize(p, 10000.0f)] = accum[quantize(p, 10000.0f)] + n;
         }
     }
     for (Vertex& v : mesh.vertices) {
@@ -69,24 +67,16 @@ void recomputeHardNormals(Mesh& mesh) {
         Vertex vb = mesh.vertices[mesh.indices[i + 1]];
         Vertex vc = mesh.vertices[mesh.indices[i + 2]];
         Vec3 n = normalize(cross(posOf(vb) - posOf(va), posOf(vc) - posOf(va)));
-        setNormal(va, n);
-        setNormal(vb, n);
-        setNormal(vc, n);
+        setNormal(va, n); setNormal(vb, n); setNormal(vc, n);
         size_t base = out.vertices.size();
-        out.vertices.push_back(va);
-        out.vertices.push_back(vb);
-        out.vertices.push_back(vc);
-        out.indices.push_back(u16(base));
-        out.indices.push_back(u16(base + 1));
-        out.indices.push_back(u16(base + 2));
+        out.vertices.push_back(va); out.vertices.push_back(vb); out.vertices.push_back(vc);
+        out.indices.push_back(u16(base)); out.indices.push_back(u16(base + 1)); out.indices.push_back(u16(base + 2));
     }
     mesh = std::move(out);
 }
 
 bool subdivideMesh(Mesh& mesh) {
-    if (mesh.indices.size() / 3 > 20000) return false;
-    if (mesh.vertices.size() > 40000) return false;
-
+    if (mesh.indices.size() / 3 > 20000 || mesh.vertices.size() > 40000) return false;
     std::map<std::pair<uint16_t, uint16_t>, uint16_t> midCache;
     auto midpoint = [&](uint16_t ia, uint16_t ib) -> uint16_t {
         if (ia > ib) std::swap(ia, ib);
@@ -96,30 +86,21 @@ bool subdivideMesh(Mesh& mesh) {
         const Vertex& a = mesh.vertices[ia];
         const Vertex& b = mesh.vertices[ib];
         Vertex m;
-        m.px = 0.5f * (a.px + b.px);
-        m.py = 0.5f * (a.py + b.py);
-        m.pz = 0.5f * (a.pz + b.pz);
-        m.nx = 0.5f * (a.nx + b.nx);
-        m.ny = 0.5f * (a.ny + b.ny);
-        m.nz = 0.5f * (a.nz + b.nz);
+        m.px = 0.5f * (a.px + b.px); m.py = 0.5f * (a.py + b.py); m.pz = 0.5f * (a.pz + b.pz);
+        m.nx = 0.5f * (a.nx + b.nx); m.ny = 0.5f * (a.ny + b.ny); m.nz = 0.5f * (a.nz + b.nz);
         setNormal(m, normalize({m.nx, m.ny, m.nz}));
         uint16_t idx = u16(mesh.vertices.size());
         mesh.vertices.push_back(m);
         midCache[key] = idx;
         return idx;
     };
-
     std::vector<uint16_t> newIndices;
     newIndices.reserve(mesh.indices.size() * 4);
     for (size_t i = 0; i + 2 < mesh.indices.size(); i += 3) {
-        uint16_t a = mesh.indices[i];
-        uint16_t b = mesh.indices[i + 1];
-        uint16_t c = mesh.indices[i + 2];
-        uint16_t ab = midpoint(a, b);
-        uint16_t bc = midpoint(b, c);
-        uint16_t ca = midpoint(c, a);
-        newIndices.push_back(a);  newIndices.push_back(ab); newIndices.push_back(ca);
-        newIndices.push_back(ab); newIndices.push_back(b);  newIndices.push_back(bc);
+        uint16_t a = mesh.indices[i], b = mesh.indices[i + 1], c = mesh.indices[i + 2];
+        uint16_t ab = midpoint(a, b), bc = midpoint(b, c), ca = midpoint(c, a);
+        newIndices.push_back(a); newIndices.push_back(ab); newIndices.push_back(ca);
+        newIndices.push_back(ab); newIndices.push_back(b); newIndices.push_back(bc);
         newIndices.push_back(ca); newIndices.push_back(bc); newIndices.push_back(c);
         newIndices.push_back(ab); newIndices.push_back(bc); newIndices.push_back(ca);
     }
@@ -128,34 +109,23 @@ bool subdivideMesh(Mesh& mesh) {
     return true;
 }
 
-bool triangulateMesh(Mesh& mesh) {
-    // Já somos só triângulos; weld suave opcional.
-    (void)mesh;
-    return true;
-}
+bool triangulateMesh(Mesh& mesh) { (void)mesh; return true; }
 
 void smoothMesh(Mesh& mesh, int iterations, float factor) {
     iterations = std::clamp(iterations, 1, 20);
     factor = std::clamp(factor, 0.0f, 1.0f);
     if (mesh.vertices.empty() || mesh.indices.size() < 3) return;
-
     std::vector<std::vector<uint16_t>> adj(mesh.vertices.size());
     for (size_t i = 0; i + 2 < mesh.indices.size(); i += 3) {
-        uint16_t a = mesh.indices[i];
-        uint16_t b = mesh.indices[i + 1];
-        uint16_t c = mesh.indices[i + 2];
+        uint16_t a = mesh.indices[i], b = mesh.indices[i + 1], c = mesh.indices[i + 2];
         adj[a].push_back(b); adj[a].push_back(c);
         adj[b].push_back(a); adj[b].push_back(c);
         adj[c].push_back(a); adj[c].push_back(b);
     }
-
     for (int it = 0; it < iterations; ++it) {
         std::vector<Vec3> next(mesh.vertices.size());
         for (size_t i = 0; i < mesh.vertices.size(); ++i) {
-            if (adj[i].empty()) {
-                next[i] = posOf(mesh.vertices[i]);
-                continue;
-            }
+            if (adj[i].empty()) { next[i] = posOf(mesh.vertices[i]); continue; }
             Vec3 sum{};
             for (uint16_t n : adj[i]) sum = sum + posOf(mesh.vertices[n]);
             Vec3 avg = sum * (1.0f / static_cast<float>(adj[i].size()));
@@ -163,9 +133,7 @@ void smoothMesh(Mesh& mesh, int iterations, float factor) {
             next[i] = cur + (avg - cur) * factor;
         }
         for (size_t i = 0; i < mesh.vertices.size(); ++i) {
-            mesh.vertices[i].px = next[i].x;
-            mesh.vertices[i].py = next[i].y;
-            mesh.vertices[i].pz = next[i].z;
+            mesh.vertices[i].px = next[i].x; mesh.vertices[i].py = next[i].y; mesh.vertices[i].pz = next[i].z;
         }
     }
     recomputeSmoothNormals(mesh);
@@ -182,9 +150,8 @@ int weldVertices(Mesh& mesh, float epsilon) {
     for (size_t i = 0; i < mesh.vertices.size(); ++i) {
         Vec3Key key = quantize(posOf(mesh.vertices[i]), scale);
         auto it = map.find(key);
-        if (it != map.end()) {
-            remap[i] = it->second;
-        } else {
+        if (it != map.end()) remap[i] = it->second;
+        else {
             uint16_t ni = u16(out.vertices.size());
             out.vertices.push_back(mesh.vertices[i]);
             map[key] = ni;
@@ -192,13 +159,9 @@ int weldVertices(Mesh& mesh, float epsilon) {
         }
     }
     for (size_t i = 0; i + 2 < mesh.indices.size(); i += 3) {
-        uint16_t a = remap[mesh.indices[i]];
-        uint16_t b = remap[mesh.indices[i + 1]];
-        uint16_t c = remap[mesh.indices[i + 2]];
+        uint16_t a = remap[mesh.indices[i]], b = remap[mesh.indices[i + 1]], c = remap[mesh.indices[i + 2]];
         if (a == b || b == c || a == c) continue;
-        out.indices.push_back(a);
-        out.indices.push_back(b);
-        out.indices.push_back(c);
+        out.indices.push_back(a); out.indices.push_back(b); out.indices.push_back(c);
     }
     mesh = std::move(out);
     recomputeSmoothNormals(mesh);
@@ -214,9 +177,7 @@ void mirrorMesh(Mesh& mesh, int axis, bool weldSeam) {
         else if (axis == 1) { v.py = -v.py; v.ny = -v.ny; }
         else { v.pz = -v.pz; v.nz = -v.nz; }
     }
-    for (size_t i = 0; i + 2 < mirrored.indices.size(); i += 3) {
-        std::swap(mirrored.indices[i + 1], mirrored.indices[i + 2]);
-    }
+    for (size_t i = 0; i + 2 < mirrored.indices.size(); i += 3) std::swap(mirrored.indices[i + 1], mirrored.indices[i + 2]);
     appendMesh(mesh, mirrored);
     if (weldSeam) weldVertices(mesh, 1e-4f);
     else recomputeSmoothNormals(mesh);
@@ -225,15 +186,12 @@ void mirrorMesh(Mesh& mesh, int axis, bool weldSeam) {
 bool extrudeFaces(Mesh& mesh, const std::vector<int>& faceIndices, float distance) {
     if (mesh.indices.size() < 3) return false;
     distance = std::clamp(distance, -5.0f, 5.0f);
-
     const int numTris = static_cast<int>(mesh.indices.size() / 3);
     std::vector<int> faces = faceIndices;
     if (faces.empty()) {
         faces.resize(static_cast<size_t>(numTris));
         for (int i = 0; i < numTris; ++i) faces[static_cast<size_t>(i)] = i;
     }
-
-    // Offset all verts of selected faces along their normals, keep original as inner.
     Mesh outer = mesh;
     for (int fi : faces) {
         if (fi < 0 || fi >= numTris) continue;
@@ -242,14 +200,10 @@ bool extrudeFaces(Mesh& mesh, const std::vector<int>& faceIndices, float distanc
             uint16_t idx = mesh.indices[base + static_cast<size_t>(k)];
             Vertex& v = outer.vertices[idx];
             Vec3 n = normalize({v.nx, v.ny, v.nz});
-            v.px += n.x * distance;
-            v.py += n.y * distance;
-            v.pz += n.z * distance;
+            v.px += n.x * distance; v.py += n.y * distance; v.pz += n.z * distance;
         }
     }
-    // Keep only selected faces on outer shell for a lighter result
-    Mesh shell = extractFaces(outer, faces);
-    appendMesh(mesh, shell);
+    appendMesh(mesh, extractFaces(outer, faces));
     recomputeSmoothNormals(mesh);
     return true;
 }
@@ -257,16 +211,11 @@ bool extrudeFaces(Mesh& mesh, const std::vector<int>& faceIndices, float distanc
 bool bevelMesh(Mesh& mesh, float amount, int segments) {
     amount = std::clamp(amount, 0.001f, 1.0f);
     segments = std::clamp(segments, 1, 3);
-    // Approximation: slight inset along normals + subdivide
     for (Vertex& v : mesh.vertices) {
         Vec3 n = normalize({v.nx, v.ny, v.nz});
-        v.px -= n.x * amount * 0.25f;
-        v.py -= n.y * amount * 0.25f;
-        v.pz -= n.z * amount * 0.25f;
+        v.px -= n.x * amount * 0.25f; v.py -= n.y * amount * 0.25f; v.pz -= n.z * amount * 0.25f;
     }
-    for (int s = 0; s < segments; ++s) {
-        if (!subdivideMesh(mesh)) break;
-    }
+    for (int s = 0; s < segments; ++s) if (!subdivideMesh(mesh)) break;
     smoothMesh(mesh, 2, 0.4f);
     return true;
 }
@@ -275,10 +224,7 @@ void appendMesh(Mesh& dst, const Mesh& other) {
     const size_t base = dst.vertices.size();
     if (base + other.vertices.size() > 65535) return;
     dst.vertices.insert(dst.vertices.end(), other.vertices.begin(), other.vertices.end());
-    dst.indices.reserve(dst.indices.size() + other.indices.size());
-    for (uint16_t idx : other.indices) {
-        dst.indices.push_back(u16(base + static_cast<size_t>(idx)));
-    }
+    for (uint16_t idx : other.indices) dst.indices.push_back(u16(base + static_cast<size_t>(idx)));
 }
 
 Mesh extractFaces(const Mesh& mesh, const std::vector<int>& faceIndices) {
@@ -299,19 +245,82 @@ Mesh extractFaces(const Mesh& mesh, const std::vector<int>& faceIndices) {
 void removeFaces(Mesh& mesh, const std::vector<int>& faceIndices) {
     if (faceIndices.empty()) return;
     std::vector<char> kill(mesh.indices.size() / 3, 0);
-    for (int fi : faceIndices) {
+    for (int fi : faceIndices)
         if (fi >= 0 && fi < static_cast<int>(kill.size())) kill[static_cast<size_t>(fi)] = 1;
-    }
     std::vector<uint16_t> ni;
-    ni.reserve(mesh.indices.size());
     for (size_t i = 0; i + 2 < mesh.indices.size(); i += 3) {
         if (!kill[i / 3]) {
-            ni.push_back(mesh.indices[i]);
-            ni.push_back(mesh.indices[i + 1]);
-            ni.push_back(mesh.indices[i + 2]);
+            ni.push_back(mesh.indices[i]); ni.push_back(mesh.indices[i + 1]); ni.push_back(mesh.indices[i + 2]);
         }
     }
     mesh.indices = std::move(ni);
+}
+
+bool createFace(Mesh& mesh, int v0, int v1, int v2) {
+    const int n = static_cast<int>(mesh.vertices.size());
+    if (v0 < 0 || v1 < 0 || v2 < 0 || v0 >= n || v1 >= n || v2 >= n) return false;
+    if (v0 == v1 || v1 == v2 || v0 == v2) return false;
+    mesh.indices.push_back(u16(static_cast<size_t>(v0)));
+    mesh.indices.push_back(u16(static_cast<size_t>(v1)));
+    mesh.indices.push_back(u16(static_cast<size_t>(v2)));
+    recomputeSmoothNormals(mesh);
+    return true;
+}
+
+bool connectVertices(Mesh& mesh, int v0, int v1) {
+    const int n = static_cast<int>(mesh.vertices.size());
+    if (v0 < 0 || v1 < 0 || v0 >= n || v1 >= n || v0 == v1) return false;
+    // Find a face containing v0; connect by inserting edge via a third vertex on a shared face.
+    for (size_t i = 0; i + 2 < mesh.indices.size(); i += 3) {
+        int a = mesh.indices[i], b = mesh.indices[i + 1], c = mesh.indices[i + 2];
+        bool has0 = (a == v0 || b == v0 || c == v0);
+        bool has1 = (a == v1 || b == v1 || c == v1);
+        if (has0 && has1) return true;  // already connected on this face
+        if (has0 && !has1) {
+            // Split face: replace triangle with two tris using v1 as diagonal if v1 is "near" plane —
+            // simpler: add a zero-area-safe triangle v0,v1,other
+            int other = (a != v0) ? a : (b != v0 ? b : c);
+            mesh.indices.push_back(u16(static_cast<size_t>(v0)));
+            mesh.indices.push_back(u16(static_cast<size_t>(v1)));
+            mesh.indices.push_back(u16(static_cast<size_t>(other)));
+            recomputeSmoothNormals(mesh);
+            return true;
+        }
+    }
+    // No shared context: create a degenerate-thin face using midpoint
+    if (mesh.vertices.size() >= 65534) return false;
+    Vertex mid = mesh.vertices[static_cast<size_t>(v0)];
+    const Vertex& vb = mesh.vertices[static_cast<size_t>(v1)];
+    mid.px = 0.5f * (mid.px + vb.px);
+    mid.py = 0.5f * (mid.py + vb.py);
+    mid.pz = 0.5f * (mid.pz + vb.pz);
+    int vm = static_cast<int>(mesh.vertices.size());
+    mesh.vertices.push_back(mid);
+    mesh.indices.push_back(u16(static_cast<size_t>(v0)));
+    mesh.indices.push_back(u16(static_cast<size_t>(v1)));
+    mesh.indices.push_back(u16(static_cast<size_t>(vm)));
+    recomputeSmoothNormals(mesh);
+    return true;
+}
+
+bool targetMerge(Mesh& mesh, int targetVertex, const std::vector<int>& sourceVertices) {
+    const int n = static_cast<int>(mesh.vertices.size());
+    if (targetVertex < 0 || targetVertex >= n) return false;
+    const Vertex tgt = mesh.vertices[static_cast<size_t>(targetVertex)];
+    for (int s : sourceVertices) {
+        if (s < 0 || s >= n || s == targetVertex) continue;
+        mesh.vertices[static_cast<size_t>(s)].px = tgt.px;
+        mesh.vertices[static_cast<size_t>(s)].py = tgt.py;
+        mesh.vertices[static_cast<size_t>(s)].pz = tgt.pz;
+    }
+    // Remap indices from sources to target, then weld
+    for (uint16_t& idx : mesh.indices) {
+        for (int s : sourceVertices) {
+            if (static_cast<int>(idx) == s) idx = u16(static_cast<size_t>(targetVertex));
+        }
+    }
+    weldVertices(mesh, 1e-5f);
+    return true;
 }
 
 MeshStats meshStats(const Mesh& mesh) {

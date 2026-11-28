@@ -8,6 +8,8 @@ add_library(aimodeling SHARED
     native-lib.cpp
     core/mesh.cpp
     core/mesh_ops.cpp
+    core/glb.cpp
+    core/pick.cpp
     core/scene.cpp
     core/editor.cpp)
 

@@ -23,20 +23,20 @@ Mesh makePrimitiveMesh(Primitive p, float size);
 
 struct Transform {
     Vec3 position;
-    Vec3 rotationDeg;  // Euler XYZ em graus
+    Vec3 rotationDeg;
     Vec3 scale{1.0f, 1.0f, 1.0f};
-
-    // T * Rz * Ry * Rx * S
     Mat4 matrix() const;
 };
 
-// Matriz 3x3 (ordem de colunas) para transformar normais: R * diag(1/scale).
 void normalMatrix(const Transform& t, float out[9]);
 
+// PBR material factors (baseColor + metallic-roughness).
 struct Color {
     float r = 0.35f;
     float g = 0.60f;
     float b = 0.95f;
+    float metallic = 0.0f;
+    float roughness = 0.5f;
 };
 
 struct Object {
@@ -64,7 +64,6 @@ struct Scene {
     int indexOf(int id) const;
 };
 
-// Id do objeto mais próximo atingido pelo raio, ou -1.
 int pickObject(const Scene& scene, const Ray& ray);
 
 }  // namespace core
