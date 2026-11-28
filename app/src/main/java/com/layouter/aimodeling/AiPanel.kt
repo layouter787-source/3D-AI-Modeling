@@ -270,12 +270,27 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
         persistChats()
         busy = true
         AiWorkScope.launch {
+            var streamedText = ""
+            var assistantIndex = -1
             try {
                 current.ask(
                     userText = text,
                     imageBase64 = outgoingImage,
                     imageMimeType = outgoingMime,
-                    onText = { answer -> if (answer.isNotBlank()) { lines.add(ChatLine("assistant", answer)); persistChats() } },
+                    onText = { delta ->
+                        if (delta.isNotEmpty()) {
+                            streamedText += delta
+                            scope.launch(Dispatchers.Main.immediate) {
+                                if (assistantIndex < 0) {
+                                    assistantIndex = lines.size
+                                    lines.add(ChatLine("assistant", streamedText))
+                                } else if (assistantIndex in lines.indices) {
+                                    lines[assistantIndex] = ChatLine("assistant", streamedText)
+                                }
+                                routeStatus = "A gerar resposta · streaming ativo"
+                            }
+                        }
+                    },
                     onTool = { call, result ->
                         lines.add(ChatLine("tool", if (result.ok) "Executado: ${call.name}" else "Falhou: ${call.name}")); persistChats()
                     },
@@ -286,8 +301,12 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
             } catch (e: Exception) {
                 lines.add(ChatLine("error", e.message ?: "Falha na ligação. Confirma a chave e o modelo.")); persistChats()
             } finally {
-                onSceneChanged()
-                busy = false
+                scope.launch(Dispatchers.Main.immediate) {
+                    persistChats()
+                    routeStatus = if (streamedText.isNotEmpty()) "Resposta recebida em streaming" else routeStatus
+                    onSceneChanged()
+                    busy = false
+                }
             }
         }
     }
