@@ -26,15 +26,22 @@ object NativeBridge {
     external fun rotateBy(id: Int, rx: Float, ry: Float, rz: Float): Boolean
     external fun scaleBy(id: Int, fx: Float, fy: Float, fz: Float): Boolean
     external fun setColor(id: Int, r: Float, g: Float, b: Float): Boolean
+    /** PBR: base color + metallic + roughness */
+    external fun setPbr(id: Int, r: Float, g: Float, b: Float, metallic: Float, roughness: Float): Boolean
 
     external fun setDisplayMode(mode: String): Boolean
 
-    /** op: soft_normals, hard_normals, divide, smooth, weld, mirror, extrude, bevel */
     external fun meshOp(id: Int, op: String, amount: Float, segments: Int, faceIndices: IntArray?): Boolean
     external fun combineObjects(idA: Int, idB: Int): Int
     external fun separateFaces(id: Int, faceIndices: IntArray?): Int
     external fun setSelectMode(mode: String): Boolean
     external fun setSelectedFaces(faceIndices: IntArray?): Boolean
+
+    /** mode: vertex|edge|face|object — returns JSON pick result */
+    external fun pickAtComponent(x: Float, y: Float, mode: String, objectId: Int): String
+
+    external fun exportGlb(id: Int, path: String): Boolean
+    external fun importGlb(path: String): Int
 
     external fun undo(): Boolean
     external fun redo(): Boolean
