@@ -104,10 +104,12 @@ class AnthropicProvider(
                 val text = StringBuilder()
                 data class ToolPart(var id: String = "", var name: String = "", var input: JSONObject = JSONObject(), val json: StringBuilder = StringBuilder())
                 val toolsByIndex = sortedMapOf<Int, ToolPart>()
+                var messageStopped = false
                 try {
                     HttpJson.postSse("$baseUrl/messages", mapOf("x-api-key" to apiKey, "anthropic-version" to "2023-06-01"), body) { raw ->
                         val event = runCatching { JSONObject(raw) }.getOrNull() ?: return@postSse
                         when (event.optString("type")) {
+                            "message_stop" -> messageStopped = true
                             "content_block_start" -> {
                                 val block = event.optJSONObject("content_block") ?: return@postSse
                                 val index = event.optInt("index")
@@ -134,12 +136,19 @@ class AnthropicProvider(
                             }
                         }
                     }
+                    if (!messageStopped) throw AiException("Stream Anthropic terminou sem message_stop")
                     val calls = toolsByIndex.values.mapIndexed { index, part ->
-                        ToolCall(part.id.ifBlank { "anthropic_tool_$index" }, part.name, part.input)
+                        if (part.name.isBlank()) throw AiException("Tool use recebido sem nome")
+                        val parsedInput = if (part.json.isNotEmpty()) {
+                            try { JSONObject(part.json.toString()) }
+                            catch (e: Exception) { throw AiException("JSON inválido nos argumentos de tool use", cause = e) }
+                        } else part.input
+                        ToolCall(part.id.ifBlank { "anthropic_tool_$index" }, part.name, parsedInput)
                     }
                     return@withContext AiTurn(text.toString(), calls)
                 } catch (error: AiException) {
                     if (error.httpCode !in setOf(400, 404, 405, 406, 415, 422, 501) || text.isNotEmpty()) throw error
+                    body.remove("stream")
                 }
             }
             val response = HttpJson.post(
