@@ -5,7 +5,7 @@
 
 namespace core {
 
-Mesh buildRenderMesh(const PolyMesh& p, float smoothAngleDegrees) {
+Mesh buildRenderMesh(const PolyMesh& p, float smoothAngleDegrees, const std::vector<Vec3>& vertexColors) {
     Mesh out;
     const size_t F = p.faces.size();
 
@@ -49,7 +49,8 @@ Mesh buildRenderMesh(const PolyMesh& p, float smoothAngleDegrees) {
                 if (length(nn) < 0.5f) nn = fn[f];
             }
             const Vec3& pos = p.verts[v];
-            out.vertices.push_back({pos.x, pos.y, pos.z, nn.x, nn.y, nn.z});
+            const Vec3 color = v < vertexColors.size() ? vertexColors[v] : Vec3{1.0f, 1.0f, 1.0f};
+            out.vertices.push_back({pos.x, pos.y, pos.z, nn.x, nn.y, nn.z, color.x, color.y, color.z});
         }
         for (size_t k = 1; k + 1 < n; ++k) {
             out.indices.push_back(base);
