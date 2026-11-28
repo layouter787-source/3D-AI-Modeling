@@ -135,11 +135,13 @@ struct GpuMesh {
     GLuint vbo = 0;
     GLuint ibo = 0;
     GLsizei count = 0;
+    uint64_t revision = 0;
 };
 
-GpuMesh upload(const Mesh& mesh) {
+GpuMesh upload(const Mesh& mesh, uint64_t revision) {
     GpuMesh g;
     g.count = static_cast<GLsizei>(mesh.indices.size());
+    g.revision = revision;
 
     glGenVertexArrays(1, &g.vao);
     glBindVertexArray(g.vao);
@@ -360,7 +362,12 @@ Java_com_layouter_aimodeling_NativeBridge_onDrawFrame(JNIEnv*, jobject) {
     glUseProgram(r.objectProgram);
     for (const Object& o : scene.objects) {
         auto it = r.gpu.find(o.id);
-        if (it == r.gpu.end()) it = r.gpu.emplace(o.id, upload(o.mesh)).first;
+        if (it == r.gpu.end()) {
+            it = r.gpu.emplace(o.id, upload(o.mesh, o.meshRevision)).first;
+        } else if (it->second.revision != o.meshRevision) {
+            destroy(it->second);
+            it->second = upload(o.mesh, o.meshRevision);
+        }
 
         const Mat4 mvp = multiply(viewProj, o.transform.matrix());
         float nm[9];
