@@ -36,7 +36,9 @@ public:
     bool scaleBy(int id, Vec3 factor);
     bool sculptMesh(int id, Vec3 center, float radius, Vec3 offset);
     // Brush IDs: 0 draw, 1 inflate, 2 grab, 3 smooth, 4 flatten, 5 pinch, 6 crease.
+    bool beginSculptStroke(int id);
     bool sculptMeshBrush(int id, Vec3 center, float radius, Vec3 stroke, int brush, float strength);
+    void endSculptStroke();
     // Blender-inspired polygon operations applied to the existing editable triangle topology.
     bool meshOperation(int id, const std::string& operation, const std::vector<int>& faces,
                        int parameter, float value, int otherObjectId = -1);
@@ -75,6 +77,12 @@ private:
     void fixSelection();
 
     Scene scene_;
+    int sculptStrokeObjectId_ = -1;
+    bool sculptStrokeChanged_ = false;
+    Mesh sculptStrokeBeforeMesh_;
+    PolyMesh sculptStrokeBeforeTopology_;
+    std::vector<Vec3> sculptStrokeBeforeColors_;
+    float sculptStrokeBeforeSmoothAngle_ = 35.0f;
     int paintStrokeObjectId_ = -1;
     bool paintStrokeChanged_ = false;
     Mesh paintStrokeBeforeMesh_;
