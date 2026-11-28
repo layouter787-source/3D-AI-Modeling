@@ -94,6 +94,10 @@ fun EditorScreen(isDarkTheme: Boolean = true, onToggleTheme: () -> Unit = {}) {
     var showLighting by remember { mutableStateOf(false) }
     var showPrimitiveDialog by remember { mutableStateOf(false) }
     var showMaterialDialog by remember { mutableStateOf(false) }
+    var vertexPaintMode by remember { mutableStateOf(false) }
+    var vertexBrushSize by remember { mutableStateOf(0.22f) }
+    var vertexBrushOpacity by remember { mutableStateOf(0.85f) }
+    var vertexPaintColorIndex by remember { mutableIntStateOf(2) }
     var faceIndex by remember { mutableStateOf("0") }
     var objExport by remember { mutableStateOf("") }
     var projectExport by remember { mutableStateOf("") }
@@ -220,7 +224,18 @@ fun EditorScreen(isDarkTheme: Boolean = true, onToggleTheme: () -> Unit = {}) {
     Box(Modifier.fillMaxSize()) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
-            factory = { context -> ModelingSurfaceView(context).apply { onSceneChanged = refresh } }
+            factory = { viewContext ->
+                ModelingSurfaceView(viewContext).apply {
+                    onSceneChanged = refresh
+                    val initialColor = palette[vertexPaintColorIndex]
+                    setVertexPaintMode(vertexPaintMode, vertexBrushSize, vertexBrushOpacity, initialColor.first, initialColor.second, initialColor.third)
+                }
+            },
+            update = { view ->
+                view.onSceneChanged = refresh
+                val selectedColor = palette.getOrElse(vertexPaintColorIndex) { palette[2] }
+                view.setVertexPaintMode(vertexPaintMode, vertexBrushSize, vertexBrushOpacity, selectedColor.first, selectedColor.second, selectedColor.third)
+            }
         )
 
         Row(
@@ -295,7 +310,19 @@ fun EditorScreen(isDarkTheme: Boolean = true, onToggleTheme: () -> Unit = {}) {
                     .background(Color(0xE91B1E23), androidx.compose.foundation.shape.RoundedCornerShape(22.dp)).systemBarsPadding().padding(10.dp),
                 verticalArrangement = Arrangement.spacedBy(7.dp)
             ) {
-                if (selected >= 0) SelectionTools(selected, refresh, onMaterial = { showMaterialDialog = true })
+                if (vertexPaintMode && selected >= 0) {
+                    VertexPaintControls(
+                        brushSize = vertexBrushSize,
+                        onBrushSize = { vertexBrushSize = it },
+                        opacity = vertexBrushOpacity,
+                        onOpacity = { vertexBrushOpacity = it },
+                        selectedColorIndex = vertexPaintColorIndex,
+                        onSelectColor = { vertexPaintColorIndex = it },
+                        onDone = { vertexPaintMode = false }
+                    )
+                } else if (selected >= 0) {
+                    SelectionTools(selected, refresh, onMaterial = { showMaterialDialog = true }, onVertexPaint = { vertexPaintMode = true })
+                }
                 PrimitiveBar(refresh) { showPrimitiveDialog = true }
             }
         }
@@ -601,7 +628,46 @@ private fun ToolButton(label: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun SelectionTools(id: Int, refresh: () -> Unit, onMaterial: () -> Unit) {
+private fun VertexPaintControls(
+    brushSize: Float,
+    onBrushSize: (Float) -> Unit,
+    opacity: Float,
+    onOpacity: (Float) -> Unit,
+    selectedColorIndex: Int,
+    onSelectColor: (Int) -> Unit,
+    onDone: () -> Unit
+) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("VERTEX PAINT", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+            TextButton(onClick = onDone) { Text("Concluir") }
+        }
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            palette.forEachIndexed { index, color ->
+                Button(
+                    onClick = { onSelectColor(index) },
+                    modifier = Modifier.size(34.dp),
+                    contentPadding = PaddingValues(0.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(color.first, color.second, color.third), contentColor = Color.Black),
+                    shape = androidx.compose.foundation.shape.CircleShape
+                ) { if (selectedColorIndex == index) Text("✓", style = MaterialTheme.typography.labelMedium) }
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Pincel", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(end = 8.dp))
+            Slider(value = brushSize, onValueChange = onBrushSize, valueRange = 0.04f..1.25f, modifier = Modifier.weight(1f))
+            Text(String.format("%.2f", brushSize), style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 6.dp))
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Opacidade", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(end = 8.dp))
+            Slider(value = opacity, onValueChange = onOpacity, valueRange = 0.05f..1.0f, modifier = Modifier.weight(1f))
+            Text((opacity * 100).toInt().toString() + "%", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 6.dp))
+        }
+        Text("Pintura por vértice · as cores seguem a malha e podem ser desfeitas com Undo.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+@Composable
+private fun SelectionTools(id: Int, refresh: () -> Unit, onMaterial: () -> Unit, onVertexPaint: () -> Unit) {
     val scroll1 = rememberScrollState()
     val scroll2 = rememberScrollState()
 
@@ -627,6 +693,7 @@ private fun SelectionTools(id: Int, refresh: () -> Unit, onMaterial: () -> Unit)
             refresh()
         }
         ToolButton("MATERIAL") { onMaterial() }
+        ToolButton("VERTEX PAINT") { onVertexPaint() }
         ToolButton("Z+") { NativeBridge.moveBy(id, 0f, 0f, MOVE_STEP); refresh() }
     }
 
