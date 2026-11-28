@@ -542,8 +542,12 @@ bool Editor::meshOperation(int id, const std::string& operation, const std::vect
         if (faces.size() != 2 || faces[0] < 0 || faces[1] < 0 ||
             static_cast<size_t>(faces[0]) >= source.verts.size() ||
             static_cast<size_t>(faces[1]) >= source.verts.size()) return false;
-        result = loopCut(source, static_cast<uint32_t>(faces[0]), static_cast<uint32_t>(faces[1]),
-                         std::clamp(parameter, 1, 32));
+        if (operation == "loop_cut") {
+            result = loopCut(source, static_cast<uint32_t>(faces[0]), static_cast<uint32_t>(faces[1]),
+                             std::clamp(parameter, 1, 32));
+        } else {
+            result = connectVertices(source, static_cast<uint32_t>(faces[0]), static_cast<uint32_t>(faces[1]));
+        }
 
     } else if (operation == "triangulate" || operation == "divide") {
         result = triangulate(source);
