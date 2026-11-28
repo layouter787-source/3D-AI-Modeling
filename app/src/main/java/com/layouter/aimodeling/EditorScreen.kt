@@ -68,6 +68,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.layouter.aimodeling.ai.RemoteMcpConnector
 import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -91,6 +92,8 @@ fun EditorScreen(isDarkTheme: Boolean = true, onToggleTheme: () -> Unit = {}) {
     var showAi by remember { mutableStateOf(false) }
     var showMeshTools by remember { mutableStateOf(false) }
     var showExtensions by remember { mutableStateOf(false) }
+    var showMcpDialog by remember { mutableStateOf(false) }
+    var mcpConfig by remember { mutableStateOf("") }
     var showLighting by remember { mutableStateOf(false) }
     var showPrimitiveDialog by remember { mutableStateOf(false) }
     var showMaterialDialog by remember { mutableStateOf(false) }
@@ -291,11 +294,58 @@ fun EditorScreen(isDarkTheme: Boolean = true, onToggleTheme: () -> Unit = {}) {
             IconButton(onClick = { showExtensions = true }) {
                 Icon(Icons.Outlined.Extension, "Extensões", tint = MaterialTheme.colorScheme.onSurface)
             }
+            TextButton(onClick = { mcpConfig = RemoteMcpConnector.configuration(); showMcpDialog = true }) {
+                Text("MCP", color = MaterialTheme.colorScheme.primary)
+            }
         }
 
         if (showMeshTools) MeshWorkbenchDialog(selected, faceIndex, { faceIndex = it }, { showMeshTools = false }, refresh)
         if (showLighting) LightingDialog { showLighting = false }
         if (showExtensions) ExtensionLibraryDialog { showExtensions = false }
+        if (showMcpDialog) {
+            AlertDialog(
+                onDismissRequest = { showMcpDialog = false },
+                title = { Text("Conectores MCP remotos") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Cole a configuração mcpServers do CodeAssist/Claude. O app aceita servidores HTTP remotos; stdio não funciona no Android. Use HTTPS e tokens próprios. A configuração é cifrada no Android Keystore.", style = MaterialTheme.typography.bodySmall)
+                        OutlinedTextField(
+                            value = mcpConfig,
+                            onValueChange = { mcpConfig = it },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 360.dp),
+                            label = { Text("mcp.json") },
+                            placeholder = { Text("""{"mcpServers":{"docs":{"type":"http","url":"https://host.example/mcp"}}}""") },
+                            minLines = 6,
+                            maxLines = 14
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        scope.launch {
+                            try {
+                                RemoteMcpConnector.saveConfiguration(mcpConfig)
+                                val tools = RemoteMcpConnector.toolDefinitions()
+                                Toast.makeText(context, "MCP conectado: ${tools.length()} ferramentas descobertas", Toast.LENGTH_LONG).show()
+                                showMcpDialog = false
+                            } catch (error: Exception) {
+                                Toast.makeText(context, "MCP: ${error.message ?: "falha ao conectar"}", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }) { Text("Guardar e testar") }
+                },
+                dismissButton = {
+                    Row {
+                        TextButton(onClick = {
+                            RemoteMcpConnector.clearConfiguration()
+                            mcpConfig = ""
+                            Toast.makeText(context, "Conectores removidos", Toast.LENGTH_SHORT).show()
+                        }) { Text("Remover") }
+                        TextButton(onClick = { showMcpDialog = false }) { Text("Fechar") }
+                    }
+                }
+            )
+        }
         if (showMaterialDialog) MaterialWorkbenchDialog(selected, onClose = { showMaterialDialog = false }, refresh = refresh)
         if (showPrimitiveDialog) AdvancedPrimitiveDialog(onClose = { showPrimitiveDialog = false }) { type, size, detail ->
             val y = if (type == PrimitiveType.PLANE) 0f else size / 2f
