@@ -39,6 +39,8 @@ object NativeBridge {
     external fun rotateBy(id: Int, rx: Float, ry: Float, rz: Float): Boolean
     external fun scaleBy(id: Int, fx: Float, fy: Float, fz: Float): Boolean
     external fun setColor(id: Int, r: Float, g: Float, b: Float): Boolean
+    external fun getVertexColors(id: Int): FloatArray
+    external fun setVertexColors(id: Int, colors: FloatArray): Boolean
     external fun setMaterial(id: Int, metallic: Float, roughness: Float, clearcoat: Float, emission: Float): Boolean
     external fun sculptMesh(id: Int, centerX: Float, centerY: Float, centerZ: Float, radius: Float, offsetX: Float, offsetY: Float, offsetZ: Float): Boolean
     external fun meshOperation(id: Int, operation: String, faceIds: IntArray, parameter: Int, value: Float, otherObjectId: Int = -1): Boolean
