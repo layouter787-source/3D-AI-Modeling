@@ -441,12 +441,27 @@ bool Editor::beginSculptStroke(int id) {
             object->topology.faces.push_back({object->mesh.indices[i], object->mesh.indices[i + 1], object->mesh.indices[i + 2]});
         object->topology = weldVertices(object->topology, 1e-5f);
     }
-    if (object->topology.empty() || object->topology.verts.size() > 100000 || object->topology.faces.size() > 150000) return false;
+    if (object->topology.empty() || object->topology.verts.size() > 60000 || object->topology.faces.size() > 100000) return false;
     sculptStrokeObjectId_ = id;
     sculptStrokeBeforeMesh_ = object->mesh;
     sculptStrokeBeforeTopology_ = object->topology;
     sculptStrokeBeforeColors_ = object->vertexColors;
     sculptStrokeBeforeSmoothAngle_ = object->smoothAngle;
+    sculptStrokeNormals_ = vertexNormals(object->topology);
+    sculptStrokeAdjacency_.assign(object->topology.verts.size(), {});
+    for (const auto& face : object->topology.faces) {
+        for (size_t k = 0; k < face.size(); ++k) {
+            const uint32_t a = face[k], b = face[(k + 1) % face.size()];
+            if (a < sculptStrokeAdjacency_.size() && b < sculptStrokeAdjacency_.size()) {
+                sculptStrokeAdjacency_[a].push_back(b);
+                sculptStrokeAdjacency_[b].push_back(a);
+            }
+        }
+    }
+    for (auto& neighbors : sculptStrokeAdjacency_) {
+        std::sort(neighbors.begin(), neighbors.end());
+        neighbors.erase(std::unique(neighbors.begin(), neighbors.end()), neighbors.end());
+    }
     sculptStrokeChanged_ = false;
     return true;
 }
@@ -465,6 +480,8 @@ void Editor::endSculptStroke() {
     sculptStrokeBeforeMesh_ = Mesh{};
     sculptStrokeBeforeTopology_ = PolyMesh{};
     sculptStrokeBeforeColors_.clear();
+    sculptStrokeNormals_.clear();
+    sculptStrokeAdjacency_.clear();
 }
 
 bool Editor::sculptMeshBrush(int id, Vec3 center, float radius, Vec3 stroke, int brush, float strength) {
@@ -481,21 +498,35 @@ bool Editor::sculptMeshBrush(int id, Vec3 center, float radius, Vec3 stroke, int
             beforeTopology.faces.push_back({object->mesh.indices[i], object->mesh.indices[i + 1], object->mesh.indices[i + 2]});
         beforeTopology = weldVertices(beforeTopology, 1e-5f);
     }
-    if (beforeTopology.empty() || beforeTopology.verts.size() > 100000 || beforeTopology.faces.size() > 150000) return false;
+    if (beforeTopology.empty() || beforeTopology.verts.size() > 60000 || beforeTopology.faces.size() > 100000) return false;
 
     strength = std::clamp(strength, 0.0f, 1.0f);
     PolyMesh afterTopology = beforeTopology;
-    const std::vector<Vec3> normals = vertexNormals(beforeTopology);
-    std::vector<std::vector<uint32_t>> adjacency(beforeTopology.verts.size());
-    for (const auto& face : beforeTopology.faces) {
-        if (face.size() < 2) continue;
-        for (size_t i = 0; i < face.size(); ++i) {
-            const uint32_t a = face[i], b = face[(i + 1) % face.size()];
-            if (a >= adjacency.size() || b >= adjacency.size()) continue;
-            adjacency[a].push_back(b);
-            adjacency[b].push_back(a);
+    const std::vector<Vec3> computedNormals = sculptStrokeObjectId_ == id && brush != 0 && brush != 2 && brush != 3
+        ? vertexNormals(beforeTopology) : std::vector<Vec3>{};
+    const std::vector<Vec3>& normals = sculptStrokeObjectId_ == id && brush != 0 && brush != 2 && brush != 3
+        ? computedNormals : (sculptStrokeObjectId_ == id ? sculptStrokeNormals_ : computedNormals);
+    std::vector<std::vector<uint32_t>> computedAdjacency;
+    const std::vector<std::vector<uint32_t>>* adjacencyPtr = nullptr;
+    if (sculptStrokeObjectId_ == id) {
+        adjacencyPtr = &sculptStrokeAdjacency_;
+    } else {
+        computedAdjacency.assign(beforeTopology.verts.size(), {});
+        for (const auto& face : beforeTopology.faces) {
+            for (size_t i = 0; i < face.size(); ++i) {
+                const uint32_t a = face[i], b = face[(i + 1) % face.size()];
+                if (a < computedAdjacency.size() && b < computedAdjacency.size()) {
+                    computedAdjacency[a].push_back(b); computedAdjacency[b].push_back(a);
+                }
+            }
         }
+        for (auto& neighbors : computedAdjacency) {
+            std::sort(neighbors.begin(), neighbors.end());
+            neighbors.erase(std::unique(neighbors.begin(), neighbors.end()), neighbors.end());
+        }
+        adjacencyPtr = &computedAdjacency;
     }
+    const auto& adjacency = *adjacencyPtr;
     std::vector<Vec3> smoothTargets(beforeTopology.verts.size());
     if (brush == 3) {
         for (size_t i = 0; i < beforeTopology.verts.size(); ++i) {
@@ -547,7 +578,8 @@ bool Editor::sculptMeshBrush(int id, Vec3 center, float radius, Vec3 stroke, int
         changed = changed || length(vertex - original) > 1e-6f;
     }
     if (!changed) return false;
-    Mesh beforeMesh = object->mesh;
+    Mesh beforeMesh;
+    if (sculptStrokeObjectId_ != id) beforeMesh = object->mesh;
     Mesh afterMesh = buildRenderMesh(afterTopology, object->smoothAngle, object->vertexColors);
     if (afterMesh.indices.empty()) return false;
     if (sculptStrokeObjectId_ == id) {
