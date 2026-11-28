@@ -395,6 +395,7 @@ private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (
     var edgeA by remember { mutableStateOf("0") }
     var edgeB by remember { mutableStateOf("1") }
     var booleanTarget by remember { mutableStateOf("") }
+    var vertexIds by remember { mutableStateOf("0,1,2") }
     var topologySummary by remember { mutableStateOf("") }
     var topologyOffset by remember { mutableIntStateOf(0) }
     var totalFaceCount by remember { mutableIntStateOf(0) }
@@ -419,6 +420,12 @@ private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (
             topologyFaces = emptyList()
         }
     }
+
+    fun parseVertexIds(): IntArray = vertexIds.split(',', ';', ' ', '\\n')
+        .mapNotNull { it.trim().toIntOrNull() }.distinct().toIntArray()
+
+    fun selectedFaceArray(): IntArray =
+        selectedFaceIds.toIntArray().takeIf { it.isNotEmpty() } ?: intArrayOf(faceIndex.toIntOrNull() ?: 0)
 
     fun apply(operation: String, parameter: Int = 1, value: Float = 0.15f, faces: IntArray = intArrayOf(), otherObjectId: Int = -1) {
         if (selected < 0) { Toast.makeText(context, "Seleciona um objeto primeiro", Toast.LENGTH_SHORT).show(); return }
@@ -467,6 +474,46 @@ private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (
             }
             Text("Seleção por ID (também podes digitar diretamente)")
             OutlinedTextField(faceIndex, onFaceIndex, label = { Text("Índice da face") }, singleLine = true)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Button(onClick = {
+                    selectedFaceIds = NativeBridge.getFaceShell(selected, faceIndex.toIntOrNull() ?: 0).toSet()
+                    if (selectedFaceIds.isEmpty()) Toast.makeText(context, "Não foi encontrada uma concha conectada", Toast.LENGTH_SHORT).show()
+                }, enabled = selected >= 0) { Text("Select Shell") }
+                Button(onClick = { selectedFaceIds = selectedFaceIds + (faceIndex.toIntOrNull() ?: 0) }) { Text("Adicionar face") }
+            }
+
+            Text("Comandos de faces", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Button(onClick = {
+                    val newId = NativeBridge.detachFaces(selected, selectedFaceArray())
+                    Toast.makeText(context, if (newId >= 0) "Faces separadas no objeto $newId" else "Não foi possível separar as faces", Toast.LENGTH_SHORT).show()
+                    if (newId >= 0) onChanged()
+                }, enabled = selected >= 0) { Text("Detach") }
+                Button(onClick = { apply("clone_faces", value = 0.12f, faces = selectedFaceArray()) }) { Text("Clone faces") }
+                Button(onClick = { apply("delete_faces", faces = selectedFaceArray()) }) { Text("Delete faces") }
+            }
+            Text("Vértices para desenhar uma face ou unir vários pontos", style = MaterialTheme.typography.labelMedium)
+            OutlinedTextField(
+                value = vertexIds,
+                onValueChange = { vertexIds = it.filter { ch -> ch.isDigit() || ch == ',' || ch == ';' || ch.isWhitespace() } },
+                label = { Text("IDs de vértices · ex.: 0,1,2,3") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Button(onClick = { apply("draw_face", faces = parseVertexIds()) }) { Text("Draw Face") }
+                Button(onClick = { apply("merge_vertices", faces = parseVertexIds()) }) { Text("Merge") }
+                Button(onClick = { apply("target_merge", faces = intArrayOf(edgeA.toIntOrNull() ?: 0, edgeB.toIntOrNull() ?: 1)) }) { Text("Target Merge") }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Button(onClick = {
+                    val ok = NativeBridge.combineObjects(selected, booleanTarget.toIntOrNull() ?: -1)
+                    Toast.makeText(context, if (ok) "Objectos combinados" else "Combinação recusada: verifica os IDs", Toast.LENGTH_SHORT).show()
+                    if (ok) onChanged()
+                }, enabled = selected >= 0) { Text("Combine objects") }
+                Button(onClick = { apply("soft_normals") }) { Text("Soft Normals") }
+                Button(onClick = { apply("hard_normals") }) { Text("Hard Normals") }
+            }
             Text("Cortes e ligações · IDs dos dois vértices da aresta", style = MaterialTheme.typography.labelMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                 OutlinedTextField(edgeA, { edgeA = it.filter(Char::isDigit) }, label = { Text("Vértice A") }, modifier = Modifier.weight(1f), singleLine = true)
@@ -484,7 +531,7 @@ private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (
                 Button(onClick = { apply("boolean_intersection", otherObjectId = booleanTarget.toIntOrNull() ?: -1) }) { Text("Intersect") }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                Button(onClick = { apply("extrude", value = 0.2f, faces = selectedFaceIds.toIntArray().takeIf { it.isNotEmpty() } ?: intArrayOf(faceIndex.toIntOrNull() ?: 0)) }) { Text("Extrude") }
+                Button(onClick = { apply("extrude", value = 0.2f, faces = selectedFaceArray()) }) { Text("Extrude") }
                 Button(onClick = { apply("inset", value = 0.08f, faces = selectedFaceIds.toIntArray().takeIf { it.isNotEmpty() } ?: intArrayOf(faceIndex.toIntOrNull() ?: 0)) }) { Text("Inset") }
                 Button(onClick = { apply("bevel", value = 0.08f, faces = selectedFaceIds.toIntArray().takeIf { it.isNotEmpty() } ?: intArrayOf(faceIndex.toIntOrNull() ?: 0)) }) { Text("Bevel") }
             }
@@ -509,7 +556,7 @@ private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (
                 Button(onClick = { apply("mirror", parameter = 1) }) { Text("Mirror Y") }
                 Button(onClick = { apply("mirror", parameter = 2) }) { Text("Mirror Z") }
             }
-            Text("Loop Cut e Boolean estão disponíveis ao agente: pede para consultar a topologia e executar sobre as arestas/objetos corretos.")
+            Text("As operações de face, vértice, concha e normal usam a topologia nativa; desfazer/refazer continua disponível.")
         }
     }, confirmButton = { TextButton(onClick = onClose) { Text("Fechar") } })
 }
