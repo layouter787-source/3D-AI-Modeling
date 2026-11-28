@@ -72,6 +72,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -386,7 +387,7 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 McpCloudPanel()
-                Divider()
+                HorizontalDivider()
                 Text("Ligação à IA", color = Color.White, style = MaterialTheme.typography.titleSmall)
                 Text("Escolhe o serviço e consulta os modelos que a tua chave pode ver.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
 
