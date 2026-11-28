@@ -61,6 +61,8 @@ PolyMesh extrudeFaces(const PolyMesh& m, const std::vector<int>& faces, float di
                       Vec3 dir, float scale);
 PolyMesh insetFaces(const PolyMesh& m, const std::vector<int>& faces, float amount);
 PolyMesh loopCut(const PolyMesh& m, uint32_t a, uint32_t b, int cuts);
+// Returns ordered face IDs along the quad edge loop seeded by edge (a,b).
+std::vector<int> edgeLoopFaces(const PolyMesh& m, uint32_t a, uint32_t b);
 PolyMesh connectVertices(const PolyMesh& m, uint32_t a, uint32_t b);
 // Splits an existing topological edge at a normalized position (0..1), inserting
 // the new vertex into every incident polygon and splitting matching creases.
