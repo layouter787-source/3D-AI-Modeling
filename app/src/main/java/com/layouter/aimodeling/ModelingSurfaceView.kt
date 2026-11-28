@@ -28,6 +28,28 @@ class ModelingSurfaceView(context: Context) : GLSurfaceView(context) {
     @Volatile private var vertexBrushR = 0.20f
     @Volatile private var vertexBrushG = 0.75f
     @Volatile private var vertexBrushB = 0.38f
+    @Volatile private var sculptEnabled = false
+    @Volatile private var sculptBrush = 0
+    @Volatile private var sculptRadius = 0.65f
+    @Volatile private var sculptStrength = 0.35f
+    private var sculpting = false
+    private var lastSculptX = 0f
+    private var lastSculptY = 0f
+    private var sculptObjectId = -1
+
+    fun setSculptMode(enabled: Boolean, brush: Int = sculptBrush, radius: Float = sculptRadius, strength: Float = sculptStrength) {
+        sculptEnabled = enabled
+        sculptBrush = brush.coerceIn(0, 6)
+        sculptRadius = radius.coerceIn(0.05f, 4.0f)
+        sculptStrength = strength.coerceIn(0.01f, 1.0f)
+        if (enabled) setVertexPaintMode(false)
+        if (!enabled && sculpting) {
+            sculpting = false
+            sculptObjectId = -1
+            post { onSceneChanged?.invoke() }
+        }
+    }
+
     private var painting = false
     private var paintObjectId = -1
     private var lastPaintX = -1f
@@ -95,6 +117,53 @@ class ModelingSurfaceView(context: Context) : GLSurfaceView(context) {
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (sculptEnabled) {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    sculptObjectId = NativeBridge.getSelected()
+                    if (sculptObjectId < 0) {
+                        Toast.makeText(context, "Seleciona uma malha antes de esculpir", Toast.LENGTH_SHORT).show()
+                        return true
+                    }
+                    sculpting = true
+                    lastSculptX = event.x
+                    lastSculptY = event.y
+                    return true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (sculpting && event.pointerCount == 1) {
+                        val dx = event.x - lastSculptX
+                        val dy = event.y - lastSculptY
+                        if (hypot(dx, dy) >= 2.2f) {
+                            lastSculptX = event.x
+                            lastSculptY = event.y
+                            val id = sculptObjectId
+                            val x = event.x
+                            val y = event.y
+                            val radius = sculptRadius
+                            val brush = sculptBrush
+                            val strength = sculptStrength
+                            // Screen drag maps to object-local displacement after native ray picking.
+                            val strokeX = dx * 0.012f
+                            val strokeY = -dy * 0.012f
+                            queueEvent {
+                                NativeBridge.sculptMeshAtScreen(id, x, y, radius, brush, strength, strokeX, strokeY)
+                                post { onSceneChanged?.invoke() }
+                            }
+                        }
+                    }
+                    return true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_POINTER_DOWN -> {
+                    sculpting = false
+                    sculptObjectId = -1
+                    post { onSceneChanged?.invoke() }
+                    return true
+                }
+                MotionEvent.ACTION_POINTER_UP -> return true
+            }
+            return true
+        }
         if (vertexPaintEnabled) {
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
