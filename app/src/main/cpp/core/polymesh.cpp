@@ -775,6 +775,71 @@ PolyMesh insetFaces(const PolyMesh& m, const std::vector<int>& sel, float amount
     return out;
 }
 
+PolyMesh bevelFaces(const PolyMesh& m, const std::vector<int>& selectedFaces,
+                     float width, float depth, int segments) {
+    if (m.empty() || selectedFaces.empty() || selectedFaces.size() > m.faces.size() ||
+        !std::isfinite(width) || !std::isfinite(depth) || m.verts.size() >= 250000) return {};
+    width = std::clamp(width, 0.0001f, 0.95f);
+    segments = clampInt(segments, 1, 8);
+
+    std::vector<char> selected(m.faces.size(), 0);
+    for (int faceId : selectedFaces) {
+        if (faceId < 0 || static_cast<size_t>(faceId) >= m.faces.size() ||
+            selected[static_cast<size_t>(faceId)] != 0) return {};
+        selected[static_cast<size_t>(faceId)] = 1;
+    }
+
+    for (const Vec3& vertex : m.verts) {
+        if (!std::isfinite(vertex.x) || !std::isfinite(vertex.y) || !std::isfinite(vertex.z)) return {};
+    }
+    for (const auto& face : m.faces) {
+        if (face.size() < 3 || face.size() > 4096) return {};
+        for (uint32_t vertex : face) if (vertex >= m.verts.size()) return {};
+    }
+
+    PolyMesh out;
+    out.verts = m.verts;
+    out.creases = m.creases;
+    out.faces.reserve(m.faces.size() + selectedFaces.size() * 8);
+    for (size_t faceId = 0; faceId < m.faces.size(); ++faceId) {
+        const auto& face = m.faces[faceId];
+        if (selected[faceId] == 0) {
+            out.faces.push_back(face);
+            continue;
+        }
+
+        const Vec3 normal = normalize(newellNormal(m, face));
+        if (length(normal) < 0.5f) return {};
+        const Vec3 center = faceCenter(m, faceId);
+        std::vector<uint32_t> previous = face;
+
+        // Build actual profile rings, not a generic smooth/subdivide approximation.
+        for (int segment = 1; segment <= segments; ++segment) {
+            if (out.verts.size() + face.size() > 250000) return {};
+            const float t = static_cast<float>(segment) / static_cast<float>(segments);
+            std::vector<uint32_t> current;
+            current.reserve(face.size());
+            for (uint32_t sourceId : face) {
+                const Vec3 source = m.verts[sourceId];
+                const Vec3 inset = lerp(source, center, width);
+                const Vec3 position = lerp(source, inset, t) + normal * (depth * t);
+                if (!std::isfinite(position.x) || !std::isfinite(position.y) ||
+                    !std::isfinite(position.z)) return {};
+                current.push_back(u32(out.verts.size()));
+                out.verts.push_back(position);
+            }
+            for (size_t edge = 0; edge < face.size(); ++edge) {
+                const size_t next = (edge + 1) % face.size();
+                addFace(out, {previous[edge], previous[next], current[next], current[edge]});
+            }
+            previous = std::move(current);
+        }
+        addFace(out, previous);
+    }
+    if (out.empty() || out.faces.size() > 250000) return {};
+    return out;
+}
+
 PolyMesh connectVertices(const PolyMesh& m, uint32_t a, uint32_t b) {
     if (a >= m.verts.size() || b >= m.verts.size() || a == b) {
         throw std::runtime_error("invalid vertex pair");

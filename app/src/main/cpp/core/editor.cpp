@@ -730,12 +730,8 @@ bool Editor::meshOperation(int id, const std::string& operation, const std::vect
         result = insetFaces(source, faces, std::clamp(value, 0.0001f, 100.0f));
     } else if (operation == "bevel") {
         if (faces.empty() || faces.size() > source.faces.size()) return false;
-        for (int face : faces) if (face < 0 || static_cast<size_t>(face) >= source.faces.size()) return false;
-        const float amount = std::clamp(std::abs(value), 0.0001f, 0.95f);
-        // Face bevel: cria o anel de transição com inset e levanta/baixa a face interna.
-        // A operação é uma só para o histórico, portanto Undo restaura a malha original.
-        PolyMesh beveled = insetFaces(source, faces, amount);
-        result = extrudeFaces(beveled, faces, value, false, Vec3{}, 1.0f);
+        result = bevelFaces(source, faces, std::clamp(std::abs(value), 0.0001f, 0.95f),
+                            value, std::clamp(parameter, 1, 8));
     } else if (operation == "smooth") {
         result = smoothMesh(source, std::clamp(parameter, 1, 100), std::clamp(value, 0.0f, 1.0f));
     } else if (operation == "solidify") {

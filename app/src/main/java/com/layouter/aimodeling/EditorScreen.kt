@@ -500,6 +500,7 @@ private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (
     var edgeA by remember { mutableStateOf("0") }
     var edgeB by remember { mutableStateOf("1") }
     var loopCutSegments by remember { mutableIntStateOf(1) }
+    var bevelSegments by remember { mutableIntStateOf(1) }
     var booleanTarget by remember { mutableStateOf("") }
     var vertexIds by remember { mutableStateOf("0,1,2") }
     var topologySummary by remember { mutableStateOf("") }
@@ -644,10 +645,12 @@ private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (
                 Button(onClick = { apply("boolean_difference", otherObjectId = booleanTarget.toIntOrNull() ?: -1) }) { Text("Difference") }
                 Button(onClick = { apply("boolean_intersection", otherObjectId = booleanTarget.toIntOrNull() ?: -1) }) { Text("Intersect") }
             }
+            Text("Segmentos do Bevel: $bevelSegments", style = MaterialTheme.typography.labelMedium)
+            Slider(value = bevelSegments.toFloat(), onValueChange = { bevelSegments = it.toInt().coerceIn(1, 8) }, valueRange = 1f..8f, steps = 6)
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 Button(onClick = { apply("extrude", value = 0.2f, faces = selectedFaceArray()) }) { Text("Extrude") }
                 Button(onClick = { apply("inset", value = 0.08f, faces = selectedFaceIds.toIntArray().takeIf { it.isNotEmpty() } ?: intArrayOf(faceIndex.toIntOrNull() ?: 0)) }) { Text("Inset") }
-                Button(onClick = { apply("bevel", value = 0.08f, faces = selectedFaceIds.toIntArray().takeIf { it.isNotEmpty() } ?: intArrayOf(faceIndex.toIntOrNull() ?: 0)) }) { Text("Bevel") }
+                Button(onClick = { apply("bevel", parameter = bevelSegments, value = 0.08f, faces = selectedFaceIds.toIntArray().takeIf { it.isNotEmpty() } ?: intArrayOf(faceIndex.toIntOrNull() ?: 0)) }) { Text("Bevel") }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 Button(onClick = { apply("subdivide") }) { Text("Subdividir") }

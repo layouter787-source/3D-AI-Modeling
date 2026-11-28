@@ -60,6 +60,8 @@ PolyMesh catmullClark(const PolyMesh& m, int levels);
 PolyMesh extrudeFaces(const PolyMesh& m, const std::vector<int>& faces, float distance, bool useDir,
                       Vec3 dir, float scale);
 PolyMesh insetFaces(const PolyMesh& m, const std::vector<int>& faces, float amount);
+// Polygon-face bevel with evenly spaced profile rings. Width is relative to face center.
+PolyMesh bevelFaces(const PolyMesh& m, const std::vector<int>& faces, float width, float depth, int segments);
 PolyMesh loopCut(const PolyMesh& m, uint32_t a, uint32_t b, int cuts);
 // Returns ordered face IDs along the quad edge loop seeded by edge (a,b).
 std::vector<int> edgeLoopFaces(const PolyMesh& m, uint32_t a, uint32_t b);

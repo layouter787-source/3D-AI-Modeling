@@ -228,7 +228,7 @@ object ToolDispatcher {
             .put("metallic",num).put("roughness",num),listOf("object_id","color")))
         list.put(tool("sculpt_mesh","Apply a sculpt displacement stroke.",JSONObject().put("object_id",id)
             .put("center",vecSchema("center")).put("radius",num).put("offset",vecSchema("offset")),listOf("object_id","center","radius","offset")))
-        list.put(tool("mesh_operation","Apply a native polygon topology operation.",JSONObject().put("object_id",id)
+        list.put(tool("mesh_operation","Apply a native polygon topology operation. For bevel, set parameter to 1-8 profile segments and value to the signed bevel depth/width.",JSONObject().put("object_id",id)
             .put("operation",str).put("faces",JSONObject().put("type","array").put("items",id))
             .put("parameter",JSONObject().put("type","integer")).put("value",num).put("other_object_id",id),listOf("object_id","operation")))
         list.put(tool("combine_objects","Combine two editable objects.",JSONObject().put("object_id",id).put("other_object_id",id),listOf("object_id","other_object_id")))

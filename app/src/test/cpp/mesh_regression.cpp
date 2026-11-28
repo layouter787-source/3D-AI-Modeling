@@ -90,6 +90,19 @@ int main() {
     PolyMesh bevel = extrudeFaces(inset, {0}, 0.1f, false, {}, 1.0f);
     for (const auto& edge : edgeUse(bevel)) assert(edge.second == 2);
     assertFinite(bevel);
+    PolyMesh bevelOne = bevelFaces(box, {0}, 0.12f, 0.08f, 1);
+    assert(bevelOne.verts.size() == box.verts.size() + 4);
+    assert(bevelOne.faces.size() == box.faces.size() + 4);
+    for (const auto& edge : edgeUse(bevelOne)) assert(edge.second == 2);
+    assertFinite(bevelOne);
+
+    PolyMesh bevelFour = bevelFaces(box, {0}, 0.12f, 0.08f, 4);
+    assert(bevelFour.verts.size() == box.verts.size() + 16);
+    assert(bevelFour.faces.size() == box.faces.size() + 16);
+    for (const auto& edge : edgeUse(bevelFour)) assert(edge.second == 2);
+    assertFinite(bevelFour);
+    assert(bevelFaces(box, {}, 0.12f, 0.08f, 3).empty());
+    assert(bevelFaces(box, {999}, 0.12f, 0.08f, 3).empty());
 
     PolyMesh plane = makePlanePoly(2.0f, 2.0f, 1, 1);
     PolyMesh planeSub = catmullClark(plane, 1);
