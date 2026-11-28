@@ -421,7 +421,7 @@ private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (
         }
     }
 
-    fun parseVertexIds(): IntArray = vertexIds.split(',', ';', ' ', '\\n')
+    fun parseVertexIds(): IntArray = vertexIds.split(',', ';', ' ')
         .mapNotNull { it.trim().toIntOrNull() }.distinct().toIntArray()
 
     fun selectedFaceArray(): IntArray =
