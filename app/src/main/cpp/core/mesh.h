@@ -15,8 +15,7 @@ struct Mesh {
     std::vector<uint16_t> indices;
 };
 
-// Todas as primitivas ficam centradas na origem, com normais e triângulos
-// em sentido anti-horário visto de fora.
+// Primitivas centradas na origem, normais e triângulos anti-horários de fora.
 Mesh makeCube(float size);
 Mesh makeSphere(float radius, int segments, int rings);
 Mesh makeCylinder(float radius, float height, int segments);

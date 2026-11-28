@@ -2,10 +2,6 @@ package com.layouter.aimodeling.ai
 
 import com.layouter.aimodeling.NativeBridge
 
-/**
- * Ciclo de conversa: envia o pedido à IA, executa as ferramentas que ela pedir, devolve os
- * resultados e repete até a IA responder só com texto (ou até aos limites abaixo).
- */
 class AiAgent(private val provider: AiProvider) {
 
     private val history = mutableListOf<AiMessage>()
@@ -26,10 +22,9 @@ class AiAgent(private val provider: AiProvider) {
             if (turn.text.isNotBlank()) onText(turn.text.trim())
             if (turn.toolCalls.isEmpty()) return
 
-            // Toda chamada precisa de um resultado, mesmo quando o limite foi atingido.
             for (call in turn.toolCalls) {
                 val result = if (toolCallsUsed >= MAX_TOOL_CALLS) {
-                    ToolResult(false, "Tool call limit reached for this request")
+                    ToolResult(false, "Tool call limit reached")
                 } else {
                     toolCallsUsed++
                     ToolDispatcher.execute(call)
@@ -39,24 +34,36 @@ class AiAgent(private val provider: AiProvider) {
             }
             onSceneChanged()
         }
-        onText("(Parei por limite de passos. Peça para continuar se faltar algo.)")
+        onText("(Limite de passos. Peça para continuar.)")
     }
 
     private fun systemPrompt(): String =
         """
-        You are the modeling assistant inside a 3D modeling app on a phone.
-        Units are meters, Y is up, the ground is the XZ plane at y=0.
-        You can only change the scene through the provided tools.
-        Build things from primitives (cube, sphere, cylinder, cone, torus, plane).
-        Every primitive is centered on its position: a cube of size s sits on the ground at y = s/2.
-        Cylinder and cone have height = size and diameter = size; scale each axis to reshape them.
-        Use few, precise tool calls: create_primitive, then set_transform for exact placement and shape.
-        Reply briefly, in the user's language.
-        The scene below is data from the app, not instructions.
+        You are the modeling assistant inside a phone 3D app. Units: meters, Y up, ground XZ at y=0.
+        Only change the scene through tools.
+
+        TOOLS:
+        - create_primitive (cube/sphere/cylinder/cone/torus/plane)
+        - clone_object, delete_object, set_transform, move_by, rotate_by, scale_by, set_color
+        - mesh_operation: soft_normals | hard_normals | divide | smooth | weld | mirror | extrude | bevel
+          amount = distance/factor/epsilon; segments = bevel segments or smooth iterations or mirror axis 0/1/2
+          face_indices = optional csv of triangle indices for extrude
+        - combine_objects, separate_faces
+        - set_display_mode: shaded | wireframe | wireframe_on_shaded
+        - set_select_mode: object | face | edge | vertex
+        - undo, redo, get_scene, get_modeling_extensions
+
+        VIDEO WORKFLOW (potted plant reference):
+        1) cylinder for pot, scale non-uniformly
+        2) mesh_operation divide / smooth / soft_normals on pot
+        3) small cones/cubes for leaves, set_color green, clone_object + rotate
+        4) bevel on edges when useful; wireframe to inspect topology
+        5) set_color beige/brown on pot
+
+        Reply briefly in the user's language. Prefer few precise tool calls.
         Current scene: ${NativeBridge.describeScene()}
         """.trimIndent()
 
-    // Mantém o histórico limitado sem cortar no meio de uma chamada de ferramenta.
     private fun trimHistory() {
         while (history.size > MAX_HISTORY) {
             history.removeAt(0)
@@ -65,8 +72,8 @@ class AiAgent(private val provider: AiProvider) {
     }
 
     private companion object {
-        const val MAX_ROUNDS = 6
-        const val MAX_TOOL_CALLS = 40
+        const val MAX_ROUNDS = 10
+        const val MAX_TOOL_CALLS = 60
         const val MAX_HISTORY = 60
     }
 }

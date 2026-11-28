@@ -5,18 +5,16 @@ object NativeBridge {
         System.loadLibrary("aimodeling")
     }
 
-    // Ciclo de vida do GL (thread do GL)
     external fun onSurfaceCreated()
     external fun onSurfaceChanged(width: Int, height: Int)
     external fun onDrawFrame()
 
-    // Câmera
     external fun onOrbit(dx: Float, dy: Float)
     external fun onPan(dx: Float, dy: Float)
     external fun onZoom(factor: Float)
 
-    // Edição da cena (seguras em qualquer thread). Rotações em graus.
     external fun addPrimitive(type: Int, size: Float, x: Float, y: Float, z: Float): Int
+    external fun cloneObject(id: Int): Int
     external fun deleteObject(id: Int): Boolean
     external fun setTransform(
         id: Int,
@@ -29,13 +27,20 @@ object NativeBridge {
     external fun scaleBy(id: Int, fx: Float, fy: Float, fz: Float): Boolean
     external fun setColor(id: Int, r: Float, g: Float, b: Float): Boolean
 
-    // Histórico
+    external fun setDisplayMode(mode: String): Boolean
+
+    /** op: soft_normals, hard_normals, divide, smooth, weld, mirror, extrude, bevel */
+    external fun meshOp(id: Int, op: String, amount: Float, segments: Int, faceIndices: IntArray?): Boolean
+    external fun combineObjects(idA: Int, idB: Int): Int
+    external fun separateFaces(id: Int, faceIndices: IntArray?): Int
+    external fun setSelectMode(mode: String): Boolean
+    external fun setSelectedFaces(faceIndices: IntArray?): Boolean
+
     external fun undo(): Boolean
     external fun redo(): Boolean
     external fun canUndo(): Boolean
     external fun canRedo(): Boolean
 
-    // Seleção e consulta
     external fun select(id: Int)
     external fun getSelected(): Int
     external fun pickAt(x: Float, y: Float): Int
