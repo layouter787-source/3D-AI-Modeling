@@ -36,6 +36,19 @@ int main() {
     PolyMesh subdiv1 = catmullClark(box, 1);
     assert(subdiv1.faces.size() == 24 && subdiv1.verts.size() == 26);
     for (const auto& edge : edgeUse(subdiv1)) assert(edge.second == 2);
+    PolyMesh creasedBox = box;
+    creasedBox.creases.push_back({0u, 1u});
+    PolyMesh creaseSub = catmullClark(creasedBox, 1);
+    assert(!creaseSub.creases.empty());
+    for (const auto& crease : creaseSub.creases) {
+        assert(crease.first < creaseSub.verts.size() && crease.second < creaseSub.verts.size());
+        assert(crease.first != crease.second);
+    }
+
+    PolyMesh twoFaceExtrusion = extrudeFaces(box, {0, 1}, 0.2f, false, {}, 1.0f);
+    for (const auto& edge : edgeUse(twoFaceExtrusion)) assert(edge.second == 2);
+    assertFinite(twoFaceExtrusion);
+
     PolyMesh subdiv2 = catmullClark(box, 2);
     assert(subdiv2.faces.size() == 96);
     assertFinite(subdiv2);
