@@ -39,4 +39,12 @@ class AiException(message: String, val httpCode: Int? = null, cause: Throwable? 
 interface AiProvider {
     val displayName: String
     suspend fun send(system: String, messages: List<AiMessage>, tools: JSONArray): AiTurn
+
+    suspend fun sendStreaming(
+        system: String, messages: List<AiMessage>, tools: JSONArray, onTextDelta: (String) -> Unit
+    ): AiTurn {
+        val turn = send(system, messages, tools)
+        if (turn.text.isNotEmpty()) onTextDelta(turn.text)
+        return turn
+    }
 }
