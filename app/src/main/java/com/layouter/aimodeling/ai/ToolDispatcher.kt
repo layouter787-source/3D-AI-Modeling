@@ -174,7 +174,7 @@ object ToolDispatcher {
         .put("native_mesh_operations",JSONArray(listOf("subdivide","extrude","inset","bevel","delete_faces",
             "clone_faces","create_face","merge_vertices","target_merge","soft_normals","hard_normals","normal_angle",
             "smooth","solidify","mirror","loop_cut","connect","triangulate","flip_normals","weld","crease_by_angle",
-            "boolean_union","boolean_difference","boolean_intersection")))
+            "boolean_union","boolean_difference","boolean_intersection","draw_cut","split_edge")))
         .put("native_tools",JSONArray(listOf("GLB import/export","component picking","wireframe display",
             "vertex paint","PBR materials","loft meshes","sculpt strokes","OBJ/MTL export")))
         .put("research_only",JSONArray(listOf("voxel remesh","QuadriFlow","UV editing","rigging","animation",
