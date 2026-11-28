@@ -51,6 +51,11 @@ int main() {
     assertFinite(split);
     assert(splitEdge(box, 0u, 999u, 0.5f).empty());
     assert(splitEdge(box, 0u, 1u, std::numeric_limits<float>::quiet_NaN()).empty());
+    PolyMesh directedSplit = splitEdge(box, 1u, 0u, 0.25f);
+    assert(directedSplit.verts.size() == box.verts.size() + 1);
+    const Vec3 expectedDirected = lerp(box.verts[1], box.verts[0], 0.25f);
+    assert(length(directedSplit.verts.back() - expectedDirected) < 1e-5f);
+
 
     PolyMesh subdiv1 = catmullClark(box, 1);
     assert(subdiv1.faces.size() == 24 && subdiv1.verts.size() == 26);
