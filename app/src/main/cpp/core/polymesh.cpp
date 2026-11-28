@@ -865,6 +865,52 @@ PolyMesh splitEdge(const PolyMesh& m, uint32_t a, uint32_t b, float t) {
     return out;
 }
 
+std::vector<int> edgeLoopFaces(const PolyMesh& m, uint32_t a, uint32_t b) {
+    if (a == b || a >= m.verts.size() || b >= m.verts.size()) return {};
+    std::unordered_map<uint64_t, std::vector<int>> edgeFaces;
+    for (size_t f = 0; f < m.faces.size(); ++f) {
+        const auto& face = m.faces[f];
+        if (face.size() < 3) return {};
+        for (uint32_t v : face) if (v >= m.verts.size()) return {};
+        for (size_t k = 0; k < face.size(); ++k)
+            edgeFaces[edgeKey(face[k], face[(k + 1) % face.size()])].push_back(static_cast<int>(f));
+    }
+    const auto start = edgeFaces.find(edgeKey(a, b));
+    if (start == edgeFaces.end() || start->second.empty() || start->second.size() > 2) return {};
+
+    auto localEdge = [&](int faceId, uint64_t key) -> int {
+        const auto& face = m.faces[static_cast<size_t>(faceId)];
+        if (face.size() != 4) return -1;
+        for (int k = 0; k < 4; ++k)
+            if (edgeKey(face[static_cast<size_t>(k)], face[static_cast<size_t>((k + 1) % 4)]) == key) return k;
+        return -1;
+    };
+
+    std::vector<int> ordered;
+    std::unordered_set<int> visited;
+    for (int seed : start->second) {
+        int faceId = seed;
+        int enter = localEdge(faceId, edgeKey(a, b));
+        if (enter < 0) continue;
+        while (visited.insert(faceId).second) {
+            ordered.push_back(faceId);
+            const auto& face = m.faces[static_cast<size_t>(faceId)];
+            const uint64_t exitKey = edgeKey(face[static_cast<size_t>((enter + 2) % 4)],
+                                             face[static_cast<size_t>((enter + 3) % 4)]);
+            const auto adjacent = edgeFaces.find(exitKey);
+            if (adjacent == edgeFaces.end() || adjacent->second.size() != 2) break;
+            int next = -1;
+            for (int candidate : adjacent->second) if (candidate != faceId) next = candidate;
+            if (next < 0 || visited.count(next) != 0) break;
+            const int nextEnter = localEdge(next, exitKey);
+            if (nextEnter < 0) break;
+            faceId = next;
+            enter = nextEnter;
+        }
+    }
+    return ordered;
+}
+
 PolyMesh loopCut(const PolyMesh& m, uint32_t a, uint32_t b, int cuts) {
     cuts = clampInt(cuts, 1, 32);
     const size_t F = m.faces.size();
