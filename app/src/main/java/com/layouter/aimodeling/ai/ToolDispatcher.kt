@@ -78,7 +78,7 @@ object ToolDispatcher {
             "read_webpage" -> ToolResult(true,InternetTools.readPage(a.getString("url")))
             else -> {
                 val external = RemoteMcpConnector.execute(call.name, a)
-                if (external != null) ToolResult(true, external)
+                if (external != null) external
                 else ToolResult(false,"Unknown tool: " + call.name)
             }
         }
