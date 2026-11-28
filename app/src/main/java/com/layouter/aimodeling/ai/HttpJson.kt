@@ -8,6 +8,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.job
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -58,7 +59,7 @@ internal object HttpJson {
                     if (line.isEmpty()) {
                         if (data.isNotEmpty()) { onData(data.toString()); data = StringBuilder() }
                     } else if (line.startsWith("data:")) {
-                        if (data.isNotEmpty()) data.append('\\n')
+                        if (data.isNotEmpty()) data.append('\n')
                         data.append(line.substring(5).trimStart())
                     }
                 }
