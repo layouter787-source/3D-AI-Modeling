@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdint>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <utility>
 
@@ -32,6 +33,19 @@ int main() {
     PolyMesh box = makeBoxPoly({2.0f,2.0f,2.0f}, 1, 1, 1);
     assert(!box.empty() && box.faces.size() == 6 && box.verts.size() == 8);
     for (const auto& edge : edgeUse(box)) assert(edge.second == 2);
+
+    PolyMesh split = splitEdge(box, 0u, 1u, 0.5f);
+    assert(split.verts.size() == box.verts.size() + 1);
+    assert(split.faces.size() == box.faces.size());
+    size_t splitFaceCount = 0;
+    for (const auto& face : split.faces) {
+        if (face.size() == 5) ++splitFaceCount;
+    }
+    assert(splitFaceCount == 2); // the edge is shared by two box faces
+    for (const auto& edge : edgeUse(split)) assert(edge.second == 2);
+    assertFinite(split);
+    assert(splitEdge(box, 0u, 999u, 0.5f).empty());
+    assert(splitEdge(box, 0u, 1u, std::numeric_limits<float>::quiet_NaN()).empty());
 
     PolyMesh subdiv1 = catmullClark(box, 1);
     assert(subdiv1.faces.size() == 24 && subdiv1.verts.size() == 26);
