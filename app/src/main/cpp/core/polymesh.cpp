@@ -702,6 +702,52 @@ PolyMesh insetFaces(const PolyMesh& m, const std::vector<int>& sel, float amount
     return out;
 }
 
+PolyMesh connectVertices(const PolyMesh& m, uint32_t a, uint32_t b) {
+    if (a >= m.verts.size() || b >= m.verts.size() || a == b) {
+        throw std::runtime_error("invalid vertex pair");
+    }
+    PolyMesh out;
+    out.verts = m.verts;
+    out.creases = m.creases;
+    bool connected = false;
+
+    for (const auto& face : m.faces) {
+        auto ia = std::find(face.begin(), face.end(), a);
+        auto ib = std::find(face.begin(), face.end(), b);
+        if (ia == face.end() || ib == face.end()) {
+            out.faces.push_back(face);
+            continue;
+        }
+        const size_t ai = static_cast<size_t>(std::distance(face.begin(), ia));
+        const size_t bi = static_cast<size_t>(std::distance(face.begin(), ib));
+        const size_t count = face.size();
+        if ((ai + 1) % count == bi || (bi + 1) % count == ai) {
+            out.faces.push_back(face);
+            continue;
+        }
+
+        std::vector<uint32_t> first;
+        for (size_t i = ai;; i = (i + 1) % count) {
+            first.push_back(face[i]);
+            if (i == bi) break;
+        }
+        std::vector<uint32_t> second;
+        for (size_t i = bi;; i = (i + 1) % count) {
+            second.push_back(face[i]);
+            if (i == ai) break;
+        }
+        if (first.size() < 3 || second.size() < 3) {
+            out.faces.push_back(face);
+            continue;
+        }
+        addFace(out, first);
+        addFace(out, second);
+        connected = true;
+    }
+    if (!connected) throw std::runtime_error("vertices do not share a splittable polygon face");
+    return out;
+}
+
 PolyMesh loopCut(const PolyMesh& m, uint32_t a, uint32_t b, int cuts) {
     cuts = clampInt(cuts, 1, 32);
     const size_t F = m.faces.size();
