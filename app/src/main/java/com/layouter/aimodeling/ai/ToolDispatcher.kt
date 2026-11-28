@@ -72,10 +72,15 @@ object ToolDispatcher {
             "undo" -> report(NativeBridge.undo(),"Undo completed","Nothing to undo")
             "redo" -> report(NativeBridge.redo(),"Redo completed","Nothing to redo")
             "get_scene" -> ToolResult(true,NativeBridge.describeScene())
+            "inspect_scene" -> inspectScene()
             "get_modeling_extensions" -> modelingExtensions()
             "web_search" -> ToolResult(true,InternetTools.search(a.getString("query")))
             "read_webpage" -> ToolResult(true,InternetTools.readPage(a.getString("url")))
-            else -> ToolResult(false,"Unknown tool: " + call.name)
+            else -> {
+                val external = RemoteMcpConnector.execute(call.name, a)
+                if (external != null) ToolResult(true, external)
+                else ToolResult(false,"Unknown tool: " + call.name)
+            }
         }
     }
 
@@ -137,6 +142,22 @@ object ToolDispatcher {
         val ok=NativeBridge.meshOperation(a.getInt("object_id"),a.getString("operation"),faces(a),
             a.optInt("parameter",1).coerceIn(1,100),a.optDouble("value",0.1).toFloat(),a.optInt("other_object_id",-1))
         return report(ok,"Mesh operation completed","Mesh operation failed")
+    }
+
+    private fun inspectScene(): ToolResult {
+        val scene = JSONObject(NativeBridge.describeScene())
+        val objects = scene.optJSONArray("objects") ?: JSONArray()
+        val inspected = JSONArray()
+        for (index in 0 until minOf(objects.length(), 32)) {
+            val item = objects.optJSONObject(index) ?: continue
+            val id = item.optInt("id", -1)
+            if (id < 0) continue
+            inspected.put(JSONObject().put("object", item)
+                .put("topology_preview", NativeBridge.getMeshTopology(id, 0, 48)))
+        }
+        return ToolResult(true, JSONObject().put("scene", scene)
+            .put("object_count", objects.length()).put("mesh_inspection", inspected)
+            .put("note", "Structured scene and mesh data only; this response is not a rendered viewport screenshot.").toString())
     }
 
     private fun objectDetails(a: JSONObject): ToolResult {
@@ -232,10 +253,13 @@ object ToolDispatcher {
         list.put(tool("pick_component","Pick a viewport component.",JSONObject().put("x",num).put("y",num).put("mode",str).put("object_id",id),listOf("x","y","mode")))
         list.put(tool("undo","Undo the last edit.",JSONObject(),emptyList()))
         list.put(tool("redo","Redo the last undone edit.",JSONObject(),emptyList()))
-        list.put(tool("get_scene","Get scene JSON.",JSONObject(),emptyList()))
+        list.put(tool("get_scene","Get current scene JSON.",JSONObject(),emptyList()))
+        list.put(tool("inspect_scene","Inspect scene objects and bounded mesh topology after edits; use this to verify actual changes and identify invalid or unchanged geometry. This is structured data, not a screenshot.",JSONObject(),emptyList()))
         list.put(tool("get_modeling_extensions","List native tools and research-only entries.",JSONObject(),emptyList()))
         list.put(tool("web_search","Search public references.",JSONObject().put("query",str),listOf("query")))
         list.put(tool("read_webpage","Read a public HTTPS reference.",JSONObject().put("url",str),listOf("url")))
+        val external = RemoteMcpConnector.toolDefinitions()
+        for (index in 0 until external.length()) list.put(external.getJSONObject(index))
         return list
     }
 }
