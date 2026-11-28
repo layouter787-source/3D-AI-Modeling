@@ -1,0 +1,9 @@
+name = "manus-3d-mcp-relay"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+[[durable_objects.bindings]]
+name = "LINKS"
+class_name = "McpLink"
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["McpLink"]
