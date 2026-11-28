@@ -893,6 +893,45 @@ bool Editor::setMaterial(int id, Material material) {
     return true;
 }
 
+std::vector<float> Editor::getVertexColors(int id) const {
+    const Object* object = scene_.find(id);
+    if (object == nullptr || object->topology.empty()) return {};
+    std::vector<float> result;
+    result.reserve(object->vertexColors.size() * 3);
+    for (const Vec3& color : object->vertexColors) {
+        result.push_back(color.x);
+        result.push_back(color.y);
+        result.push_back(color.z);
+    }
+    return result;
+}
+
+bool Editor::setVertexColors(int id, const std::vector<float>& rgb) {
+    Object* object = scene_.find(id);
+    if (object == nullptr || object->topology.empty() ||
+        rgb.size() != object->topology.verts.size() * 3) return false;
+    std::vector<Vec3> colors(object->topology.verts.size());
+    for (size_t i = 0; i < colors.size(); ++i) {
+        const float r = rgb[i * 3];
+        const float g = rgb[i * 3 + 1];
+        const float b = rgb[i * 3 + 2];
+        if (!std::isfinite(r) || !std::isfinite(g) || !std::isfinite(b)) return false;
+        colors[i] = {std::clamp(r, 0.0f, 1.0f),
+                     std::clamp(g, 0.0f, 1.0f),
+                     std::clamp(b, 0.0f, 1.0f)};
+    }
+    Mesh beforeMesh = object->mesh;
+    Mesh afterMesh = buildRenderMesh(object->topology, object->smoothAngle, colors);
+    if (afterMesh.indices.empty()) return false;
+    execute(std::make_unique<MeshCommand>(
+        id, std::move(beforeMesh), std::move(afterMesh),
+        object->topology, object->topology,
+        object->smoothAngle, object->smoothAngle,
+        object->vertexColors, colors
+    ));
+    return true;
+}
+
 void Editor::clearScene() {
     paintStrokeObjectId_ = -1;
     paintStrokeChanged_ = false;
