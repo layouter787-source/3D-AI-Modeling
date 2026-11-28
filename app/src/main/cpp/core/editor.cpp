@@ -420,7 +420,7 @@ bool Editor::meshOperation(int id, const std::string& operation, const std::vect
         afterSmoothAngle = 180.0f;
     } else if (operation == "hard_normals") {
         result = source;
-        afterSmoothAngle = 35.0f;
+        afterSmoothAngle = 0.0f;
     } else if (operation == "normal_angle") {
         result = source;
         afterSmoothAngle = std::clamp(value, 0.0f, 180.0f);
@@ -960,6 +960,7 @@ bool Editor::undo() {
 }
 
 bool Editor::redo() {
+    if (paintStrokeObjectId_ >= 0) endVertexPaintStroke();
     if (redo_.empty()) return false;
     std::unique_ptr<Command> command = std::move(redo_.back());
     redo_.pop_back();
