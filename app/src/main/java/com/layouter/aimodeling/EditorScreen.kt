@@ -348,9 +348,12 @@ private fun LightingDialog(onClose: () -> Unit) {
 @Composable
 private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (String) -> Unit, onClose: () -> Unit, onChanged: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    fun apply(operation: String, parameter: Int = 1, value: Float = 0.15f, faces: IntArray = intArrayOf()) {
+    var edgeA by remember { mutableStateOf("0") }
+    var edgeB by remember { mutableStateOf("1") }
+    var booleanTarget by remember { mutableStateOf("") }
+    fun apply(operation: String, parameter: Int = 1, value: Float = 0.15f, faces: IntArray = intArrayOf(), otherObjectId: Int = -1) {
         if (selected < 0) { Toast.makeText(context, "Seleciona um objeto primeiro", Toast.LENGTH_SHORT).show(); return }
-        val ok = NativeBridge.meshOperation(selected, operation, faces, parameter, value)
+        val ok = NativeBridge.meshOperation(selected, operation, faces, parameter, value, otherObjectId)
         Toast.makeText(context, if (ok) "Malha alterada · Undo disponível" else "Operação falhou: verifica a topologia", Toast.LENGTH_SHORT).show()
         if (ok) onChanged()
     }
@@ -359,6 +362,22 @@ private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (
             Text("Ferramentas de geometria nativa. As alterações entram no Undo/Redo.")
             Text("Face ID (pede à IA: get_mesh_topology)")
             OutlinedTextField(faceIndex, onFaceIndex, label = { Text("Índice da face") }, singleLine = true)
+            Text("Cortes e ligações · IDs dos dois vértices da aresta", style = MaterialTheme.typography.labelMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                OutlinedTextField(edgeA, { edgeA = it.filter(Char::isDigit) }, label = { Text("Vértice A") }, modifier = Modifier.weight(1f), singleLine = true)
+                OutlinedTextField(edgeB, { edgeB = it.filter(Char::isDigit) }, label = { Text("Vértice B") }, modifier = Modifier.weight(1f), singleLine = true)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Button(onClick = { apply("loop_cut", parameter = 1, faces = intArrayOf(edgeA.toIntOrNull() ?: 0, edgeB.toIntOrNull() ?: 1)) }) { Text("Loop Cut") }
+                Button(onClick = { apply("connect", parameter = 1, faces = intArrayOf(edgeA.toIntOrNull() ?: 0, edgeB.toIntOrNull() ?: 1)) }) { Text("Connect") }
+            }
+            Text("Boolean · ID do segundo objeto", style = MaterialTheme.typography.labelMedium)
+            OutlinedTextField(booleanTarget, { booleanTarget = it.filter(Char::isDigit) }, label = { Text("ID do objeto operand") }, singleLine = true)
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Button(onClick = { apply("boolean_union", otherObjectId = booleanTarget.toIntOrNull() ?: -1) }) { Text("Union") }
+                Button(onClick = { apply("boolean_difference", otherObjectId = booleanTarget.toIntOrNull() ?: -1) }) { Text("Difference") }
+                Button(onClick = { apply("boolean_intersection", otherObjectId = booleanTarget.toIntOrNull() ?: -1) }) { Text("Intersect") }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 Button(onClick = { apply("extrude", value = 0.2f, faces = intArrayOf(faceIndex.toIntOrNull() ?: 0)) }) { Text("Extrude") }
                 Button(onClick = { apply("inset", value = 0.08f, faces = intArrayOf(faceIndex.toIntOrNull() ?: 0)) }) { Text("Inset") }
