@@ -48,7 +48,7 @@ import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Image as GalleryImage
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Person
@@ -548,7 +548,7 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
                                 Icon(Icons.Outlined.Add, "Adicionar referência", tint = MaterialTheme.colorScheme.primary)
                             }
                             DropdownMenu(expanded = attachmentMenu, onDismissRequest = { attachmentMenu = false }) {
-                                DropdownMenuItem(text = { Text("Galeria") }, leadingIcon = { Icon(Icons.Outlined.Image, null) }, onClick = {
+                                DropdownMenuItem(text = { Text("Galeria") }, leadingIcon = { Icon(GalleryImage, null) }, onClick = {
                                     attachmentMenu = false
                                     galleryPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                                 })
