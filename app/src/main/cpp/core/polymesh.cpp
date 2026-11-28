@@ -277,9 +277,9 @@ PolyMesh makePipePoly(float outerRadius, float innerRadius, float height, int ra
     PolyMesh mesh;
     const uint32_t ringSize = static_cast<uint32_t>(radial);
     const uint32_t outerBottom = 0;
-    const uint32_t outerTop = ringSize * static_cast<uint32_t>(heightSegments + 1);
-    const uint32_t innerBottom = outerTop + ringSize;
-    const uint32_t innerTop = innerBottom + ringSize * static_cast<uint32_t>(heightSegments + 1);
+    const uint32_t outerTop = ringSize * static_cast<uint32_t>(heightSegments);
+    const uint32_t innerBottom = ringSize * static_cast<uint32_t>(heightSegments + 1);
+    const uint32_t innerTop = innerBottom + ringSize * static_cast<uint32_t>(heightSegments);
 
     // Outer and inner walls use independent rings so the wall has real thickness.
     for (int level = 0; level <= heightSegments; ++level) {
