@@ -32,6 +32,7 @@ std::vector<Vec3> vertexNormals(const PolyMesh& m);
 PolyMesh makeBoxPoly(Vec3 size, int sx, int sy, int sz);
 PolyMesh makeSpherePoly(float radius, int segments);  // esfera de quads (cubo projetado)
 PolyMesh makeCylinderPoly(float radius, float height, int radial, int heightSegments, bool caps);
+PolyMesh makePipePoly(float outerRadius, float innerRadius, float height, int radial, int heightSegments);
 PolyMesh makeConePoly(float radius, float height, int radial, bool cap);
 PolyMesh makeTorusPoly(float majorRadius, float minorRadius, int segments, int sides);
 PolyMesh makePlanePoly(float width, float depth, int sx, int sz);
