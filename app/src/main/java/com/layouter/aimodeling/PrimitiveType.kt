@@ -12,7 +12,15 @@ enum class PrimitiveType(val id: Int, val apiName: String, val label: String) {
     CAPSULE(7, "capsule", "Cápsula"),
     OCTAHEDRON(8, "octahedron", "Octaedro"),
     HEX_PRISM(9, "hex_prism", "Prisma hexagonal"),
-    CUSTOM_MESH(10, "custom_mesh", "Malha personalizada");
+    CUSTOM_MESH(10, "custom_mesh", "Malha personalizada"),
+    TRI_PRISM(11, "tri_prism", "Prisma triangular"),
+    PENT_PRISM(12, "pent_prism", "Prisma pentagonal"),
+    OCT_PRISM(13, "oct_prism", "Prisma octogonal"),
+    DEC_PRISM(14, "dec_prism", "Prisma decagonal"),
+    DODEC_PRISM(15, "dodec_prism", "Prisma dodecagonal"),
+    TETRAHEDRON(16, "tetrahedron", "Tetraedro"),
+    ICOSAHEDRON(17, "icosahedron", "Icosaedro"),
+    ICOSPHERE(18, "icosphere", "Icosfera");
 
     companion object {
         fun fromApiName(name: String): PrimitiveType? = values().firstOrNull { it.apiName == name }
