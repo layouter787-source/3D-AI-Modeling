@@ -628,7 +628,12 @@ private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (
             Text("Segmentos do Loop Cut: $loopCutSegments", style = MaterialTheme.typography.labelMedium)
             Slider(value = loopCutSegments.toFloat(), onValueChange = { loopCutSegments = it.toInt().coerceIn(1, 8) }, valueRange = 1f..8f, steps = 6)
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                Button(onClick = {\n                    val loop = NativeBridge.getEdgeLoopFaces(selected, edgeA.toIntOrNull() ?: 0, edgeB.toIntOrNull() ?: 1)\n                    selectedFaceIds = loop.toSet()\n                    Toast.makeText(context, if (loop.isNotEmpty()) "Edge loop: ${loop.size} faces" else "Não foi encontrado um loop quadrangular", Toast.LENGTH_SHORT).show()\n                }, enabled = selected >= 0) { Text("Select Edge Loop") }\n                Button(onClick = { apply("loop_cut", parameter = loopCutSegments, faces = intArrayOf(edgeA.toIntOrNull() ?: 0, edgeB.toIntOrNull() ?: 1)) }) { Text("Loop Cut") }
+                Button(onClick = {
+                    val loop = NativeBridge.getEdgeLoopFaces(selected, edgeA.toIntOrNull() ?: 0, edgeB.toIntOrNull() ?: 1)
+                    selectedFaceIds = loop.toSet()
+                    Toast.makeText(context, if (loop.isNotEmpty()) "Edge loop: ${loop.size} faces" else "Não foi encontrado um loop quadrangular", Toast.LENGTH_SHORT).show()
+                }, enabled = selected >= 0) { Text("Select Edge Loop") }
+                Button(onClick = { apply("loop_cut", parameter = loopCutSegments, faces = intArrayOf(edgeA.toIntOrNull() ?: 0, edgeB.toIntOrNull() ?: 1)) }) { Text("Loop Cut") }
                 Button(onClick = { apply("connect", parameter = 1, faces = intArrayOf(edgeA.toIntOrNull() ?: 0, edgeB.toIntOrNull() ?: 1)) }) { Text("Connect") }
                 Button(onClick = { apply("draw_cut", value = 0.5f, faces = intArrayOf(edgeA.toIntOrNull() ?: 0, edgeB.toIntOrNull() ?: 1)) }) { Text("Draw Cut / Split") }
             }
