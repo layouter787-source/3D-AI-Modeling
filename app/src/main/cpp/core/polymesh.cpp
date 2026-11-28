@@ -670,16 +670,36 @@ PolyMesh catmullClarkOnce(const PolyMesh& m) {
 
 size_t estimateSubdividedFaces(const PolyMesh& m, int levels) {
     if (levels <= 0) return m.faces.size();
+    constexpr size_t kSaturation = 250001;
     size_t corners = 0;
-    for (const auto& f : m.faces) corners += f.size();
+    for (const auto& face : m.faces) {
+        if (face.size() > kSaturation - std::min(corners, kSaturation)) return kSaturation;
+        corners += face.size();
+        if (corners >= kSaturation) return kSaturation;
+    }
     size_t total = corners;
-    for (int i = 1; i < levels; ++i) total *= 4;
+    for (int i = 1; i < std::min(levels, 8); ++i) {
+        if (total > kSaturation / 4) return kSaturation;
+        total *= 4;
+    }
     return total;
 }
 
 PolyMesh catmullClark(const PolyMesh& m, int levels) {
+    if (m.empty() || m.verts.size() > 250000 || m.faces.size() > 250000) return {};
+    for (const Vec3& v : m.verts)
+        if (!std::isfinite(v.x) || !std::isfinite(v.y) || !std::isfinite(v.z)) return {};
+    for (const auto& face : m.faces) {
+        if (face.size() < 3 || face.size() > 4096) return {};
+        for (uint32_t index : face) if (index >= m.verts.size()) return {};
+    }
+    levels = std::clamp(levels, 0, 3);
+    if (estimateSubdividedFaces(m, levels) > 180000) return {};
     PolyMesh cur = m;
-    for (int i = 0; i < levels; ++i) cur = catmullClarkOnce(cur);
+    for (int i = 0; i < levels; ++i) {
+        cur = catmullClarkOnce(cur);
+        if (cur.empty() || cur.verts.size() > 250000 || cur.faces.size() > 250000) return {};
+    }
     return cur;
 }
 
