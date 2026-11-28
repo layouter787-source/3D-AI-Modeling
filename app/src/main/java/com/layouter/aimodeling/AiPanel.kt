@@ -385,6 +385,8 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
                     .padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                McpCloudPanel()
+                Divider()
                 Text("Ligação à IA", color = Color.White, style = MaterialTheme.typography.titleSmall)
                 Text("Escolhe o serviço e consulta os modelos que a tua chave pode ver.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
 
