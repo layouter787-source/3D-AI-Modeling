@@ -45,6 +45,7 @@ import androidx.compose.material.icons.outlined.ZoomOut
 import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.WbSunny
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
@@ -257,10 +258,10 @@ fun EditorScreen(isDarkTheme: Boolean = true, onToggleTheme: () -> Unit = {}) {
                 Icon(Icons.Outlined.FileDownload, "Export OBJ", tint = Color(0xFFBFC7D1))
             }
             IconButton(onClick = { showAi = !showAi }) {
-                Icon(Icons.Outlined.SmartToy, "Assistente IA", tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Outlined.AutoAwesome, "Assistente IA", tint = MaterialTheme.colorScheme.primary)
             }
             IconButton(onClick = { showMeshTools = true }) {
-                Icon(Icons.Outlined.Build, "Ferramentas de malha", tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Outlined.Tune, "Ferramentas de malha", tint = MaterialTheme.colorScheme.primary)
             }
             IconButton(onClick = { showLighting = true }) {
                 Icon(Icons.Outlined.WbSunny, "Luz, sol e céu", tint = Color(0xFFFFC857))
