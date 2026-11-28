@@ -598,6 +598,27 @@ Java_com_layouter_aimodeling_NativeBridge_getFaceShell(JNIEnv* env, jobject, jin
     return result;
 }
 
+JNIEXPORT jboolean JNICALL
+Java_com_layouter_aimodeling_NativeBridge_beginVertexPaintStroke(JNIEnv*, jobject, jint id) {
+    std::lock_guard<std::mutex> lock(gMutex);
+    return toJ(gRenderer.editor.beginVertexPaintStroke(id));
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_layouter_aimodeling_NativeBridge_paintVertexAt(JNIEnv*, jobject, jint id,
+                                                        jfloat x, jfloat y, jfloat radius,
+                                                        jfloat r, jfloat g, jfloat b, jfloat opacity) {
+    std::lock_guard<std::mutex> lock(gMutex);
+    const Ray ray = cameraRay(gRenderer, x, y);
+    return toJ(gRenderer.editor.paintVertexAt(id, ray, radius, Vec3{r, g, b}, opacity));
+}
+
+JNIEXPORT void JNICALL
+Java_com_layouter_aimodeling_NativeBridge_endVertexPaintStroke(JNIEnv*, jobject) {
+    std::lock_guard<std::mutex> lock(gMutex);
+    gRenderer.editor.endVertexPaintStroke();
+}
+
 JNIEXPORT jstring JNICALL
 Java_com_layouter_aimodeling_NativeBridge_getMeshTopology(JNIEnv* env, jobject, jint id, jint offset, jint limit) {
     std::string output;
