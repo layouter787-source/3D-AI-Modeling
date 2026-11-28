@@ -48,7 +48,6 @@ import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.Image as GalleryImage
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Person
@@ -495,7 +494,7 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {
-                                Icon(Icons.Filled.SmartToy, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(19.dp).size(38.dp))
+                                Icon(Icons.Outlined.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(19.dp).size(38.dp))
                             }
                             Text("O que vamos criar?", color = Color.White, style = MaterialTheme.typography.titleLarge)
                             Text(
@@ -510,7 +509,7 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
                 if (busy) {
                     item {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.SmartToy, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(19.dp))
+                            Icon(Icons.Outlined.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(19.dp))
                             Text(" A pensar…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                         }
                     }
@@ -548,7 +547,7 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
                                 Icon(Icons.Outlined.Add, "Adicionar referência", tint = MaterialTheme.colorScheme.primary)
                             }
                             DropdownMenu(expanded = attachmentMenu, onDismissRequest = { attachmentMenu = false }) {
-                                DropdownMenuItem(text = { Text("Galeria") }, leadingIcon = { Icon(GalleryImage, null) }, onClick = {
+                                DropdownMenuItem(text = { Text("Galeria") }, leadingIcon = { Icon(Icons.Outlined.Image, null) }, onClick = {
                                     attachmentMenu = false
                                     galleryPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                                 })
@@ -662,7 +661,7 @@ private fun ChatBubble(line: ChatLine, showActions: Boolean) {
                 when {
                     isError -> Icons.Outlined.Warning
                     isUser -> Icons.Outlined.Person
-                    else -> Icons.Filled.SmartToy
+                    else -> Icons.Outlined.AutoAwesome
                 },
                 null,
                 tint = when {
