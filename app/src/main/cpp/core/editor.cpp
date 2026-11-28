@@ -791,6 +791,48 @@ void Editor::endVertexPaintStroke() {
     paintStrokeBeforeColors_.clear();
 }
 
+bool Editor::paintVertexRegion(int id, Vec3 center, float radius, Color paint, float opacity) {
+    Object* object = scene_.find(id);
+    if (object == nullptr || object->topology.empty() || !finite3(center) ||
+        !std::isfinite(radius) || radius < 0.001f || !std::isfinite(opacity) ||
+        !std::isfinite(paint.r) || !std::isfinite(paint.g) || !std::isfinite(paint.b)) return false;
+
+    radius = std::clamp(radius, 0.001f, 100.0f);
+    opacity = std::clamp(opacity, 0.0f, 1.0f);
+    paint.r = std::clamp(paint.r, 0.0f, 1.0f);
+    paint.g = std::clamp(paint.g, 0.0f, 1.0f);
+    paint.b = std::clamp(paint.b, 0.0f, 1.0f);
+
+    std::vector<Vec3> beforeColors = object->vertexColors;
+    if (beforeColors.size() != object->topology.verts.size()) {
+        beforeColors.assign(object->topology.verts.size(), Vec3{1.0f, 1.0f, 1.0f});
+    }
+    std::vector<Vec3> afterColors = beforeColors;
+    bool changed = false;
+    const Vec3 paintColor{paint.r, paint.g, paint.b};
+    for (size_t i = 0; i < object->topology.verts.size(); ++i) {
+        const float distance = length(object->topology.verts[i] - center);
+        if (distance >= radius) continue;
+        const float t = std::clamp(1.0f - distance / radius, 0.0f, 1.0f);
+        const float alpha = opacity * t * t * (3.0f - 2.0f * t);
+        if (alpha <= 0.001f) continue;
+        afterColors[i] = beforeColors[i] * (1.0f - alpha) + paintColor * alpha;
+        changed = changed || length(afterColors[i] - beforeColors[i]) > 0.0001f;
+    }
+    if (!changed) return false;
+
+    Mesh beforeMesh = object->mesh;
+    Mesh afterMesh = buildRenderMesh(object->topology, object->smoothAngle, afterColors);
+    if (afterMesh.indices.empty()) return false;
+    execute(std::make_unique<MeshCommand>(
+        id, std::move(beforeMesh), std::move(afterMesh),
+        object->topology, object->topology,
+        object->smoothAngle, object->smoothAngle,
+        std::move(beforeColors), std::move(afterColors)
+    ));
+    return true;
+}
+
 std::string Editor::describeMesh(int id, int offset, int limit) const {
     const Object* object = scene_.find(id);
     if (object == nullptr) return "{\"error\":\"Object not found\"}";
