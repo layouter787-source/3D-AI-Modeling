@@ -430,8 +430,46 @@ bool Editor::sculptMesh(int id, Vec3 center, float radius, Vec3 offset) {
 }
 
 
+bool Editor::beginSculptStroke(int id) {
+    if (sculptStrokeObjectId_ >= 0) endSculptStroke();
+    Object* object = scene_.find(id);
+    if (object == nullptr || object->mesh.indices.empty()) return false;
+    if (object->topology.empty()) {
+        object->topology.verts.reserve(object->mesh.vertices.size());
+        for (const Vertex& vertex : object->mesh.vertices) object->topology.verts.push_back({vertex.px, vertex.py, vertex.pz});
+        for (size_t i = 0; i + 2 < object->mesh.indices.size(); i += 3)
+            object->topology.faces.push_back({object->mesh.indices[i], object->mesh.indices[i + 1], object->mesh.indices[i + 2]});
+        object->topology = weldVertices(object->topology, 1e-5f);
+    }
+    if (object->topology.empty() || object->topology.verts.size() > 100000 || object->topology.faces.size() > 150000) return false;
+    sculptStrokeObjectId_ = id;
+    sculptStrokeBeforeMesh_ = object->mesh;
+    sculptStrokeBeforeTopology_ = object->topology;
+    sculptStrokeBeforeColors_ = object->vertexColors;
+    sculptStrokeBeforeSmoothAngle_ = object->smoothAngle;
+    sculptStrokeChanged_ = false;
+    return true;
+}
+
+void Editor::endSculptStroke() {
+    if (sculptStrokeObjectId_ < 0) return;
+    const int id = sculptStrokeObjectId_;
+    Object* object = scene_.find(id);
+    if (object != nullptr && sculptStrokeChanged_) {
+        execute(std::make_unique<MeshCommand>(id, std::move(sculptStrokeBeforeMesh_), object->mesh,
+            std::move(sculptStrokeBeforeTopology_), object->topology, sculptStrokeBeforeSmoothAngle_,
+            object->smoothAngle, std::move(sculptStrokeBeforeColors_), object->vertexColors));
+    }
+    sculptStrokeObjectId_ = -1;
+    sculptStrokeChanged_ = false;
+    sculptStrokeBeforeMesh_ = Mesh{};
+    sculptStrokeBeforeTopology_ = PolyMesh{};
+    sculptStrokeBeforeColors_.clear();
+}
+
 bool Editor::sculptMeshBrush(int id, Vec3 center, float radius, Vec3 stroke, int brush, float strength) {
     Object* object = scene_.find(id);
+    if (sculptStrokeObjectId_ >= 0 && sculptStrokeObjectId_ != id) return false;
     if (!object || !finite3(center) || !finite3(stroke) || !std::isfinite(radius) ||
         !std::isfinite(strength) || radius < 0.001f || radius > 1000.0f || brush < 0 || brush > 6) return false;
 
@@ -443,7 +481,7 @@ bool Editor::sculptMeshBrush(int id, Vec3 center, float radius, Vec3 stroke, int
             beforeTopology.faces.push_back({object->mesh.indices[i], object->mesh.indices[i + 1], object->mesh.indices[i + 2]});
         beforeTopology = weldVertices(beforeTopology, 1e-5f);
     }
-    if (beforeTopology.empty() || beforeTopology.verts.size() > 250000) return false;
+    if (beforeTopology.empty() || beforeTopology.verts.size() > 100000 || beforeTopology.faces.size() > 150000) return false;
 
     strength = std::clamp(strength, 0.0f, 1.0f);
     PolyMesh afterTopology = beforeTopology;
@@ -511,9 +549,17 @@ bool Editor::sculptMeshBrush(int id, Vec3 center, float radius, Vec3 stroke, int
     if (!changed) return false;
     Mesh beforeMesh = object->mesh;
     Mesh afterMesh = buildRenderMesh(afterTopology, object->smoothAngle, object->vertexColors);
-    execute(std::make_unique<MeshCommand>(id, std::move(beforeMesh), std::move(afterMesh),
-        std::move(beforeTopology), std::move(afterTopology), object->smoothAngle, object->smoothAngle,
-        object->vertexColors, object->vertexColors));
+    if (afterMesh.indices.empty()) return false;
+    if (sculptStrokeObjectId_ == id) {
+        object->mesh = std::move(afterMesh);
+        object->topology = std::move(afterTopology);
+        ++object->meshRevision;
+        sculptStrokeChanged_ = true;
+    } else {
+        execute(std::make_unique<MeshCommand>(id, std::move(beforeMesh), std::move(afterMesh),
+            std::move(beforeTopology), std::move(afterTopology), object->smoothAngle, object->smoothAngle,
+            object->vertexColors, object->vertexColors));
+    }
     return true;
 }
 
@@ -1108,6 +1154,7 @@ bool Editor::setVertexColors(int id, const std::vector<float>& rgb) {
 }
 
 void Editor::clearScene() {
+    endSculptStroke();
     paintStrokeObjectId_ = -1;
     paintStrokeChanged_ = false;
     paintStrokeBeforeMesh_ = Mesh{};
@@ -1124,6 +1171,7 @@ void Editor::clearHistory() {
 }
 
 bool Editor::undo() {
+    endSculptStroke();
     if (paintStrokeObjectId_ >= 0) endVertexPaintStroke();
     if (undo_.empty()) return false;
     std::unique_ptr<Command> command = std::move(undo_.back());
@@ -1135,6 +1183,7 @@ bool Editor::undo() {
 }
 
 bool Editor::redo() {
+    endSculptStroke();
     if (paintStrokeObjectId_ >= 0) endVertexPaintStroke();
     if (redo_.empty()) return false;
     std::unique_ptr<Command> command = std::move(redo_.back());
