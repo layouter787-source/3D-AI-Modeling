@@ -248,8 +248,8 @@ object ToolDispatcher {
                     add("capsule",0.84f,side*0.93f,1.48f,0f,0.56f,0.98f,0.56f,suit,rz=side*28f)
                     add("capsule",0.78f,side*1.18f,0.88f,0f,0.48f,1.0f,0.48f,skin,rz=side*12f)
                     add("sphere",0.22f,side*1.22f,0.38f,0f,1f,1.2f,0.9f,skin)
-                    add("capsule",0.92f,side*0.30f,0.24f,0f,0.62f,1.22f,0.68f,suit)
-                    add("capsule",0.82f,side*0.30f,-0.38f,0f,0.56f,1.04f,0.58f,suit)
+                    add("capsule",0.92f,side*0.30f,0.82f,0f,0.62f,1.10f,0.68f,suit)
+                    add("capsule",0.82f,side*0.30f,0.38f,0f,0.56f,0.88f,0.58f,suit)
                     add("cube",0.38f,side*0.30f,0.08f,0.20f,1.15f,0.52f,1.65f,suit)
                 }
             }
