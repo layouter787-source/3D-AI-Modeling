@@ -11,6 +11,7 @@ namespace core {
 struct Vertex {
     float px, py, pz;
     float nx, ny, nz;
+    float cr = 1.0f, cg = 1.0f, cb = 1.0f;
 };
 
 struct Mesh {
@@ -19,6 +20,6 @@ struct Mesh {
 };
 
 // smoothAngleDegrees: arestas com ângulo menor que isto ficam suaves; 0 = tudo plano; 180 = tudo suave.
-Mesh buildRenderMesh(const PolyMesh& poly, float smoothAngleDegrees);
+Mesh buildRenderMesh(const PolyMesh& poly, float smoothAngleDegrees, const std::vector<Vec3>& vertexColors = {});
 
 }  // namespace core
