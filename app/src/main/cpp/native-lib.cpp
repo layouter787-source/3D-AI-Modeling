@@ -613,6 +613,22 @@ Java_com_layouter_aimodeling_NativeBridge_sculptMesh(JNIEnv*, jobject, jint id, 
 
 
 JNIEXPORT jboolean JNICALL
+Java_com_layouter_aimodeling_NativeBridge_beginSculptStroke(JNIEnv*, jobject, jint id) {
+    std::lock_guard<std::mutex> lock(gMutex);
+    try { return toJ(gRenderer.editor.beginSculptStroke(id)); }
+    catch (const std::exception& error) { LOGE("Begin sculpt stroke failed: %s", error.what()); return JNI_FALSE; }
+    catch (...) { LOGE("Begin sculpt stroke failed unexpectedly"); return JNI_FALSE; }
+}
+
+JNIEXPORT void JNICALL
+Java_com_layouter_aimodeling_NativeBridge_endSculptStroke(JNIEnv*, jobject) {
+    std::lock_guard<std::mutex> lock(gMutex);
+    try { gRenderer.editor.endSculptStroke(); }
+    catch (const std::exception& error) { LOGE("End sculpt stroke failed: %s", error.what()); }
+    catch (...) { LOGE("End sculpt stroke failed unexpectedly"); }
+}
+
+JNIEXPORT jboolean JNICALL
 Java_com_layouter_aimodeling_NativeBridge_sculptMeshAtScreen(JNIEnv*, jobject, jint id,
         jfloat screenX, jfloat screenY, jfloat radius, jint brush, jfloat strength,
         jfloat strokeX, jfloat strokeY) {
