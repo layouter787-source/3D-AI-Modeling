@@ -630,6 +630,7 @@ private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 Button(onClick = { apply("loop_cut", parameter = loopCutSegments, faces = intArrayOf(edgeA.toIntOrNull() ?: 0, edgeB.toIntOrNull() ?: 1)) }) { Text("Loop Cut") }
                 Button(onClick = { apply("connect", parameter = 1, faces = intArrayOf(edgeA.toIntOrNull() ?: 0, edgeB.toIntOrNull() ?: 1)) }) { Text("Connect") }
+                Button(onClick = { apply("draw_cut", value = 0.5f, faces = intArrayOf(edgeA.toIntOrNull() ?: 0, edgeB.toIntOrNull() ?: 1)) }) { Text("Draw Cut / Split") }
             }
             Text("Boolean · ID do segundo objeto", style = MaterialTheme.typography.labelMedium)
             OutlinedTextField(booleanTarget, { booleanTarget = it.filter(Char::isDigit) }, label = { Text("ID do objeto operand") }, singleLine = true)
