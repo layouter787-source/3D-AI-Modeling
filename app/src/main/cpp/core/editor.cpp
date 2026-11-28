@@ -17,7 +17,9 @@ namespace {
 
 constexpr size_t kMaxHistory = 200;
 
-PolyMesh extractFaceSet(const PolyMesh& source, const std::vector<int>& faceIds) {
+PolyMesh extractFaceSet(const PolyMesh& source, const std::vector<int>& faceIds,
+                        const std::vector<Vec3>* sourceColors = nullptr,
+                        std::vector<Vec3>* extractedColors = nullptr) {
     PolyMesh result;
     const uint32_t missing = std::numeric_limits<uint32_t>::max();
     std::vector<uint32_t> remap(source.verts.size(), missing);
@@ -29,6 +31,11 @@ PolyMesh extractFaceSet(const PolyMesh& source, const std::vector<int>& faceIds)
             if (remap[sourceVertex] == missing) {
                 remap[sourceVertex] = static_cast<uint32_t>(result.verts.size());
                 result.verts.push_back(source.verts[sourceVertex]);
+                if (extractedColors != nullptr) {
+                    const Vec3 color = sourceColors != nullptr && sourceVertex < sourceColors->size()
+                        ? (*sourceColors)[sourceVertex] : Vec3{1.0f, 1.0f, 1.0f};
+                    extractedColors->push_back(color);
+                }
             }
             face.push_back(remap[sourceVertex]);
         }
@@ -46,6 +53,23 @@ PolyMesh extractFaceSet(const PolyMesh& source, const std::vector<int>& faceIds)
 }
 
 bool finite3(Vec3 v) { return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z); }
+
+bool rayTriangleHit(const Ray& ray, Vec3 a, Vec3 b, Vec3 c, float& distance) {
+    const Vec3 edge1 = b - a;
+    const Vec3 edge2 = c - a;
+    const Vec3 p = cross(ray.dir, edge2);
+    const float determinant = dot(edge1, p);
+    if (std::fabs(determinant) < 1e-8f) return false;
+    const float inverse = 1.0f / determinant;
+    const Vec3 offset = ray.origin - a;
+    const float u = dot(offset, p) * inverse;
+    if (u < 0.0f || u > 1.0f) return false;
+    const Vec3 q = cross(offset, edge1);
+    const float v = dot(ray.dir, q) * inverse;
+    if (v < 0.0f || u + v > 1.0f) return false;
+    distance = dot(edge2, q) * inverse;
+    return distance > 1e-4f;
+}
 
 class AddCommand : public Command {
 public:
@@ -115,20 +139,22 @@ private:
 class MeshCommand : public Command {
 public:
     MeshCommand(int id, Mesh before, Mesh after, PolyMesh beforeTopology, PolyMesh afterTopology,
-                float beforeSmoothAngle, float afterSmoothAngle)
+                float beforeSmoothAngle, float afterSmoothAngle,
+                std::vector<Vec3> beforeVertexColors, std::vector<Vec3> afterVertexColors)
         : id_(id), before_(std::move(before)), after_(std::move(after)),
           beforeTopology_(std::move(beforeTopology)), afterTopology_(std::move(afterTopology)),
-          beforeSmoothAngle_(beforeSmoothAngle), afterSmoothAngle_(afterSmoothAngle) {}
+          beforeSmoothAngle_(beforeSmoothAngle), afterSmoothAngle_(afterSmoothAngle),
+          beforeVertexColors_(std::move(beforeVertexColors)), afterVertexColors_(std::move(afterVertexColors)) {}
     void apply(Scene& s) override {
         if (Object* o = s.find(id_)) {
             o->mesh = after_; o->topology = afterTopology_;
-            o->smoothAngle = afterSmoothAngle_; ++o->meshRevision;
+            o->smoothAngle = afterSmoothAngle_; o->vertexColors = afterVertexColors_; ++o->meshRevision;
         }
     }
     void revert(Scene& s) override {
         if (Object* o = s.find(id_)) {
             o->mesh = before_; o->topology = beforeTopology_;
-            o->smoothAngle = beforeSmoothAngle_; ++o->meshRevision;
+            o->smoothAngle = beforeSmoothAngle_; o->vertexColors = beforeVertexColors_; ++o->meshRevision;
         }
     }
 private:
@@ -137,6 +163,8 @@ private:
     PolyMesh beforeTopology_, afterTopology_;
     float beforeSmoothAngle_;
     float afterSmoothAngle_;
+    std::vector<Vec3> beforeVertexColors_;
+    std::vector<Vec3> afterVertexColors_;
 };
 
 class ColorCommand : public Command {
@@ -187,7 +215,8 @@ int Editor::addPrimitive(Primitive type, float size, Vec3 position, int detail) 
     object.detail = std::clamp(detail, 1, 64);
     object.smoothAngle = primitiveSmoothAngle(type);
     object.topology = makePrimitivePolyMesh(type, size, object.detail);
-    object.mesh = buildRenderMesh(object.topology, primitiveSmoothAngle(type));
+    object.vertexColors.assign(object.topology.verts.size(), Vec3{1.0f, 1.0f, 1.0f});
+    object.mesh = buildRenderMesh(object.topology, object.smoothAngle, object.vertexColors);
     object.transform.position = position;
     object.name = std::string(primitiveName(type)) + "_" + std::to_string(object.id);
 
@@ -353,11 +382,11 @@ bool Editor::sculptMesh(int id, Vec3 center, float radius, Vec3 offset) {
         changed = changed || weight > 0.0001f;
     }
     if (!changed) return false;
-    Mesh afterMesh = buildRenderMesh(afterTopology, object->smoothAngle);
+    Mesh afterMesh = buildRenderMesh(afterTopology, object->smoothAngle, object->vertexColors);
     Mesh beforeMesh = object->mesh;
     execute(std::make_unique<MeshCommand>(id, std::move(beforeMesh), std::move(afterMesh),
                                           std::move(beforeTopology), std::move(afterTopology),
-                                          object->smoothAngle, object->smoothAngle));
+                                          object->smoothAngle, object->smoothAngle, object->vertexColors, object->vertexColors));
     return true;
 }
 
