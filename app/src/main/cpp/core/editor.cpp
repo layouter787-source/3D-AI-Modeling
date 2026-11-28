@@ -413,6 +413,7 @@ bool Editor::meshOperation(int id, const std::string& operation, const std::vect
     if (source.empty() || source.faces.size() > 250000 || source.verts.size() > 250000) return false;
 
     PolyMesh result;
+    std::vector<Vec3> afterColors;
     float afterSmoothAngle = object->smoothAngle;
     if (operation == "soft_normals") {
         result = source;
@@ -445,7 +446,7 @@ bool Editor::meshOperation(int id, const std::string& operation, const std::vect
         for (size_t i = 0; i < source.faces.size(); ++i) {
             if (removed.count(static_cast<int>(i)) == 0) remaining.push_back(static_cast<int>(i));
         }
-        result = extractFaceSet(source, remaining);
+        result = extractFaceSet(source, remaining, &object->vertexColors, &afterColors);
     } else if (operation == "create_face" || operation == "draw_face") {
         if (faces.size() < 3 || faces.size() > 128) return false;
         std::unordered_set<int> unique;
@@ -557,14 +558,19 @@ bool Editor::meshOperation(int id, const std::string& operation, const std::vect
     }
 
     if (result.empty() || result.verts.size() > 250000 || result.faces.size() > 250000) return false;
-    Mesh after = buildRenderMesh(result, afterSmoothAngle);
+    if (afterColors.size() != result.verts.size()) {
+        afterColors.assign(result.verts.size(), Vec3{1.0f, 1.0f, 1.0f});
+        const size_t retained = std::min(object->vertexColors.size(), afterColors.size());
+        for (size_t i = 0; i < retained; ++i) afterColors[i] = object->vertexColors[i];
+    }
+    Mesh after = buildRenderMesh(result, afterSmoothAngle, afterColors);
     if (after.vertices.empty() || after.indices.empty() || after.vertices.size() > 500000 ||
         after.indices.size() > 1500000) return false;
     Mesh beforeMesh = object->mesh;
     PolyMesh beforeTopology = object->topology;
     execute(std::make_unique<MeshCommand>(id, std::move(beforeMesh), std::move(after),
                                           std::move(beforeTopology), std::move(result),
-                                          object->smoothAngle, afterSmoothAngle));
+                                          object->smoothAngle, afterSmoothAngle, object->vertexColors, std::move(afterColors)));
     return true;
 }
 
@@ -584,14 +590,16 @@ int Editor::detachFaces(int id, const std::vector<int>& faces) {
     for (size_t i = 0; i < object->topology.faces.size(); ++i) {
         if (selected.count(static_cast<int>(i)) == 0) remainIds.push_back(static_cast<int>(i));
     }
-    PolyMesh detachedTopology = extractFaceSet(object->topology, detachIds);
-    PolyMesh remainingTopology = extractFaceSet(object->topology, remainIds);
+    std::vector<Vec3> detachedColors;
+    std::vector<Vec3> remainingColors;
+    PolyMesh detachedTopology = extractFaceSet(object->topology, detachIds, &object->vertexColors, &detachedColors);
+    PolyMesh remainingTopology = extractFaceSet(object->topology, remainIds, &object->vertexColors, &remainingColors);
     if (detachedTopology.empty() || remainingTopology.empty()) return -1;
 
     const Mesh beforeMesh = object->mesh;
     const PolyMesh beforeTopology = object->topology;
-    Mesh remainingMesh = buildRenderMesh(remainingTopology, object->smoothAngle);
-    Mesh detachedMesh = buildRenderMesh(detachedTopology, object->smoothAngle);
+    Mesh remainingMesh = buildRenderMesh(remainingTopology, object->smoothAngle, remainingColors);
+    Mesh detachedMesh = buildRenderMesh(detachedTopology, object->smoothAngle, detachedColors);
     if (remainingMesh.indices.empty() || detachedMesh.indices.empty()) return -1;
 
     const float smoothAngle = object->smoothAngle;
@@ -600,11 +608,12 @@ int Editor::detachFaces(int id, const std::vector<int>& faces) {
     detached.name = object->name + "_detached_" + std::to_string(detached.id);
     detached.mesh = std::move(detachedMesh);
     detached.topology = std::move(detachedTopology);
+    detached.vertexColors = detachedColors;
     detached.meshRevision = 1;
 
     execute(std::make_unique<MeshCommand>(id, beforeMesh, std::move(remainingMesh),
                                           beforeTopology, std::move(remainingTopology),
-                                          smoothAngle, smoothAngle));
+                                          smoothAngle, smoothAngle, object->vertexColors, remainingColors));
     const int newId = detached.id;
     execute(std::make_unique<AddCommand>(std::move(detached)));
     return newId;
@@ -622,9 +631,12 @@ bool Editor::combineObjects(int id, int otherObjectId) {
     for (Vec3& vertex : other.verts) {
         vertex = transformPoint(inverseTarget, transformPoint(operandWorld, vertex));
     }
-    PolyMesh combined = weldVertices(mergeMeshes(target->topology, other), 1e-5f);
+    PolyMesh combined = mergeMeshes(target->topology, other);
+    std::vector<Vec3> combinedColors = target->vertexColors;
+    combinedColors.insert(combinedColors.end(), operand->vertexColors.begin(), operand->vertexColors.end());
+    if (combinedColors.size() != combined.verts.size()) combinedColors.resize(combined.verts.size(), Vec3{1.0f,1.0f,1.0f});
     if (combined.empty() || combined.verts.size() > 250000 || combined.faces.size() > 250000) return false;
-    Mesh combinedMesh = buildRenderMesh(combined, target->smoothAngle);
+    Mesh combinedMesh = buildRenderMesh(combined, target->smoothAngle, combinedColors);
     if (combinedMesh.indices.empty() || combinedMesh.vertices.size() > 500000 ||
         combinedMesh.indices.size() > 1500000) return false;
 
@@ -633,7 +645,7 @@ bool Editor::combineObjects(int id, int otherObjectId) {
     const float smoothAngle = target->smoothAngle;
     execute(std::make_unique<MeshCommand>(id, beforeMesh, std::move(combinedMesh),
                                           beforeTopology, std::move(combined),
-                                          smoothAngle, smoothAngle));
+                                          smoothAngle, smoothAngle, target->vertexColors, std::move(combinedColors)));
     execute(std::make_unique<DeleteCommand>(otherObjectId));
     return true;
 }
