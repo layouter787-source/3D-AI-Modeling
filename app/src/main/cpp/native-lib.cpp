@@ -529,6 +529,16 @@ Java_com_layouter_aimodeling_NativeBridge_setColor(JNIEnv*, jobject, jint id, jf
     return toJ(gRenderer.editor.setColor(id, c));
 }
 
+JNIEXPORT jboolean JNICALL
+Java_com_layouter_aimodeling_NativeBridge_paintVertexRegion(JNIEnv*, jobject, jint id,
+                                                            jfloat cx, jfloat cy, jfloat cz,
+                                                            jfloat radius, jfloat r, jfloat g,
+                                                            jfloat b, jfloat opacity) {
+    std::lock_guard<std::mutex> lock(gMutex);
+    Color color{r, g, b};
+    return toJ(gRenderer.editor.paintVertexRegion(id, Vec3{cx, cy, cz}, radius, color, opacity));
+}
+
 JNIEXPORT jfloatArray JNICALL
 Java_com_layouter_aimodeling_NativeBridge_getVertexColors(JNIEnv* env, jobject, jint id) {
     std::vector<float> values;
