@@ -152,7 +152,7 @@ object ToolDispatcher {
                 "Catmull-Clark subdivide", "face extrude", "face inset", "face delete", "draw face by vertices", "clone faces", "merge vertices", "target merge", "connected face shell", "detach face set", "combine objects", "soft/hard normals", "smooth",
                 "solidify", "axis mirror", "loop cut", "triangulate", "flip normals",
                 "weld by tolerance", "crease by angle", "Boolean union", "Boolean difference",
-                "Boolean intersection", "radial vertex sculpt", "lofted profile mesh",
+                "Boolean intersection", "radial vertex sculpt", "per-vertex color paint", "lofted profile mesh",
                 "topology inspection", "undo/redo mesh commands", "bevel", "connect", "divide", "sun light", "sky color", "ambient environment"
             )))
             .put("research_candidates", JSONArray()
@@ -165,7 +165,7 @@ object ToolDispatcher {
                 .put(JSONObject().put("name", "Blender BMesh / modeling operators").put("purpose", "topology and modeling reference").put("license", "GPL-3.0-or-later Blender code").put("status", "source-level reference; full Blender integration changes distribution/licensing architecture")))
             .put("native_primitives", JSONArray(listOf(
                 "cube", "quad_sphere", "cylinder", "cone", "torus", "subdivided_plane", "pyramid",
-                "capsule", "octahedron", "hexagonal_prism", "triangular_prism", "pentagonal_prism",
+                "capsule", "octahedron", "hollow_pipe", "hexagonal_prism", "triangular_prism", "pentagonal_prism",
                 "octagonal_prism", "decagonal_prism", "dodecagonal_prism", "tetrahedron",
                 "icosahedron", "geodesic_icosphere", "hollow_pipe", "continuous_loft_mesh"
             )))
