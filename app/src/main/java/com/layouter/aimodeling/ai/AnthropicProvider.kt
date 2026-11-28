@@ -15,6 +15,12 @@ class AnthropicProvider(
     override val displayName = "Anthropic (chave de API)"
 
     override suspend fun send(system: String, messages: List<AiMessage>, tools: JSONArray): AiTurn =
+        sendInternal(system, messages, tools, null)
+
+    override suspend fun sendStreaming(system: String, messages: List<AiMessage>, tools: JSONArray, onTextDelta: (String) -> Unit): AiTurn =
+        sendInternal(system, messages, tools, onTextDelta)
+
+    private suspend fun sendInternal(system: String, messages: List<AiMessage>, tools: JSONArray, onTextDelta: ((String) -> Unit)?): AiTurn =
         withContext(Dispatchers.IO) {
             val msgs = JSONArray()
 
@@ -93,6 +99,49 @@ class AnthropicProvider(
                 .put("messages", msgs)
                 .put("tools", toolDefs)
 
+            if (onTextDelta != null) {
+                body.put("stream", true)
+                val text = StringBuilder()
+                data class ToolPart(var id: String = "", var name: String = "", var input: JSONObject = JSONObject(), val json: StringBuilder = StringBuilder())
+                val toolsByIndex = sortedMapOf<Int, ToolPart>()
+                try {
+                    HttpJson.postSse("$baseUrl/messages", mapOf("x-api-key" to apiKey, "anthropic-version" to "2023-06-01"), body) { raw ->
+                        val event = runCatching { JSONObject(raw) }.getOrNull() ?: return@postSse
+                        when (event.optString("type")) {
+                            "content_block_start" -> {
+                                val block = event.optJSONObject("content_block") ?: return@postSse
+                                val index = event.optInt("index")
+                                if (block.optString("type") == "tool_use") {
+                                    toolsByIndex[index] = ToolPart(block.optString("id"), block.optString("name"), block.optJSONObject("input") ?: JSONObject())
+                                } else if (block.optString("type") == "text") {
+                                    val initial = block.optString("text", "")
+                                    if (initial.isNotEmpty()) { text.append(initial); onTextDelta(initial) }
+                                }
+                            }
+                            "content_block_delta" -> {
+                                val delta = event.optJSONObject("delta") ?: return@postSse
+                                when (delta.optString("type")) {
+                                    "text_delta" -> {
+                                        val token = delta.optString("text", "")
+                                        if (token.isNotEmpty()) { text.append(token); onTextDelta(token) }
+                                    }
+                                    "input_json_delta" -> toolsByIndex[event.optInt("index")]?.json?.append(delta.optString("partial_json", ""))
+                                }
+                            }
+                            "content_block_stop" -> {
+                                val part = toolsByIndex[event.optInt("index")]
+                                if (part != null && part.json.isNotEmpty()) part.input = runCatching { JSONObject(part.json.toString()) }.getOrElse { JSONObject() }
+                            }
+                        }
+                    }
+                    val calls = toolsByIndex.values.mapIndexed { index, part ->
+                        ToolCall(part.id.ifBlank { "anthropic_tool_$index" }, part.name, part.input)
+                    }
+                    return@withContext AiTurn(text.toString(), calls)
+                } catch (error: AiException) {
+                    if (error.httpCode !in setOf(400, 404, 405, 406, 415, 422, 501) || text.isNotEmpty()) throw error
+                }
+            }
             val response = HttpJson.post(
                 url = "$baseUrl/messages",
                 headers = mapOf("x-api-key" to apiKey, "anthropic-version" to "2023-06-01"),
