@@ -804,8 +804,8 @@ std::string Editor::describeScene() const {
         if (!first) out += ",";
         first = false;
         std::snprintf(buf, sizeof(buf),
-                      R"JSON({"id":%d,"type":"%s","size":%.3f,"detail":%d,"vertices":%zu,"triangles":%zu,"position":[%.3f,%.3f,%.3f],"rotation":[%.1f,%.1f,%.1f],"scale":[%.3f,%.3f,%.3f],"color":[%.2f,%.2f,%.2f],"material":{"metallic":%.2f,"roughness":%.2f,"clearcoat":%.2f,"emission":%.2f}})JSON",
-                      o.id, primitiveName(o.type), o.size, o.detail, o.mesh.vertices.size(),
+                      R"JSON({"id":%d,"type":"%s","size":%.3f,"detail":%d,"smooth_angle":%.1f,"vertices":%zu,"triangles":%zu,"position":[%.3f,%.3f,%.3f],"rotation":[%.1f,%.1f,%.1f],"scale":[%.3f,%.3f,%.3f],"color":[%.2f,%.2f,%.2f],"material":{"metallic":%.2f,"roughness":%.2f,"clearcoat":%.2f,"emission":%.2f}})JSON",
+                      o.id, primitiveName(o.type), o.size, o.detail, o.smoothAngle, o.mesh.vertices.size(),
                       o.mesh.indices.size() / 3, o.transform.position.x,
                       o.transform.position.y, o.transform.position.z, o.transform.rotationDeg.x,
                       o.transform.rotationDeg.y, o.transform.rotationDeg.z, o.transform.scale.x,
