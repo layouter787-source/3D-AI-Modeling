@@ -611,6 +611,26 @@ JNIEXPORT jboolean JNICALL
 Java_com_layouter_aimodeling_NativeBridge_sculptMesh(JNIEnv*, jobject, jint id, jfloat cx,jfloat cy,jfloat cz,jfloat radius,jfloat dx,jfloat dy,jfloat dz){std::lock_guard<std::mutex> lock(gMutex);return toJ(gRenderer.editor.sculptMesh(id,Vec3{cx,cy,cz},radius,Vec3{dx,dy,dz}));}
 
 
+
+JNIEXPORT jboolean JNICALL
+Java_com_layouter_aimodeling_NativeBridge_sculptMeshAtScreen(JNIEnv*, jobject, jint id,
+        jfloat screenX, jfloat screenY, jfloat radius, jint brush, jfloat strength,
+        jfloat strokeX, jfloat strokeY) {
+    std::lock_guard<std::mutex> lock(gMutex);
+    const Object* object = gRenderer.editor.scene().find(id);
+    if (!object) return JNI_FALSE;
+    const PickResult hit = pickComponent(gRenderer.editor.scene(), cameraRay(gRenderer, screenX, screenY), id, PickComponent::Face);
+    if (hit.objectId != id) return JNI_FALSE;
+    const Mat4 worldToLocal = inverseAffine(object->transform.matrix());
+    const Vec3 localCenter = transformPoint(worldToLocal, hit.worldPoint);
+    const float sx = std::max(0.001f, std::fabs(object->transform.scale.x));
+    const float sy = std::max(0.001f, std::fabs(object->transform.scale.y));
+    const float sz = std::max(0.001f, std::fabs(object->transform.scale.z));
+    const float localRadius = radius / std::max(sx, std::max(sy, sz));
+    return toJ(gRenderer.editor.sculptMeshBrush(id, localCenter, localRadius,
+        Vec3{strokeX, strokeY, 0.0f}, brush, strength));
+}
+
 JNIEXPORT jboolean JNICALL
 Java_com_layouter_aimodeling_NativeBridge_meshOperation(JNIEnv* env, jobject, jint id, jstring operation,
                                                         jintArray faceIds, jint parameter, jfloat value, jint otherObjectId) {
