@@ -6,6 +6,8 @@
 #include <cstdio>
 #include <map>
 #include <tuple>
+#include <limits>
+#include <unordered_set>
 #include <utility>
 
 namespace core {
@@ -13,6 +15,34 @@ namespace core {
 namespace {
 
 constexpr size_t kMaxHistory = 200;
+
+PolyMesh extractFaceSet(const PolyMesh& source, const std::vector<int>& faceIds) {
+    PolyMesh result;
+    const uint32_t missing = std::numeric_limits<uint32_t>::max();
+    std::vector<uint32_t> remap(source.verts.size(), missing);
+    for (int faceId : faceIds) {
+        if (faceId < 0 || static_cast<size_t>(faceId) >= source.faces.size()) continue;
+        std::vector<uint32_t> face;
+        for (uint32_t sourceVertex : source.faces[static_cast<size_t>(faceId)]) {
+            if (sourceVertex >= source.verts.size()) continue;
+            if (remap[sourceVertex] == missing) {
+                remap[sourceVertex] = static_cast<uint32_t>(result.verts.size());
+                result.verts.push_back(source.verts[sourceVertex]);
+            }
+            face.push_back(remap[sourceVertex]);
+        }
+        if (face.size() >= 3) result.faces.push_back(std::move(face));
+    }
+    for (const auto& crease : source.creases) {
+        if (crease.first < remap.size() && crease.second < remap.size() &&
+            remap[crease.first] != missing && remap[crease.second] != missing &&
+            remap[crease.first] != remap[crease.second]) {
+            result.creases.push_back({std::min(remap[crease.first], remap[crease.second]),
+                                      std::max(remap[crease.first], remap[crease.second])});
+        }
+    }
+    return result;
+}
 
 bool finite3(Vec3 v) { return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z); }
 
@@ -373,6 +403,79 @@ bool Editor::meshOperation(int id, const std::string& operation, const std::vect
         PolyMesh other = operand->topology;
         for (Vec3& vertex : other.verts) vertex = transformPoint(inverseSelected, transformPoint(operandWorld, vertex));
         result = booleanOp(source, other, op);
+    } else if (operation == "delete_faces") {
+        if (faces.empty() || faces.size() >= source.faces.size()) return false;
+        std::unordered_set<int> removed;
+        for (int face : faces) {
+            if (face < 0 || static_cast<size_t>(face) >= source.faces.size()) return false;
+            removed.insert(face);
+        }
+        std::vector<int> remaining;
+        remaining.reserve(source.faces.size() - removed.size());
+        for (size_t i = 0; i < source.faces.size(); ++i) {
+            if (removed.count(static_cast<int>(i)) == 0) remaining.push_back(static_cast<int>(i));
+        }
+        result = extractFaceSet(source, remaining);
+    } else if (operation == "create_face" || operation == "draw_face") {
+        if (faces.size() < 3 || faces.size() > 128) return false;
+        std::unordered_set<int> unique;
+        std::vector<uint32_t> face;
+        face.reserve(faces.size());
+        for (int vertex : faces) {
+            if (vertex < 0 || static_cast<size_t>(vertex) >= source.verts.size() ||
+                !unique.insert(vertex).second) return false;
+            face.push_back(static_cast<uint32_t>(vertex));
+        }
+        if (length(newellNormal(source, face)) < 1e-7f) return false;
+        result = source;
+        result.faces.push_back(std::move(face));
+    } else if (operation == "merge_vertices") {
+        if (faces.size() < 2 || faces.size() > 256) return false;
+        std::unordered_set<int> unique;
+        Vec3 target;
+        for (int vertex : faces) {
+            if (vertex < 0 || static_cast<size_t>(vertex) >= source.verts.size() ||
+                !unique.insert(vertex).second) return false;
+            target += source.verts[static_cast<size_t>(vertex)];
+        }
+        target = target / static_cast<float>(unique.size());
+        result = source;
+        for (int vertex : unique) result.verts[static_cast<size_t>(vertex)] = target;
+        result = weldVertices(result, 1e-5f);
+    } else if (operation == "target_merge") {
+        if (faces.size() != 2 || faces[0] < 0 || faces[1] < 0 ||
+            static_cast<size_t>(faces[0]) >= source.verts.size() ||
+            static_cast<size_t>(faces[1]) >= source.verts.size() || faces[0] == faces[1]) return false;
+        result = source;
+        result.verts[static_cast<size_t>(faces[0])] = result.verts[static_cast<size_t>(faces[1])];
+        result = weldVertices(result, 1e-5f);
+    } else if (operation == "clone_faces") {
+        if (faces.empty() || faces.size() >= source.faces.size()) return false;
+        std::unordered_map<uint32_t, uint32_t> remap;
+        Vec3 normal;
+        std::unordered_set<int> uniqueFaces;
+        for (int faceId : faces) {
+            if (faceId < 0 || static_cast<size_t>(faceId) >= source.faces.size() ||
+                !uniqueFaces.insert(faceId).second) return false;
+            normal += newellNormal(source, source.faces[static_cast<size_t>(faceId)]);
+        }
+        normal = normalize(normal);
+        if (length(normal) < 0.5f) return false;
+        result = source;
+        const float distance = std::clamp(value == 0.0f ? 0.1f : value, -100.0f, 100.0f);
+        for (int faceId : faces) {
+            std::vector<uint32_t> clone;
+            for (uint32_t sourceVertex : source.faces[static_cast<size_t>(faceId)]) {
+                auto found = remap.find(sourceVertex);
+                if (found == remap.end()) {
+                    const uint32_t newId = static_cast<uint32_t>(result.verts.size());
+                    result.verts.push_back(source.verts[sourceVertex] + normal * distance);
+                    found = remap.emplace(sourceVertex, newId).first;
+                }
+                clone.push_back(found->second);
+            }
+            result.faces.push_back(std::move(clone));
+        }
     } else if (operation == "subdivide") {
         const int levels = std::clamp(parameter, 1, 3);
         if (estimateSubdividedFaces(source, levels) > 180000) return false;
@@ -433,6 +536,121 @@ bool Editor::meshOperation(int id, const std::string& operation, const std::vect
                                           std::move(beforeTopology), std::move(result),
                                           object->smoothAngle, afterSmoothAngle));
     return true;
+}
+
+int Editor::detachFaces(int id, const std::vector<int>& faces) {
+    Object* object = scene_.find(id);
+    if (object == nullptr || faces.empty() || object->topology.empty() ||
+        faces.size() >= object->topology.faces.size()) return -1;
+
+    std::unordered_set<int> selected;
+    for (int face : faces) {
+        if (face < 0 || static_cast<size_t>(face) >= object->topology.faces.size() ||
+            !selected.insert(face).second) return -1;
+    }
+
+    std::vector<int> detachIds(selected.begin(), selected.end());
+    std::vector<int> remainIds;
+    for (size_t i = 0; i < object->topology.faces.size(); ++i) {
+        if (selected.count(static_cast<int>(i)) == 0) remainIds.push_back(static_cast<int>(i));
+    }
+    PolyMesh detachedTopology = extractFaceSet(object->topology, detachIds);
+    PolyMesh remainingTopology = extractFaceSet(object->topology, remainIds);
+    if (detachedTopology.empty() || remainingTopology.empty()) return -1;
+
+    const Mesh beforeMesh = object->mesh;
+    const PolyMesh beforeTopology = object->topology;
+    Mesh remainingMesh = buildRenderMesh(remainingTopology, object->smoothAngle);
+    Mesh detachedMesh = buildRenderMesh(detachedTopology, object->smoothAngle);
+    if (remainingMesh.indices.empty() || detachedMesh.indices.empty()) return -1;
+
+    const float smoothAngle = object->smoothAngle;
+    Object detached = *object;
+    detached.id = scene_.nextId++;
+    detached.name = object->name + "_detached_" + std::to_string(detached.id);
+    detached.mesh = std::move(detachedMesh);
+    detached.topology = std::move(detachedTopology);
+    detached.meshRevision = 1;
+
+    execute(std::make_unique<MeshCommand>(id, beforeMesh, std::move(remainingMesh),
+                                          beforeTopology, std::move(remainingTopology),
+                                          smoothAngle, smoothAngle));
+    const int newId = detached.id;
+    execute(std::make_unique<AddCommand>(std::move(detached)));
+    return newId;
+}
+
+bool Editor::combineObjects(int id, int otherObjectId) {
+    Object* target = scene_.find(id);
+    const Object* operand = scene_.find(otherObjectId);
+    if (target == nullptr || operand == nullptr || id == otherObjectId ||
+        target->topology.empty() || operand->topology.empty()) return false;
+
+    PolyMesh other = operand->topology;
+    const Mat4 inverseTarget = inverseAffine(target->transform.matrix());
+    const Mat4 operandWorld = operand->transform.matrix();
+    for (Vec3& vertex : other.verts) {
+        vertex = transformPoint(inverseTarget, transformPoint(operandWorld, vertex));
+    }
+    PolyMesh combined = weldVertices(mergeMeshes(target->topology, other), 1e-5f);
+    if (combined.empty() || combined.verts.size() > 250000 || combined.faces.size() > 250000) return false;
+    Mesh combinedMesh = buildRenderMesh(combined, target->smoothAngle);
+    if (combinedMesh.indices.empty() || combinedMesh.vertices.size() > 500000 ||
+        combinedMesh.indices.size() > 1500000) return false;
+
+    const Mesh beforeMesh = target->mesh;
+    const PolyMesh beforeTopology = target->topology;
+    const float smoothAngle = target->smoothAngle;
+    execute(std::make_unique<MeshCommand>(id, beforeMesh, std::move(combinedMesh),
+                                          beforeTopology, std::move(combined),
+                                          smoothAngle, smoothAngle));
+    execute(std::make_unique<DeleteCommand>(otherObjectId));
+    return true;
+}
+
+std::vector<int> Editor::faceShell(int id, int startFace) const {
+    std::vector<int> result;
+    const Object* object = scene_.find(id);
+    if (object == nullptr || object->topology.empty() || startFace < 0 ||
+        static_cast<size_t>(startFace) >= object->topology.faces.size()) return result;
+
+    using EdgeKey = std::pair<uint32_t, uint32_t>;
+    std::map<EdgeKey, std::vector<int>> edgeFaces;
+    const auto& faces = object->topology.faces;
+    for (size_t faceId = 0; faceId < faces.size(); ++faceId) {
+        const auto& face = faces[faceId];
+        for (size_t corner = 0; corner < face.size(); ++corner) {
+            uint32_t a = face[corner];
+            uint32_t b = face[(corner + 1) % face.size()];
+            if (a > b) std::swap(a, b);
+            edgeFaces[{a, b}].push_back(static_cast<int>(faceId));
+        }
+    }
+
+    std::vector<char> visited(faces.size(), 0);
+    std::vector<int> stack{startFace};
+    visited[static_cast<size_t>(startFace)] = 1;
+    while (!stack.empty()) {
+        const int current = stack.back();
+        stack.pop_back();
+        result.push_back(current);
+        const auto& face = faces[static_cast<size_t>(current)];
+        for (size_t corner = 0; corner < face.size(); ++corner) {
+            uint32_t a = face[corner];
+            uint32_t b = face[(corner + 1) % face.size()];
+            if (a > b) std::swap(a, b);
+            const auto found = edgeFaces.find({a, b});
+            if (found == edgeFaces.end()) continue;
+            for (int adjacent : found->second) {
+                if (!visited[static_cast<size_t>(adjacent)]) {
+                    visited[static_cast<size_t>(adjacent)] = 1;
+                    stack.push_back(adjacent);
+                }
+            }
+        }
+    }
+    std::sort(result.begin(), result.end());
+    return result;
 }
 
 std::string Editor::describeMesh(int id, int offset, int limit) const {
