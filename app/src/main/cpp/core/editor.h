@@ -37,6 +37,9 @@ public:
     // Blender-inspired polygon operations applied to the existing editable triangle topology.
     bool meshOperation(int id, const std::string& operation, const std::vector<int>& faces,
                        int parameter, float value, int otherObjectId = -1);
+    int detachFaces(int id, const std::vector<int>& faces);
+    bool combineObjects(int id, int otherObjectId);
+    std::vector<int> faceShell(int id, int startFace) const;
     std::string describeMesh(int id, int offset, int limit) const;
     bool setColor(int id, Color color);
     bool setMaterial(int id, Material material);
