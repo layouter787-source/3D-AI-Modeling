@@ -83,19 +83,29 @@ private:
 
 class MeshCommand : public Command {
 public:
-    MeshCommand(int id, Mesh before, Mesh after, PolyMesh beforeTopology, PolyMesh afterTopology)
+    MeshCommand(int id, Mesh before, Mesh after, PolyMesh beforeTopology, PolyMesh afterTopology,
+                float beforeSmoothAngle, float afterSmoothAngle)
         : id_(id), before_(std::move(before)), after_(std::move(after)),
-          beforeTopology_(std::move(beforeTopology)), afterTopology_(std::move(afterTopology)) {}
+          beforeTopology_(std::move(beforeTopology)), afterTopology_(std::move(afterTopology)),
+          beforeSmoothAngle_(beforeSmoothAngle), afterSmoothAngle_(afterSmoothAngle) {}
     void apply(Scene& s) override {
-        if (Object* o = s.find(id_)) { o->mesh = after_; o->topology = afterTopology_; ++o->meshRevision; }
+        if (Object* o = s.find(id_)) {
+            o->mesh = after_; o->topology = afterTopology_;
+            o->smoothAngle = afterSmoothAngle_; ++o->meshRevision;
+        }
     }
     void revert(Scene& s) override {
-        if (Object* o = s.find(id_)) { o->mesh = before_; o->topology = beforeTopology_; ++o->meshRevision; }
+        if (Object* o = s.find(id_)) {
+            o->mesh = before_; o->topology = beforeTopology_;
+            o->smoothAngle = beforeSmoothAngle_; ++o->meshRevision;
+        }
     }
 private:
     int id_;
     Mesh before_, after_;
     PolyMesh beforeTopology_, afterTopology_;
+    float beforeSmoothAngle_;
+    float afterSmoothAngle_;
 };
 
 class ColorCommand : public Command {
@@ -144,6 +154,7 @@ int Editor::addPrimitive(Primitive type, float size, Vec3 position, int detail) 
     object.type = type;
     object.size = size;
     object.detail = std::clamp(detail, 1, 64);
+    object.smoothAngle = primitiveSmoothAngle(type);
     object.topology = makePrimitivePolyMesh(type, size, object.detail);
     object.mesh = buildRenderMesh(object.topology, primitiveSmoothAngle(type));
     object.transform.position = position;
@@ -220,7 +231,7 @@ int Editor::addLoftMesh(const std::vector<float>& profiles, int segments, Vec3 p
 
     Object object;
     object.id=scene_.nextId++; object.type=Primitive::CustomMesh; object.size=1.0f;
-    object.name="loft_mesh_"+std::to_string(object.id); object.mesh=std::move(mesh);
+    object.name="loft_mesh_"+std::to_string(object.id); object.mesh=std::move(mesh); object.smoothAngle=35.0f;
     object.topology=std::move(topology);
     object.transform.position=position;
     const int id=object.id;
@@ -311,10 +322,11 @@ bool Editor::sculptMesh(int id, Vec3 center, float radius, Vec3 offset) {
         changed = changed || weight > 0.0001f;
     }
     if (!changed) return false;
-    Mesh afterMesh = buildRenderMesh(afterTopology, primitiveSmoothAngle(object->type));
+    Mesh afterMesh = buildRenderMesh(afterTopology, object->smoothAngle);
     Mesh beforeMesh = object->mesh;
     execute(std::make_unique<MeshCommand>(id, std::move(beforeMesh), std::move(afterMesh),
-                                          std::move(beforeTopology), std::move(afterTopology)));
+                                          std::move(beforeTopology), std::move(afterTopology),
+                                          object->smoothAngle, object->smoothAngle));
     return true;
 }
 
@@ -341,7 +353,17 @@ bool Editor::meshOperation(int id, const std::string& operation, const std::vect
     if (source.empty() || source.faces.size() > 250000 || source.verts.size() > 250000) return false;
 
     PolyMesh result;
-    if (operation == "boolean_union" || operation == "boolean_difference" || operation == "boolean_intersection") {
+    float afterSmoothAngle = object->smoothAngle;
+    if (operation == "soft_normals") {
+        result = source;
+        afterSmoothAngle = 180.0f;
+    } else if (operation == "hard_normals") {
+        result = source;
+        afterSmoothAngle = 35.0f;
+    } else if (operation == "normal_angle") {
+        result = source;
+        afterSmoothAngle = std::clamp(value, 0.0f, 180.0f);
+    } else if (operation == "boolean_union" || operation == "boolean_difference" || operation == "boolean_intersection") {
         const Object* operand = scene_.find(otherObjectId);
         if (!operand || operand->id == object->id || operand->topology.empty()) return false;
         const int op = operation == "boolean_union" ? 0 : (operation == "boolean_difference" ? 1 : 2);
@@ -402,13 +424,14 @@ bool Editor::meshOperation(int id, const std::string& operation, const std::vect
     }
 
     if (result.empty() || result.verts.size() > 250000 || result.faces.size() > 250000) return false;
-    Mesh after = buildRenderMesh(result, primitiveSmoothAngle(object->type));
+    Mesh after = buildRenderMesh(result, afterSmoothAngle);
     if (after.vertices.empty() || after.indices.empty() || after.vertices.size() > 500000 ||
         after.indices.size() > 1500000) return false;
     Mesh beforeMesh = object->mesh;
     PolyMesh beforeTopology = object->topology;
     execute(std::make_unique<MeshCommand>(id, std::move(beforeMesh), std::move(after),
-                                          std::move(beforeTopology), std::move(result)));
+                                          std::move(beforeTopology), std::move(result),
+                                          object->smoothAngle, afterSmoothAngle));
     return true;
 }
 
