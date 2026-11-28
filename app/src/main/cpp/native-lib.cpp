@@ -424,39 +424,6 @@ Java_com_layouter_aimodeling_NativeBridge_onDrawFrame(JNIEnv*, jobject) {
     }
 
     // Liberta a memória da GPU de objetos que já não existem na cena.
-        auto it = r.gpu.find(o.id);
-        if (it == r.gpu.end()) {
-            it = r.gpu.emplace(o.id, upload(o.mesh, o.meshRevision)).first;
-        } else if (it->second.revision != o.meshRevision) {
-            destroy(it->second);
-            it->second = upload(o.mesh, o.meshRevision);
-        }
-
-        const Mat4 mvp = multiply(viewProj, o.transform.matrix());
-        float nm[9];
-        normalMatrix(o.transform, nm);
-
-        glUniformMatrix4fv(r.objMvp, 1, GL_FALSE, mvp.m);
-        glUniformMatrix4fv(r.objModel, 1, GL_FALSE, o.transform.matrix().m);
-        const Mat4 cameraRotation = multiply(rotateY(-r.camera.yaw), rotateX(-r.camera.pitch));
-        const Vec3 cameraPosition = transformPoint(cameraRotation, Vec3{-r.camera.panX, -r.camera.panY, r.camera.distance});
-        glUniform3f(r.objCamera, cameraPosition.x, cameraPosition.y, cameraPosition.z);
-        glUniformMatrix3fv(r.objNormal, 1, GL_FALSE, nm);
-        glUniform3f(r.objColor, o.color.r, o.color.g, o.color.b);
-        glUniform1f(r.objSelected, o.id == scene.selectedId ? 1.0f : 0.0f);
-        glUniform1f(r.objMetallic, o.material.metallic);
-        glUniform1f(r.objRoughness, o.material.roughness);
-        glUniform1f(r.objClearcoat, o.material.clearcoat);
-        glUniform1f(r.objEmission, o.material.emission);
-        glUniform3f(r.objSunDirection, r.sunDirection.x, r.sunDirection.y, r.sunDirection.z);
-        glUniform3f(r.objSunColor, r.sunColor.x, r.sunColor.y, r.sunColor.z);
-        glUniform1f(r.objSunIntensity, r.sunIntensity);
-        glUniform1f(r.objAmbientStrength, r.ambientStrength);
-
-        glBindVertexArray(it->second.vao);
-        glDrawElements(GL_TRIANGLES, it->second.count, GL_UNSIGNED_INT, nullptr);
-    }
-    // Liberta a memória da GPU de objetos que já não existem na cena.
     for (auto it = r.gpu.begin(); it != r.gpu.end();) {
         if (scene.find(it->first) == nullptr) {
             destroy(it->second);
