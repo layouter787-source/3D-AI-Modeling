@@ -1,5 +1,6 @@
 #include "core/glb.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <cmath>
@@ -14,15 +15,11 @@ struct GlbHeader {
     uint32_t version;
     uint32_t length;
 };
-struct GlbChunk {
-    uint32_t length;
-    uint32_t type;
-};
 #pragma pack(pop)
 
-constexpr uint32_t kGlbMagic = 0x46546C67u;  // glTF
-constexpr uint32_t kJsonChunk = 0x4E4F534Au;  // JSON
-constexpr uint32_t kBinChunk = 0x004E4942u;   // BIN\0
+constexpr uint32_t kGlbMagic = 0x46546C67u;
+constexpr uint32_t kJsonChunk = 0x4E4F534Au;
+constexpr uint32_t kBinChunk = 0x004E4942u;
 
 void appendU32(std::vector<uint8_t>& b, uint32_t v) {
     b.push_back(static_cast<uint8_t>(v & 0xff));
@@ -41,6 +38,24 @@ void pad4(std::vector<uint8_t>& b, uint8_t padByte) {
     while (b.size() % 4 != 0) b.push_back(padByte);
 }
 
+int findCountAfter(const std::string& json, size_t from, int nth) {
+    size_t search = from;
+    int found = 0;
+    const std::string key = "\"count\":";
+    while (search < json.size()) {
+        size_t c = json.find(key, search);
+        if (c == std::string::npos) break;
+        c += key.size();
+        int val = 0;
+        if (std::sscanf(json.c_str() + c, "%d", &val) == 1) {
+            if (found == nth) return val;
+            found++;
+        }
+        search = c + 1;
+    }
+    return 0;
+}
+
 }  // namespace
 
 std::vector<uint8_t> exportMeshToGlb(const Mesh& mesh, const Color& color, float metallic,
@@ -50,7 +65,6 @@ std::vector<uint8_t> exportMeshToGlb(const Mesh& mesh, const Color& color, float
     const size_t nV = mesh.vertices.size();
     const size_t nI = mesh.indices.size();
 
-    // BIN: positions (float3) + normals (float3) + indices (uint16)
     std::vector<uint8_t> bin;
     bin.reserve(nV * 24 + nI * 2 + 16);
     for (const Vertex& v : mesh.vertices) {
@@ -71,7 +85,6 @@ std::vector<uint8_t> exportMeshToGlb(const Mesh& mesh, const Color& color, float
     }
     pad4(bin, 0);
 
-    // Bounds
     float minP[3] = {1e30f, 1e30f, 1e30f};
     float maxP[3] = {-1e30f, -1e30f, -1e30f};
     for (const Vertex& v : mesh.vertices) {
@@ -87,13 +100,30 @@ std::vector<uint8_t> exportMeshToGlb(const Mesh& mesh, const Color& color, float
     const char* meshName = name && name[0] ? name : "mesh";
     std::snprintf(
         json, sizeof(json),
-        R"({"asset":{"version":"2.0","generator":"3D-AI-Modeling"},"scenes":[{"nodes":[0]}],"scene":0,"nodes":[{"mesh":0,"name":"%s"}],"meshes":[{"primitives":[{"attributes":{"POSITION":0,"NORMAL":1},"indices":2,"material":0}]}],"materials":[{"pbrMetallicRoughness":{"baseColorFactor":[%.4f,%.4f,%.4f,1.0],"metallicFactor":%.4f,"roughnessFactor":%.4f},"name":"mat"}],"accessors":[{"bufferView":0,"componentType":5126,"count":%zu,"type":"VEC3","max":[%.6f,%.6f,%.6f],"min":[%.6f,%.6f,%.6f]},{"bufferView":1,"componentType":5126,"count":%zu,"type":"VEC3"},{"bufferView":2,"componentType":5123,"count":%zu,"type":"SCALAR"}],"bufferViews":[{"buffer":0,"byteOffset":0,"byteLength":%zu,"target":34962},{"buffer":0,"byteOffset":%zu,"byteLength":%zu,"target":34962},{"buffer":0,"byteOffset":%zu,"byteLength":%zu,"target":34963}],"buffers":[{"byteLength":%zu}]})",
+        "{\"asset\":{\"version\":\"2.0\",\"generator\":\"3D-AI-Modeling\"},"
+        "\"scenes\":[{\"nodes\":[0]}],\"scene\":0,"
+        "\"nodes\":[{\"mesh\":0,\"name\":\"%s\"}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0,\"NORMAL\":1},"
+        "\"indices\":2,\"material\":0}]}],"
+        "\"materials\":[{\"pbrMetallicRoughness\":{"
+        "\"baseColorFactor\":[%.4f,%.4f,%.4f,1.0],"
+        "\"metallicFactor\":%.4f,\"roughnessFactor\":%.4f},\"name\":\"mat\"}],"
+        "\"accessors\":[{"
+        "\"bufferView\":0,\"componentType\":5126,\"count\":%zu,\"type\":\"VEC3\","
+        "\"max\":[%.6f,%.6f,%.6f],\"min\":[%.6f,%.6f,%.6f]},{"
+        "\"bufferView\":1,\"componentType\":5126,\"count\":%zu,\"type\":\"VEC3\"},{"
+        "\"bufferView\":2,\"componentType\":5123,\"count\":%zu,\"type\":\"SCALAR\"}],"
+        "\"bufferViews\":[{"
+        "\"buffer\":0,\"byteOffset\":0,\"byteLength\":%zu,\"target\":34962},{"
+        "\"buffer\":0,\"byteOffset\":%zu,\"byteLength\":%zu,\"target\":34962},{"
+        "\"buffer\":0,\"byteOffset\":%zu,\"byteLength\":%zu,\"target\":34963}],"
+        "\"buffers\":[{\"byteLength\":%zu}]}",
         meshName, color.r, color.g, color.b, metallic, roughness, nV, maxP[0], maxP[1], maxP[2],
         minP[0], minP[1], minP[2], nV, nI, nV * 12, normalOffset, nV * 12, indexOffset, nI * 2,
         bin.size());
 
     std::vector<uint8_t> jsonBytes(json, json + std::strlen(json));
-    pad4(jsonBytes, 0x20);  // space pad
+    pad4(jsonBytes, 0x20);
 
     std::vector<uint8_t> out;
     const uint32_t total =
@@ -113,7 +143,7 @@ std::vector<uint8_t> exportMeshToGlb(const Mesh& mesh, const Color& color, float
 bool importMeshFromGlb(const uint8_t* data, size_t size, Mesh& outMesh, Color* outColor,
                        float* outMetallic, float* outRoughness) {
     if (!data || size < 20) return false;
-    uint32_t magic, version, length;
+    uint32_t magic = 0, version = 0, length = 0;
     std::memcpy(&magic, data, 4);
     std::memcpy(&version, data + 4, 4);
     std::memcpy(&length, data + 8, 4);
@@ -125,7 +155,7 @@ bool importMeshFromGlb(const uint8_t* data, size_t size, Mesh& outMesh, Color* o
     std::string json;
 
     while (offset + 8 <= size) {
-        uint32_t chunkLen, chunkType;
+        uint32_t chunkLen = 0, chunkType = 0;
         std::memcpy(&chunkLen, data + offset, 4);
         std::memcpy(&chunkType, data + offset + 4, 4);
         offset += 8;
@@ -140,12 +170,6 @@ bool importMeshFromGlb(const uint8_t* data, size_t size, Mesh& outMesh, Color* o
     }
     if (!binData || json.empty()) return false;
 
-    // Minimal parse: find "POSITION" bufferView 0 style layout from our exporter,
-    // or generic: look for first large float array as positions.
-    // For robustness with our own files: positions at 0, normals after, indices last.
-    // Also accept any GLB that has count of verts in accessors.
-
-    // Extract baseColorFactor if present
     if (outColor) {
         auto pos = json.find("baseColorFactor");
         if (pos != std::string::npos) {
@@ -174,41 +198,10 @@ bool importMeshFromGlb(const uint8_t* data, size_t size, Mesh& outMesh, Color* o
         }
     }
 
-    // Parse first accessor count for POSITION
-    size_t vertCount = 0;
-    size_t idxCount = 0;
-    {
-        auto pos = json.find("\"POSITION\"");
-        if (pos == std::string::npos) pos = json.find("POSITION");
-        // Find count near first accessor
-        auto acc = json.find("\"count\"");
-        if (acc == std::string::npos) acc = json.find("\"count\":");
-        if (acc == std::string::npos) acc = json.find("count":");
-        // Simpler: search all "count":N
-        size_t search = 0;
-        int found = 0;
-        while (search < json.size() && found < 3) {
-            auto c = json.find("\"count\":", search);
-            if (c == std::string::npos) c = json.find("count":", search);
-            if (c == std::string::npos) break;
-            c = json.find(':', c);
-            int val = 0;
-            if (c != std::string::npos && std::sscanf(json.c_str() + c + 1, "%d", &val) == 1) {
-                if (found == 0) vertCount = static_cast<size_t>(val);
-                if (found == 2) idxCount = static_cast<size_t>(val);
-                found++;
-            }
-            search = c + 1;
-        }
-    }
+    size_t vertCount = static_cast<size_t>(findCountAfter(json, 0, 0));
+    size_t idxCount = static_cast<size_t>(findCountAfter(json, 0, 2));
+    if (vertCount == 0 || vertCount * 12 > binSize) return false;
 
-    if (vertCount == 0 || vertCount * 12 > binSize) {
-        // Fallback: assume only positions tightly packed, indices uint16 at end
-        // Try half binary as floats for verts
-        return false;
-    }
-
-    // Assume our export layout: pos, normals, indices
     const size_t posBytes = vertCount * 12;
     const size_t nrmBytes = vertCount * 12;
     if (posBytes + nrmBytes > binSize) return false;
@@ -228,7 +221,7 @@ bool importMeshFromGlb(const uint8_t* data, size_t size, Mesh& outMesh, Color* o
     if (idxOffset + idxCount * 2 > binSize) idxCount = (binSize - idxOffset) / 2;
     outMesh.indices.resize(idxCount);
     for (size_t i = 0; i < idxCount; ++i) {
-        uint16_t idx;
+        uint16_t idx = 0;
         std::memcpy(&idx, binData + idxOffset + i * 2, 2);
         outMesh.indices[i] = idx;
     }
