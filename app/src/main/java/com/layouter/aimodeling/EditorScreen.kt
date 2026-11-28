@@ -503,7 +503,7 @@ private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (
     var bevelSegments by remember { mutableIntStateOf(1) }
     var knifeEdgeA by remember { mutableStateOf("0") }
     var knifeEdgeB by remember { mutableStateOf("2") }
-    var knifePosition by remember { mutableFloatStateOf(0.5f) }
+    var knifePosition by remember { mutableStateOf(0.5f) }
     var booleanTarget by remember { mutableStateOf("") }
     var vertexIds by remember { mutableStateOf("0,1,2") }
     var topologySummary by remember { mutableStateOf("") }
