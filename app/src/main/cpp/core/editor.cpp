@@ -502,10 +502,9 @@ bool Editor::sculptMeshBrush(int id, Vec3 center, float radius, Vec3 stroke, int
 
     strength = std::clamp(strength, 0.0f, 1.0f);
     PolyMesh afterTopology = beforeTopology;
-    const std::vector<Vec3> computedNormals = sculptStrokeObjectId_ == id && brush != 0 && brush != 2 && brush != 3
-        ? vertexNormals(beforeTopology) : std::vector<Vec3>{};
-    const std::vector<Vec3>& normals = sculptStrokeObjectId_ == id && brush != 0 && brush != 2 && brush != 3
-        ? computedNormals : (sculptStrokeObjectId_ == id ? sculptStrokeNormals_ : computedNormals);
+    const bool useCachedNormals = sculptStrokeObjectId_ == id && (brush == 0 || brush == 2 || brush == 3);
+    const std::vector<Vec3> computedNormals = useCachedNormals ? std::vector<Vec3>{} : vertexNormals(beforeTopology);
+    const std::vector<Vec3>& normals = useCachedNormals ? sculptStrokeNormals_ : computedNormals;
     std::vector<std::vector<uint32_t>> computedAdjacency;
     const std::vector<std::vector<uint32_t>>* adjacencyPtr = nullptr;
     if (sculptStrokeObjectId_ == id) {
