@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -90,6 +91,7 @@ fun EditorScreen(isDarkTheme: Boolean = true, onToggleTheme: () -> Unit = {}) {
     var showMeshTools by remember { mutableStateOf(false) }
     var showExtensions by remember { mutableStateOf(false) }
     var showLighting by remember { mutableStateOf(false) }
+    var showPrimitiveDialog by remember { mutableStateOf(false) }
     var faceIndex by remember { mutableStateOf("0") }
     var objExport by remember { mutableStateOf("") }
     var projectExport by remember { mutableStateOf("") }
@@ -220,7 +222,7 @@ fun EditorScreen(isDarkTheme: Boolean = true, onToggleTheme: () -> Unit = {}) {
         )
 
         Row(
-            modifier = Modifier.align(Alignment.TopCenter).systemBarsPadding().padding(8.dp)
+            modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().horizontalScroll(rememberScrollState()).systemBarsPadding().padding(8.dp)
                 .background(if (isDarkTheme) Color(0xE9000000) else Color(0xE9FFFFFF), androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -271,10 +273,17 @@ fun EditorScreen(isDarkTheme: Boolean = true, onToggleTheme: () -> Unit = {}) {
         if (showMeshTools) MeshWorkbenchDialog(selected, faceIndex, { faceIndex = it }, { showMeshTools = false }, refresh)
         if (showLighting) LightingDialog { showLighting = false }
         if (showExtensions) ExtensionLibraryDialog { showExtensions = false }
+        if (showPrimitiveDialog) AdvancedPrimitiveDialog(onClose = { showPrimitiveDialog = false }) { type, size, detail ->
+            val y = if (type == PrimitiveType.PLANE) 0f else size / 2f
+            val id = NativeBridge.addPrimitiveDetailed(type.id, size, 0f, y, 0f, detail)
+            if (id >= 0) { NativeBridge.select(id); refresh() }
+            else Toast.makeText(context, "Não foi possível criar esta malha com a resolução escolhida", Toast.LENGTH_LONG).show()
+            showPrimitiveDialog = false
+        }
         AiPanel(
             onClose = { showAi = false },
             onSceneChanged = refresh,
-            modifier = Modifier.align(Alignment.BottomCenter),
+            modifier = Modifier.align(Alignment.Center).fillMaxSize(),
             visible = showAi
         )
         if (!showAi) {
@@ -284,7 +293,7 @@ fun EditorScreen(isDarkTheme: Boolean = true, onToggleTheme: () -> Unit = {}) {
                 verticalArrangement = Arrangement.spacedBy(7.dp)
             ) {
                 if (selected >= 0) SelectionTools(selected, refresh)
-                PrimitiveBar(refresh)
+                PrimitiveBar(refresh) { showPrimitiveDialog = true }
             }
         }
     }
@@ -512,21 +521,81 @@ private fun SelectionTools(id: Int, refresh: () -> Unit) {
 }
 
 @Composable
-private fun PrimitiveBar(refresh: () -> Unit) {
+private fun PrimitiveBar(refresh: () -> Unit, onAdvanced: () -> Unit) {
     Row(
-        Modifier.horizontalScroll(rememberScrollState()),
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(7.dp)
     ) {
-        Text("CRIAR", color = Color(0xFF9BC8C0), style = MaterialTheme.typography.labelSmall)
-        PrimitiveType.values().forEach { type ->
+        Text("MALHAS", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
+        listOf(
+            PrimitiveType.CUBE, PrimitiveType.SPHERE, PrimitiveType.CYLINDER,
+            PrimitiveType.CONE, PrimitiveType.TORUS, PrimitiveType.PLANE
+        ).forEach { type ->
             ToolButton(type.label) {
                 val size = 1f
                 val y = if (type == PrimitiveType.PLANE) 0f else size / 2f
-                val id = NativeBridge.addPrimitive(type.id, size, 0f, y, 0f)
+                val id = NativeBridge.addPrimitiveDetailed(type.id, size, 0f, y, 0f, 8)
                 if (id >= 0) NativeBridge.select(id)
                 refresh()
             }
         }
+        ToolButton("MAIS MALHAS +") { onAdvanced() }
     }
+}
+
+@Composable
+private fun AdvancedPrimitiveDialog(
+    onClose: () -> Unit,
+    onCreate: (PrimitiveType, Float, Int) -> Unit
+) {
+    var selected by remember { mutableStateOf(PrimitiveType.SPHERE) }
+    var size by remember { mutableStateOf(1.0f) }
+    var detail by remember { mutableStateOf(8.0f) }
+
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Criar malha avançada") },
+        text = {
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = 470.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
+                Text("FORMAS POLIGONAIS", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                PrimitiveType.values().filter { it != PrimitiveType.CUSTOM_MESH }.chunked(2).forEach { pair ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                        pair.forEach { type ->
+                            Button(
+                                onClick = { selected = type },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (selected == type) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                    contentColor = if (selected == type) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                                ),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 9.dp)
+                            ) {
+                                Text(type.label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                            }
+                        }
+                        if (pair.size == 1) androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+                    }
+                }
+                Text("Tamanho · ${"%.2f".format(size)} m", style = MaterialTheme.typography.labelMedium)
+                Slider(value = size, onValueChange = { size = it }, valueRange = 0.2f..4.0f)
+                Text("Densidade da malha · ${detail.toInt()}", style = MaterialTheme.typography.labelMedium)
+                Slider(value = detail, onValueChange = { detail = it }, valueRange = 1f..64f, steps = 62)
+                Text(
+                    "Mais densidade cria mais vértices e faces para subdivisão e escultura, mas usa mais memória e processamento. Começa baixo e aumenta quando necessário.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onCreate(selected, size, detail.toInt().coerceIn(1, 64)) }) {
+                Text("Criar malha")
+            }
+        },
+        dismissButton = { TextButton(onClick = onClose) { Text("Cancelar") } }
+    )
 }
