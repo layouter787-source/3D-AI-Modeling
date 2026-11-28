@@ -695,6 +695,102 @@ std::vector<int> Editor::faceShell(int id, int startFace) const {
     return result;
 }
 
+bool Editor::beginVertexPaintStroke(int id) {
+    if (paintStrokeObjectId_ >= 0) endVertexPaintStroke();
+    Object* object = scene_.find(id);
+    if (object == nullptr || object->topology.empty()) return false;
+    if (object->vertexColors.size() != object->topology.verts.size()) {
+        object->vertexColors.assign(object->topology.verts.size(), Vec3{1.0f, 1.0f, 1.0f});
+        object->mesh = buildRenderMesh(object->topology, object->smoothAngle, object->vertexColors);
+        ++object->meshRevision;
+    }
+    paintStrokeObjectId_ = id;
+    paintStrokeBeforeMesh_ = object->mesh;
+    paintStrokeBeforeTopology_ = object->topology;
+    paintStrokeBeforeColors_ = object->vertexColors;
+    paintStrokeBeforeSmoothAngle_ = object->smoothAngle;
+    paintStrokeChanged_ = false;
+    return true;
+}
+
+bool Editor::paintVertexAt(int id, const Ray& ray, float radius, Vec3 color, float opacity) {
+    Object* object = scene_.find(id);
+    if (object == nullptr || paintStrokeObjectId_ != id || object->topology.empty() ||
+        !finite3(ray.origin) || !finite3(ray.dir) || !finite3(color) ||
+        !std::isfinite(radius) || !std::isfinite(opacity) || radius < 0.001f) return false;
+
+    radius = std::clamp(radius, 0.001f, 100.0f);
+    opacity = std::clamp(opacity, 0.0f, 1.0f);
+    color.x = std::clamp(color.x, 0.0f, 1.0f);
+    color.y = std::clamp(color.y, 0.0f, 1.0f);
+    color.z = std::clamp(color.z, 0.0f, 1.0f);
+
+    const Mat4 model = object->transform.matrix();
+    float nearest = std::numeric_limits<float>::max();
+    for (size_t i = 0; i + 2 < object->mesh.indices.size(); i += 3) {
+        const uint32_t ia = object->mesh.indices[i];
+        const uint32_t ib = object->mesh.indices[i + 1];
+        const uint32_t ic = object->mesh.indices[i + 2];
+        if (ia >= object->mesh.vertices.size() || ib >= object->mesh.vertices.size() ||
+            ic >= object->mesh.vertices.size()) continue;
+        const Vertex& va = object->mesh.vertices[ia];
+        const Vertex& vb = object->mesh.vertices[ib];
+        const Vertex& vc = object->mesh.vertices[ic];
+        const Vec3 a = transformPoint(model, {va.px, va.py, va.pz});
+        const Vec3 b = transformPoint(model, {vb.px, vb.py, vb.pz});
+        const Vec3 d = transformPoint(model, {vc.px, vc.py, vc.pz});
+        float hitDistance = 0.0f;
+        if (rayTriangleHit(ray, a, b, d, hitDistance) && hitDistance < nearest) nearest = hitDistance;
+    }
+    if (!std::isfinite(nearest) || nearest == std::numeric_limits<float>::max()) return false;
+
+    const Vec3 worldHit = ray.origin + ray.dir * nearest;
+    const Vec3 localHit = transformPoint(inverseAffine(model), worldHit);
+    bool changed = false;
+    for (size_t i = 0; i < object->topology.verts.size(); ++i) {
+        const float distance = length(object->topology.verts[i] - localHit);
+        if (distance >= radius) continue;
+        const float t = std::clamp(1.0f - distance / radius, 0.0f, 1.0f);
+        const float falloff = t * t * (3.0f - 2.0f * t);
+        const float alpha = opacity * falloff;
+        if (alpha <= 0.001f) continue;
+        const Vec3 before = object->vertexColors[i];
+        const Vec3 after = before * (1.0f - alpha) + color * alpha;
+        if (length(after - before) > 0.0001f) {
+            object->vertexColors[i] = after;
+            changed = true;
+        }
+    }
+    if (!changed) return false;
+    object->mesh = buildRenderMesh(object->topology, object->smoothAngle, object->vertexColors);
+    ++object->meshRevision;
+    paintStrokeChanged_ = true;
+    return true;
+}
+
+void Editor::endVertexPaintStroke() {
+    if (paintStrokeObjectId_ < 0) return;
+    const int id = paintStrokeObjectId_;
+    Object* object = scene_.find(id);
+    if (object != nullptr && paintStrokeChanged_) {
+        Mesh afterMesh = object->mesh;
+        PolyMesh afterTopology = object->topology;
+        std::vector<Vec3> afterColors = object->vertexColors;
+        const float afterSmoothAngle = object->smoothAngle;
+        execute(std::make_unique<MeshCommand>(
+            id, std::move(paintStrokeBeforeMesh_), std::move(afterMesh),
+            std::move(paintStrokeBeforeTopology_), std::move(afterTopology),
+            paintStrokeBeforeSmoothAngle_, afterSmoothAngle,
+            std::move(paintStrokeBeforeColors_), std::move(afterColors)
+        ));
+    }
+    paintStrokeObjectId_ = -1;
+    paintStrokeChanged_ = false;
+    paintStrokeBeforeMesh_ = Mesh{};
+    paintStrokeBeforeTopology_ = PolyMesh{};
+    paintStrokeBeforeColors_.clear();
+}
+
 std::string Editor::describeMesh(int id, int offset, int limit) const {
     const Object* object = scene_.find(id);
     if (object == nullptr) return "{\"error\":\"Object not found\"}";
@@ -798,6 +894,11 @@ bool Editor::setMaterial(int id, Material material) {
 }
 
 void Editor::clearScene() {
+    paintStrokeObjectId_ = -1;
+    paintStrokeChanged_ = false;
+    paintStrokeBeforeMesh_ = Mesh{};
+    paintStrokeBeforeTopology_ = PolyMesh{};
+    paintStrokeBeforeColors_.clear();
     scene_ = Scene{};
     undo_.clear();
     redo_.clear();
@@ -809,6 +910,7 @@ void Editor::clearHistory() {
 }
 
 bool Editor::undo() {
+    if (paintStrokeObjectId_ >= 0) endVertexPaintStroke();
     if (undo_.empty()) return false;
     std::unique_ptr<Command> command = std::move(undo_.back());
     undo_.pop_back();
