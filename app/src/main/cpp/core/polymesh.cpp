@@ -277,9 +277,7 @@ PolyMesh makePipePoly(float outerRadius, float innerRadius, float height, int ra
     PolyMesh mesh;
     const uint32_t ringSize = static_cast<uint32_t>(radial);
     const uint32_t outerBottom = 0;
-    const uint32_t outerTop = ringSize * static_cast<uint32_t>(heightSegments);
     const uint32_t innerBottom = ringSize * static_cast<uint32_t>(heightSegments + 1);
-    const uint32_t innerTop = innerBottom + ringSize * static_cast<uint32_t>(heightSegments);
 
     // Outer and inner walls use independent rings so the wall has real thickness.
     for (int level = 0; level <= heightSegments; ++level) {
@@ -310,8 +308,9 @@ PolyMesh makePipePoly(float outerRadius, float innerRadius, float height, int ra
     for (int level = 0; level < heightSegments; ++level) {
         for (int i = 0; i < radial; ++i) {
             const int next = (i + 1) % radial;
-            mesh.faces.push_back({outer(level, i), outer(level, next), outer(level + 1, next), outer(level + 1, i)});
-            mesh.faces.push_back({inner(level, next), inner(level, i), inner(level + 1, i), inner(level + 1, next)});
+            // The outer wall faces away from the axis; the inner wall faces into the bore.
+            mesh.faces.push_back({outer(level, i), outer(level + 1, i), outer(level + 1, next), outer(level, next)});
+            mesh.faces.push_back({inner(level, i), inner(level, next), inner(level + 1, next), inner(level + 1, i)});
         }
     }
     for (int i = 0; i < radial; ++i) {
