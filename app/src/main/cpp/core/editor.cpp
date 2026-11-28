@@ -28,7 +28,6 @@ public:
         if (i >= 0) scene.objects.erase(scene.objects.begin() + i);
         if (scene.selectedId == object_.id) scene.selectedId = -1;
     }
-
 private:
     Object object_;
 };
@@ -51,7 +50,6 @@ public:
         scene.objects.insert(scene.objects.begin() + static_cast<std::ptrdiff_t>(pos), saved_);
         scene.selectedId = id_;
     }
-
 private:
     int id_;
     size_t index_ = 0;
@@ -69,7 +67,6 @@ public:
     void revert(Scene& scene) override {
         if (Object* o = scene.find(id_)) o->transform = before_;
     }
-
 private:
     int id_;
     Transform before_;
@@ -85,7 +82,6 @@ public:
     void revert(Scene& scene) override {
         if (Object* o = scene.find(id_)) o->color = before_;
     }
-
 private:
     int id_;
     Color before_;
@@ -102,7 +98,6 @@ public:
     void revert(Scene& scene) override {
         if (Object* o = scene.find(id_)) o->mesh = before_;
     }
-
 private:
     int id_;
     Mesh before_;
@@ -111,12 +106,9 @@ private:
 
 class ReplaceObjectCommand : public Command {
 public:
-    // For combine: stores A-before, B (deleted), A-after
     ReplaceObjectCommand(Object aBefore, Object bSaved, Object aAfter, bool bDeleted)
-        : aBefore_(std::move(aBefore)),
-          bSaved_(std::move(bSaved)),
-          aAfter_(std::move(aAfter)),
-          bDeleted_(bDeleted) {}
+        : aBefore_(std::move(aBefore)), bSaved_(std::move(bSaved)),
+          aAfter_(std::move(aAfter)), bDeleted_(bDeleted) {}
     void apply(Scene& scene) override {
         if (Object* a = scene.find(aAfter_.id)) *a = aAfter_;
         if (bDeleted_) {
@@ -127,16 +119,11 @@ public:
     }
     void revert(Scene& scene) override {
         if (Object* a = scene.find(aBefore_.id)) *a = aBefore_;
-        if (bDeleted_ && scene.find(bSaved_.id) == nullptr) {
-            scene.objects.push_back(bSaved_);
-        }
+        if (bDeleted_ && scene.find(bSaved_.id) == nullptr) scene.objects.push_back(bSaved_);
         scene.selectedId = aBefore_.id;
     }
-
 private:
-    Object aBefore_;
-    Object bSaved_;
-    Object aAfter_;
+    Object aBefore_, bSaved_, aAfter_;
     bool bDeleted_;
 };
 
@@ -146,7 +133,6 @@ int Editor::addPrimitive(Primitive type, float size, Vec3 position) {
     if (scene_.objects.size() >= kMaxObjects) return -1;
     if (!std::isfinite(size) || !finite3(position)) return -1;
     size = std::clamp(size, 0.01f, 100.0f);
-
     Object object;
     object.id = scene_.nextId++;
     object.type = type;
@@ -154,7 +140,6 @@ int Editor::addPrimitive(Primitive type, float size, Vec3 position) {
     object.mesh = makePrimitiveMesh(type, size);
     object.transform.position = position;
     object.name = std::string(primitiveName(type)) + "_" + std::to_string(object.id);
-
     const int id = object.id;
     execute(std::make_unique<AddCommand>(std::move(object)));
     return id;
@@ -164,12 +149,10 @@ int Editor::cloneObject(int id) {
     if (scene_.objects.size() >= kMaxObjects) return -1;
     const Object* src = scene_.find(id);
     if (src == nullptr) return -1;
-
     Object object = *src;
     object.id = scene_.nextId++;
     object.name = src->name + "_clone_" + std::to_string(object.id);
     object.transform.position.x += 0.15f;
-
     const int newId = object.id;
     execute(std::make_unique<AddCommand>(std::move(object)));
     return newId;
@@ -225,6 +208,8 @@ bool Editor::setColor(int id, Color color) {
     color.r = std::clamp(color.r, 0.0f, 1.0f);
     color.g = std::clamp(color.g, 0.0f, 1.0f);
     color.b = std::clamp(color.b, 0.0f, 1.0f);
+    color.metallic = std::clamp(color.metallic, 0.0f, 1.0f);
+    color.roughness = std::clamp(color.roughness, 0.04f, 1.0f);
     execute(std::make_unique<ColorCommand>(id, o->color, color));
     return true;
 }
@@ -250,12 +235,22 @@ bool Editor::meshOp(int id, const std::string& op, float amount, int segments,
     } else if (op == "weld" || op == "merge_vertices") {
         weldVertices(after, amount > 0.0f ? amount : 1e-4f);
     } else if (op == "mirror") {
-        mirrorMesh(after, segments /* axis 0/1/2 */, true);
+        mirrorMesh(after, segments, true);
     } else if (op == "extrude") {
         ok = extrudeFaces(after, faceIndices.empty() ? selectedFaces_ : faceIndices,
                           amount != 0.0f ? amount : 0.1f);
     } else if (op == "bevel") {
         ok = bevelMesh(after, amount > 0.0f ? amount : 0.05f, std::max(1, segments));
+    } else if (op == "create_face") {
+        if (faceIndices.size() < 3) return false;
+        ok = createFace(after, faceIndices[0], faceIndices[1], faceIndices[2]);
+    } else if (op == "connect") {
+        if (faceIndices.size() < 2) return false;
+        ok = connectVertices(after, faceIndices[0], faceIndices[1]);
+    } else if (op == "target_merge") {
+        if (faceIndices.size() < 2) return false;
+        std::vector<int> sources(faceIndices.begin() + 1, faceIndices.end());
+        ok = targetMerge(after, faceIndices[0], sources);
     } else {
         return false;
     }
@@ -269,35 +264,25 @@ int Editor::combineObjects(int idA, int idB) {
     Object* a = scene_.find(idA);
     Object* b = scene_.find(idB);
     if (a == nullptr || b == nullptr || idA == idB) return -1;
-
     Object aBefore = *a;
     Object bSaved = *b;
     Object aAfter = *a;
-
-    // Transform B verts into A's local space (approx: world then inverse A)
-    // Simple approach: bake both to world then store in A with identity-ish scale.
     Mesh worldB = b->mesh;
     const Mat4 mb = b->transform.matrix();
     for (auto& v : worldB.vertices) {
         Vec3 p = transformPoint(mb, {v.px, v.py, v.pz});
-        v.px = p.x;
-        v.py = p.y;
-        v.pz = p.z;
+        v.px = p.x; v.py = p.y; v.pz = p.z;
     }
     Mesh worldA = a->mesh;
     const Mat4 ma = a->transform.matrix();
     for (auto& v : worldA.vertices) {
         Vec3 p = transformPoint(ma, {v.px, v.py, v.pz});
-        v.px = p.x;
-        v.py = p.y;
-        v.pz = p.z;
+        v.px = p.x; v.py = p.y; v.pz = p.z;
     }
     appendMesh(worldA, worldB);
     aAfter.mesh = std::move(worldA);
-    aAfter.transform = Transform{};  // identity at origin of combined
-    // Keep position at A for UX
+    aAfter.transform = Transform{};
     aAfter.transform.position = a->transform.position;
-
     execute(std::make_unique<ReplaceObjectCommand>(std::move(aBefore), std::move(bSaved),
                                                    std::move(aAfter), true));
     return idA;
@@ -309,13 +294,10 @@ int Editor::separateFaces(int id, const std::vector<int>& faceIndices) {
     if (o == nullptr) return -1;
     const std::vector<int>& faces = faceIndices.empty() ? selectedFaces_ : faceIndices;
     if (faces.empty()) return -1;
-
     Mesh extracted = extractFaces(o->mesh, faces);
     if (extracted.indices.empty()) return -1;
-
     Mesh remaining = o->mesh;
     removeFaces(remaining, faces);
-
     Object neu;
     neu.id = scene_.nextId++;
     neu.type = o->type;
@@ -324,7 +306,6 @@ int Editor::separateFaces(int id, const std::vector<int>& faceIndices) {
     neu.transform = o->transform;
     neu.color = o->color;
     neu.name = o->name + "_part_" + std::to_string(neu.id);
-
     Mesh before = o->mesh;
     execute(std::make_unique<MeshCommand>(id, before, remaining));
     const int newId = neu.id;
@@ -363,7 +344,7 @@ int Editor::pick(const Ray& ray) {
 
 std::string Editor::describeScene() const {
     std::string out = "{\"objects\":[";
-    char buf[640];
+    char buf[768];
     bool first = true;
     for (const Object& o : scene_.objects) {
         if (!first) out += ",";
@@ -371,21 +352,20 @@ std::string Editor::describeScene() const {
         const auto st = meshStats(o.mesh);
         std::snprintf(
             buf, sizeof(buf),
-            R"JSON({"id":%d,"type":"%s","size":%.3f,"position":[%.3f,%.3f,%.3f],"rotation":[%.1f,%.1f,%.1f],"scale":[%.3f,%.3f,%.3f],"color":[%.2f,%.2f,%.2f],"vertices":%d,"triangles":%d})JSON",
+            R"JSON({"id":%d,"type":"%s","size":%.3f,"position":[%.3f,%.3f,%.3f],"rotation":[%.1f,%.1f,%.1f],"scale":[%.3f,%.3f,%.3f],"color":[%.2f,%.2f,%.2f],"metallic":%.2f,"roughness":%.2f,"vertices":%d,"triangles":%d})JSON",
             o.id, primitiveName(o.type), o.size, o.transform.position.x, o.transform.position.y,
             o.transform.position.z, o.transform.rotationDeg.x, o.transform.rotationDeg.y,
             o.transform.rotationDeg.z, o.transform.scale.x, o.transform.scale.y, o.transform.scale.z,
-            o.color.r, o.color.g, o.color.b, st.vertices, st.triangles);
+            o.color.r, o.color.g, o.color.b, o.color.metallic, o.color.roughness, st.vertices,
+            st.triangles);
         out += buf;
     }
     std::snprintf(buf, sizeof(buf),
                   R"JSON(],"selected":%d,"select_mode":"%s","selected_faces":%zu})JSON",
                   scene_.selectedId,
-                  selectMode_ == SelectMode::Face
-                      ? "face"
-                      : selectMode_ == SelectMode::Edge
-                            ? "edge"
-                            : selectMode_ == SelectMode::Vertex ? "vertex" : "object",
+                  selectMode_ == SelectMode::Face ? "face"
+                      : selectMode_ == SelectMode::Edge ? "edge"
+                      : selectMode_ == SelectMode::Vertex ? "vertex" : "object",
                   selectedFaces_.size());
     out += buf;
     return out;
