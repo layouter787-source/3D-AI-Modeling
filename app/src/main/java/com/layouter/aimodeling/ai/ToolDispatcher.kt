@@ -198,7 +198,7 @@ object ToolDispatcher {
         .put("name",name).put("description",description)
         .put("parameters",JSONObject().put("type","object").put("properties",properties).put("required",JSONArray(required)))
 
-    fun toolDefinitions():JSONArray{
+    suspend fun toolDefinitions():JSONArray{
         val id=JSONObject().put("type","integer"); val num=JSONObject().put("type","number")
         val str=JSONObject().put("type","string"); val list=JSONArray()
         list.put(tool("create_primitive","Create an editable primitive.",JSONObject()
