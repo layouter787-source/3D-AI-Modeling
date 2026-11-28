@@ -1,6 +1,6 @@
-# 3D-AI-Modeling
+# AI Modeling 3D
 
-Aplicativo Android de modelagem 3D com assistente de IA integrado. A interface é Kotlin + Jetpack Compose; o núcleo de cena e geometria é C++17/NDK com renderização OpenGL ES 3.0.
+**AI Modeling 3D** é um aplicativo Android de modelagem 3D com assistente de IA integrado. A interface é Kotlin + Jetpack Compose; o núcleo de cena e geometria é C++17/NDK com renderização OpenGL ES 3.0.
 
 ## O que já existe
 
@@ -58,6 +58,8 @@ O GitHub Actions compila um APK debug em cada push. Ver a aba Actions do reposit
 - [Formato de projeto](docs/PROJECT_FORMAT.md)
 - [Provedores e modelos](docs/AI_PROVIDERS.md)
 
-## Licença
+## Licença e integração com Blender
 
-Apache-2.0.
+O projeto está licenciado sob **GNU GPL-3.0-or-later**. Consulte o arquivo `LICENSE` completo e os avisos em `docs/BLENDER_GPL_INTEGRATION.md`.
+
+O objetivo é incorporar e adaptar ferramentas de modelagem do Blender de forma transparente e compatível com GPL, mantendo os avisos de copyright e registrando os componentes e modificações. Não afirmamos que as ferramentas já portadas estejam completas nem que o app seja o Blender. O código de terceiros mantém as licenças próprias quando aplicável.
