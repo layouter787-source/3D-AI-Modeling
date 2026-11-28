@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import com.layouter.aimodeling.ai.RemoteMcpConnector
+import com.layouter.aimodeling.ai.McpCloudLinkManager
 
 private val StudioBlue = Color(0xFF2563EB)
 private val StudioBlueDark = Color(0xFF60A5FA)
@@ -23,6 +24,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         RemoteMcpConnector.initialize(applicationContext)
+        McpCloudLinkManager.init(applicationContext)
         val preferences = getSharedPreferences("studio_preferences", MODE_PRIVATE)
         setContent {
             var darkTheme by remember { mutableStateOf(preferences.getBoolean("dark_theme", true)) }
