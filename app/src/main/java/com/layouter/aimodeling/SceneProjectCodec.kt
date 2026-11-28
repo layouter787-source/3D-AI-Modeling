@@ -18,6 +18,7 @@ object SceneProjectCodec {
         val type: PrimitiveType,
         val size: Float,
         val detail: Int,
+        val smoothAngle: Float,
         val position: FloatArray,
         val rotation: FloatArray,
         val scale: FloatArray,
@@ -76,6 +77,13 @@ object SceneProjectCodec {
                 ?: throw IllegalArgumentException("Tipo de objeto não suportado")
             val size = boundedNumber(item, "size", 0.01, 100.0)
             val detail = item.optInt("detail", 8).also { require(it in 1..64) { "Resolução de malha inválida" } }
+            val defaultSmoothAngle = when (type) {
+                PrimitiveType.SPHERE, PrimitiveType.TORUS, PrimitiveType.CAPSULE, PrimitiveType.ICOSPHERE -> 180.0
+                else -> 35.0
+            }
+            val smoothAngle = item.optDouble("smooth_angle", defaultSmoothAngle).also {
+                require(it.isFinite() && it in 0.0..180.0) { "Ângulo de normais inválido" }
+            }.toFloat()
             val position = vector(item, "position", -10000.0, 10000.0)
             val rotation = vector(item, "rotation", -100000.0, 100000.0)
             val scale = vector(item, "scale", 0.001, 1000.0)
@@ -87,7 +95,7 @@ object SceneProjectCodec {
             val emission = material?.let { boundedNumber(it, "emission", 0.0, 8.0) } ?: 0f
 
             parsed.add(
-                StoredObject(sourceId, type, size, detail, position, rotation, scale, color, metallic, roughness, clearcoat, emission)
+                StoredObject(sourceId, type, size, detail, smoothAngle, position, rotation, scale, color, metallic, roughness, clearcoat, emission)
             )
         }
 
@@ -114,6 +122,9 @@ object SceneProjectCodec {
                     item.detail
                 )
                 check(id >= 0) { "O motor recusou um objeto do projeto" }
+                check(NativeBridge.meshOperation(id, "normal_angle", intArrayOf(), 1, item.smoothAngle)) {
+                    "Não foi possível restaurar o modo de normais"
+                }
 
                 check(
                     NativeBridge.setTransform(
