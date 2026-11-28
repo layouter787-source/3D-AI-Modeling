@@ -965,15 +965,15 @@ Java_com_layouter_aimodeling_NativeBridge_setDisplayMode(JNIEnv* env, jobject, j
 JNIEXPORT jstring JNICALL
 Java_com_layouter_aimodeling_NativeBridge_pickAtComponent(JNIEnv* env, jobject, jfloat x, jfloat y,
                                                            jstring modeJ, jint objectId) {
-    if (!modeJ) return env->NewStringUTF("{\\"ok\\":false}");
+    if (!modeJ) return env->NewStringUTF("{\"ok\":false}");
     const char* mode = env->GetStringUTFChars(modeJ, nullptr);
-    if (!mode) return env->NewStringUTF("{\\"ok\\":false}");
+    if (!mode) return env->NewStringUTF("{\"ok\":false}");
     PickComponent component = PickComponent::None;
     if (std::strcmp(mode, "vertex") == 0) component = PickComponent::Vertex;
     else if (std::strcmp(mode, "edge") == 0) component = PickComponent::Edge;
     else if (std::strcmp(mode, "face") == 0) component = PickComponent::Face;
     env->ReleaseStringUTFChars(modeJ, mode);
-    if (component == PickComponent::None) return env->NewStringUTF("{\\"ok\\":false}");
+    if (component == PickComponent::None) return env->NewStringUTF("{\"ok\":false}");
     PickResult result;
     {
         std::lock_guard<std::mutex> lock(gMutex);
@@ -984,7 +984,7 @@ Java_com_layouter_aimodeling_NativeBridge_pickAtComponent(JNIEnv* env, jobject, 
                                 result.component == PickComponent::Face ? "face" : "none";
     char json[256];
     std::snprintf(json, sizeof(json),
-        "{\\"ok\\":%s,\\"object_id\\":%d,\\"component\\":\\"%s\\",\\"index\\":%d,\\"index_b\\":%d,\\"point\\":[%.5f,%.5f,%.5f]}",
+        "{\"ok\":%s,\"object_id\":%d,\"component\":\"%s\",\"index\":%d,\"index_b\":%d,\"point\":[%.5f,%.5f,%.5f]}",
         result.objectId >= 0 ? "true" : "false", result.objectId, componentName,
         result.index, result.indexB, result.worldPoint.x, result.worldPoint.y, result.worldPoint.z);
     return env->NewStringUTF(json);
