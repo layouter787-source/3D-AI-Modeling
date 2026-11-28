@@ -60,6 +60,7 @@ PolyMesh extrudeFaces(const PolyMesh& m, const std::vector<int>& faces, float di
                       Vec3 dir, float scale);
 PolyMesh insetFaces(const PolyMesh& m, const std::vector<int>& faces, float amount);
 PolyMesh loopCut(const PolyMesh& m, uint32_t a, uint32_t b, int cuts);
+PolyMesh connectVertices(const PolyMesh& m, uint32_t a, uint32_t b);
 PolyMesh solidify(const PolyMesh& m, float thickness);
 PolyMesh smoothMesh(const PolyMesh& m, int iterations, float factor);
 PolyMesh creaseByAngle(const PolyMesh& m, float angleDegrees);
