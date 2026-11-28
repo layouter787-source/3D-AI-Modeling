@@ -9,6 +9,18 @@ Mesh buildRenderMesh(const PolyMesh& p, float smoothAngleDegrees, const std::vec
     Mesh out;
     const size_t F = p.faces.size();
 
+    // Validate every polygon before Newell normals or vertex adjacency index the arrays.
+    if (p.verts.empty() || F == 0 || !std::isfinite(smoothAngleDegrees)) return out;
+    for (const Vec3& vertex : p.verts) {
+        if (!std::isfinite(vertex.x) || !std::isfinite(vertex.y) || !std::isfinite(vertex.z)) return out;
+    }
+    for (const auto& face : p.faces) {
+        if (face.size() < 3) return out;
+        for (uint32_t vertex : face) {
+            if (vertex >= p.verts.size()) return out;
+        }
+    }
+
     std::vector<Vec3> fn(F);
     std::vector<float> area(F);
     size_t corners = 0;
