@@ -88,6 +88,19 @@ object ToolDispatcher {
                 val c = a.vec3("color")
                 report(NativeBridge.setColor(a.getInt("object_id"), c[0], c[1], c[2]), "Color changed")
             }
+            "paint_vertex_region" -> {
+                val center = a.vec3("center")
+                val color = a.vec3("color")
+                report(
+                    NativeBridge.paintVertexRegion(
+                        a.getInt("object_id"), center[0], center[1], center[2],
+                        a.getDouble("radius").toFloat(), color[0], color[1], color[2],
+                        a.optDouble("opacity", 1.0).toFloat()
+                    ),
+                    "Vertex region painted and recorded in undo history",
+                    "Vertex paint missed the mesh or the radius/color values were invalid"
+                )
+            }
             "set_material" -> report(
                 NativeBridge.setMaterial(
                     a.getInt("object_id"),
@@ -449,6 +462,17 @@ object ToolDispatcher {
                     listOf("object_id", "color")
                 )
             )
+            .put(tool(
+                "paint_vertex_region",
+                "Paint editable mesh vertices around a local-space center using smooth radial falloff. This is true vertex color data rendered by the viewport shader, not a UV texture. Use local object coordinates, a radius in model units, RGB 0..1, and opacity 0..1. The operation is one undoable edit.",
+                JSONObject()
+                    .put("object_id", objectId)
+                    .put("center", number3("Local-space paint center [x,y,z]"))
+                    .put("radius", JSONObject().put("type","number").put("minimum",0.001).put("maximum",100))
+                    .put("color", number3("RGB 0..1"))
+                    .put("opacity", JSONObject().put("type","number").put("minimum",0).put("maximum",1)),
+                listOf("object_id","center","radius","color")
+            ))
             .put(tool(
                 "set_material",
                 "Set physically-based material controls. metallic and clearcoat are 0..1, roughness is 0.04..1, and emission is 0..8. This changes real viewport shading and is undoable.",
