@@ -51,6 +51,7 @@ object NativeBridge {
     external fun detachFaces(id: Int, faceIds: IntArray): Int
     external fun combineObjects(id: Int, otherObjectId: Int): Boolean
     external fun getFaceShell(id: Int, startFace: Int): IntArray
+    external fun getEdgeLoopFaces(id: Int, vertexA: Int, vertexB: Int): IntArray
     external fun beginVertexPaintStroke(id: Int): Boolean
     external fun paintVertexAt(id: Int, x: Float, y: Float, radius: Float, r: Float, g: Float, b: Float, opacity: Float): Boolean
     external fun endVertexPaintStroke()
