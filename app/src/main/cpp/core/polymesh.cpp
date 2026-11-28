@@ -821,6 +821,50 @@ PolyMesh connectVertices(const PolyMesh& m, uint32_t a, uint32_t b) {
     return out;
 }
 
+PolyMesh splitEdge(const PolyMesh& m, uint32_t a, uint32_t b, float t) {
+    if (a == b || a >= m.verts.size() || b >= m.verts.size() ||
+        !std::isfinite(t) || m.verts.size() >= 250000) return {};
+    t = std::clamp(t, 0.001f, 0.999f);
+    const uint64_t key = edgeKey(a, b);
+    bool found = false;
+    for (const auto& face : m.faces) {
+        if (face.size() < 3) return {};
+        for (size_t i = 0; i < face.size(); ++i) {
+            if (edgeKey(face[i], face[(i + 1) % face.size()]) == key) found = true;
+            if (face[i] >= m.verts.size()) return {};
+        }
+    }
+    if (!found) return {};
+
+    PolyMesh out = m;
+    const uint32_t inserted = static_cast<uint32_t>(out.verts.size());
+    const float ratio = a < b ? t : (1.0f - t);
+    out.verts.push_back(lerp(m.verts[a], m.verts[b], ratio));
+    for (auto& face : out.faces) {
+        std::vector<uint32_t> rebuilt;
+        rebuilt.reserve(face.size() + 1);
+        for (size_t i = 0; i < face.size(); ++i) {
+            const uint32_t p = face[i], q = face[(i + 1) % face.size()];
+            rebuilt.push_back(p);
+            if (edgeKey(p, q) == key) rebuilt.push_back(inserted);
+        }
+        face = std::move(rebuilt);
+    }
+
+    std::vector<std::pair<uint32_t, uint32_t>> creases;
+    creases.reserve(out.creases.size() + 1);
+    for (const auto& crease : out.creases) {
+        if (edgeKey(crease.first, crease.second) == key) {
+            creases.push_back(sortedPair(crease.first, inserted));
+            creases.push_back(sortedPair(inserted, crease.second));
+        } else {
+            creases.push_back(crease);
+        }
+    }
+    out.creases = std::move(creases);
+    return out;
+}
+
 PolyMesh loopCut(const PolyMesh& m, uint32_t a, uint32_t b, int cuts) {
     cuts = clampInt(cuts, 1, 32);
     const size_t F = m.faces.size();
