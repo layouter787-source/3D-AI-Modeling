@@ -7,9 +7,21 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.util.concurrent.TimeUnit
 
 /** HTTP JSON. Os métodos bloqueantes são usados apenas em Dispatchers.IO. */
 internal object HttpJson {
+    private val streamClient = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(0, TimeUnit.MILLISECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
+        .build()
+
 
     fun get(url: String, headers: Map<String, String> = emptyMap()): JSONObject =
         request(url, "GET", headers, null, 30_000)
@@ -17,30 +29,26 @@ internal object HttpJson {
     fun post(url: String, headers: Map<String, String>, body: JSONObject): JSONObject =
         request(url, "POST", headers, body, 90_000)
 
-    /** Consumes server-sent events incrementally; it never buffers the complete response. */
+    /** OkHttp/Okio reads each flushed SSE event from the open response stream. */
     suspend fun postSse(url: String, headers: Map<String, String>, body: JSONObject, onData: (String) -> Unit) =
         withContext(Dispatchers.IO) {
-            val connection = URL(url).openConnection() as HttpURLConnection
-            try {
-                connection.requestMethod = "POST"
-                connection.connectTimeout = 20_000
-                connection.readTimeout = 120_000
-                connection.setRequestProperty("Accept", "text/event-stream")
-                connection.setRequestProperty("Cache-Control", "no-cache")
-                connection.setRequestProperty("Content-Type", "application/json")
-                headers.forEach { (name, value) -> connection.setRequestProperty(name, value) }
-                connection.doOutput = true
-                connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
-                val code = connection.responseCode
-                if (code !in 200..299) {
-                    val error = connection.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-                    throw AiException("HTTP $code: ${errorMessage(error)}", httpCode = code)
+            val requestBody = body.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+            val request = Request.Builder().url(url).post(requestBody)
+                .header("Accept", "text/event-stream")
+                .header("Cache-Control", "no-cache, no-transform")
+                .header("Content-Type", "application/json")
+                .apply { headers.forEach { (name, value) -> header(name, value) } }
+                .build()
+            streamClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    val error = response.body?.string().orEmpty()
+                    throw AiException("HTTP ${response.code}: ${errorMessage(error)}", httpCode = response.code)
                 }
-                val reader = connection.inputStream.bufferedReader(Charsets.UTF_8)
+                val source = response.body?.source() ?: throw AiException("Resposta de streaming vazia")
                 var data = StringBuilder()
-                while (true) {
+                while (!source.exhausted()) {
                     currentCoroutineContext().ensureActive()
-                    val line = reader.readLine() ?: break
+                    val line = source.readUtf8Line() ?: break
                     if (line.isEmpty()) {
                         if (data.isNotEmpty()) { onData(data.toString()); data = StringBuilder() }
                     } else if (line.startsWith("data:")) {
@@ -49,8 +57,6 @@ internal object HttpJson {
                     }
                 }
                 if (data.isNotEmpty()) onData(data.toString())
-            } finally {
-                connection.disconnect()
             }
         }
 
