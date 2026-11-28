@@ -45,6 +45,7 @@ public:
     int detachFaces(int id, const std::vector<int>& faces);
     bool combineObjects(int id, int otherObjectId);
     std::vector<int> faceShell(int id, int startFace) const;
+    std::vector<int> edgeLoopFaces(int id, uint32_t vertexA, uint32_t vertexB) const;
     bool beginVertexPaintStroke(int id);
     bool paintVertexAt(int id, const Ray& ray, float radius, Vec3 color, float opacity);
     void endVertexPaintStroke();
