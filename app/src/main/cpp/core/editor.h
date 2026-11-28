@@ -40,6 +40,9 @@ public:
     int detachFaces(int id, const std::vector<int>& faces);
     bool combineObjects(int id, int otherObjectId);
     std::vector<int> faceShell(int id, int startFace) const;
+    bool beginVertexPaintStroke(int id);
+    bool paintVertexAt(int id, const Ray& ray, float radius, Vec3 color, float opacity);
+    void endVertexPaintStroke();
     std::string describeMesh(int id, int offset, int limit) const;
     bool setColor(int id, Color color);
     bool setMaterial(int id, Material material);
@@ -66,6 +69,12 @@ private:
     void fixSelection();
 
     Scene scene_;
+    int paintStrokeObjectId_ = -1;
+    bool paintStrokeChanged_ = false;
+    Mesh paintStrokeBeforeMesh_;
+    PolyMesh paintStrokeBeforeTopology_;
+    std::vector<Vec3> paintStrokeBeforeColors_;
+    float paintStrokeBeforeSmoothAngle_ = 35.0f;
     std::vector<std::unique_ptr<Command>> undo_;
     std::vector<std::unique_ptr<Command>> redo_;
 };
