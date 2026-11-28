@@ -10,7 +10,7 @@
     <application
         android:usesCleartextTraffic="true"
         android:allowBackup="false"
-        android:label="3D AI Modeling"
+        android:label="AI Modeling 3D"
         android:icon="@drawable/app_icon"
         android:roundIcon="@drawable/app_icon"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
