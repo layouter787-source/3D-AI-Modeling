@@ -8,6 +8,7 @@
         android:required="true" />
 
     <application
+        android:usesCleartextTraffic="true"
         android:allowBackup="false"
         android:label="3D AI Modeling"
         android:icon="@drawable/app_icon"
