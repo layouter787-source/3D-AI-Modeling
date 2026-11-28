@@ -13,10 +13,10 @@ export class McpLink {
  async fetch(req:Request):Promise<Response>{
   if(new URL(req.url).pathname==="/device"){const pair=new WebSocketPair(),client=pair[0],server=pair[1];this.state.acceptWebSocket(server);this.socket=server;server.addEventListener("message",e=>this.receive(String(e.data)));server.addEventListener("close",()=>{if(this.socket===server)this.socket=undefined;});return new Response(null,{status:101,webSocket:client});}
   if(!this.socket||this.socket.readyState!==WebSocket.OPEN)return new Response(JSON.stringify({error:"Manus app offline; enable MCP Cloud in app"}),{status:503,headers:{"content-type":"application/json"}});
-  const id=crypto.randomUUID(),body=req.method==="GET"?"":await req.text(),headers:Record<string,string>={};
+  const device=this.socket; const id=crypto.randomUUID(),body=req.method==="GET"?"":await req.text(),headers:Record<string,string>={};
   for(const k of ["accept","content-type","mcp-session-id","mcp-protocol-version","last-event-id"]){const v=req.headers.get(k);if(v)headers[k]=v;}
   const n=Math.max(1,Math.ceil(body.length/180000));const promise=new Promise<Response>(resolve=>this.pending.set(id,{resolve,parts:new Array(n),status:502,headers:new Headers({"content-type":"application/json"})}));
-  for(let i=0;i<n;i++)this.socket.send(JSON.stringify({t:"req",id,method:req.method,headers,i,n,data:body.slice(i*180000,(i+1)*180000)}));
+  for(let i=0;i<n;i++)device.send(JSON.stringify({t:"req",id,method:req.method,headers,i,n,data:body.slice(i*180000,(i+1)*180000)}));
   const timer=setTimeout(()=>{const p=this.pending.get(id);if(p){this.pending.delete(id);p.resolve(new Response(JSON.stringify({error:"MCP call timed out"}),{status:504}));}},115000);
   const result=await promise;clearTimeout(timer);return result;
  }
