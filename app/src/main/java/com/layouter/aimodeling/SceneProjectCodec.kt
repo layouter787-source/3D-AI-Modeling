@@ -44,7 +44,8 @@ object SceneProjectCodec {
         for (index in 0 until objects.length()) {
             val item = objects.getJSONObject(index)
             val colors = NativeBridge.getVertexColors(item.getInt("id"))
-            if (colors.isNotEmpty()) {
+            // Unpainted meshes already regenerate as white vertex color; omit that payload.
+            if (colors.any { kotlin.math.abs(it - 1.0f) > 0.00001f }) {
                 val packed = JSONArray()
                 colors.forEach { packed.put(it.toDouble()) }
                 item.put("vertex_colors", packed)
