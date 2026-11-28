@@ -71,6 +71,7 @@ struct Object {
     float size = 1.0f;
     int detail = 8;
     float smoothAngle = 35.0f;
+    std::vector<Vec3> vertexColors;
     uint64_t meshRevision = 1;
     Mesh mesh;                 // malha triangulada de renderização
     PolyMesh topology;          // malha poligonal editável (quads/ngons)
