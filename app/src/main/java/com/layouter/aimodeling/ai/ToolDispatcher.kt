@@ -23,6 +23,20 @@ object ToolDispatcher {
         val a = call.arguments
         return when (call.name) {
             "create_primitive" -> createPrimitive(a)
+            "clone_object" -> {
+                val id = a.getInt("object_id")
+                // Prefer native clone when available; otherwise recreate from scene description.
+                val newId = try {
+                    NativeBridge.cloneObject(id)
+                } catch (_: Throwable) {
+                    -1
+                }
+                if (newId >= 0) {
+                    ToolResult(true, "Cloned object $id -> new id $newId")
+                } else {
+                    ToolResult(false, "Clone failed (object not found or native clone not yet linked)")
+                }
+            }
             "set_transform" -> {
                 val p = a.vec3("position")
                 val r = a.vec3("rotation_degrees")
@@ -55,6 +69,16 @@ object ToolDispatcher {
             "undo" -> report(NativeBridge.undo(), "Undone", "Nothing to undo")
             "redo" -> report(NativeBridge.redo(), "Redone", "Nothing to redo")
             "get_scene" -> ToolResult(true, NativeBridge.describeScene())
+            "get_modeling_extensions" -> modelingExtensions()
+            "set_display_mode" -> {
+                val mode = a.getString("mode")
+                val ok = try {
+                    NativeBridge.setDisplayMode(mode)
+                } catch (_: Throwable) {
+                    false
+                }
+                report(ok, "Display mode set to $mode", "Display mode not supported yet: $mode")
+            }
             else -> ToolResult(false, "Unknown tool: ${call.name}")
         }
     }
@@ -75,6 +99,39 @@ object ToolDispatcher {
         } else {
             ToolResult(true, "Created object with id $id")
         }
+    }
+
+    private fun modelingExtensions(): ToolResult {
+        val json = JSONObject()
+            .put("native_ops", JSONArray()
+                .put("create_primitive")
+                .put("clone_object")
+                .put("set_transform").put("move_by").put("rotate_by").put("scale_by")
+                .put("set_color").put("delete_object")
+                .put("undo").put("redo").put("get_scene")
+                .put("set_display_mode"))
+            .put("planned_poly_mesh", JSONArray()
+                .put("extrude").put("inset").put("bevel").put("divide").put("triangulate")
+                .put("soft_normals").put("hard_normals").put("smooth")
+                .put("mirror").put("weld").put("merge_vertices").put("target_merge")
+                .put("connect").put("create_face").put("detach_faces").put("combine_objects")
+                .put("sculpt_mesh").put("loop_cut").put("boolean"))
+            .put("video_tools_mapped", JSONArray()
+                .put("Clone")
+                .put("Delete")
+                .put("Object selection")
+                .put("Free move/rotate/scale")
+                .put("Soft/Hard normals (planned)")
+                .put("Divide (planned)")
+                .put("Bevel (planned)")
+                .put("Combine/Separate (planned)")
+                .put("Wireframe display (incremental)"))
+            .put("research_sculpt_brushes", JSONArray()
+                .put("Draw/Clay/Inflate/Grab/Smooth/Flatten/Pinch/Crease — approximate with sculpt_mesh when available"))
+            .put("research_dcc", JSONArray()
+                .put("Blender").put("Prisma3D").put("Nomad Sculpt").put("ZBrush").put("3DCoat"))
+            .put("note", "Never claim planned ops are installed. Approximate with native_ops only.")
+        return ToolResult(true, json.toString())
     }
 
     private fun report(
@@ -134,6 +191,14 @@ object ToolDispatcher {
             )
             .put(
                 tool(
+                    "clone_object",
+                    "Duplicate an existing object (same mesh, transform and color). Returns the new id.",
+                    JSONObject().put("object_id", objectId),
+                    listOf("object_id")
+                )
+            )
+            .put(
+                tool(
                     "set_transform",
                     "Set the absolute transform of an object.",
                     JSONObject()
@@ -176,5 +241,27 @@ object ToolDispatcher {
             .put(tool("undo", "Undo the last change.", JSONObject(), emptyList()))
             .put(tool("redo", "Redo the last undone change.", JSONObject(), emptyList()))
             .put(tool("get_scene", "Return the current scene as JSON.", JSONObject(), emptyList()))
+            .put(
+                tool(
+                    "get_modeling_extensions",
+                    "Return the catalog of native operations, planned PolyMesh ops, and research maps (Blender/Nomad/ZBrush). Call this when the user asks for advanced modeling, sculpt, bevel, wireframe or industry workflows.",
+                    JSONObject(),
+                    emptyList()
+                )
+            )
+            .put(
+                tool(
+                    "set_display_mode",
+                    "Set viewport display mode: wireframe, shaded, or wireframe_on_shaded.",
+                    JSONObject().put(
+                        "mode",
+                        JSONObject().put("type", "string").put(
+                            "enum",
+                            JSONArray().put("wireframe").put("shaded").put("wireframe_on_shaded")
+                        )
+                    ),
+                    listOf("mode")
+                )
+            )
     }
 }
