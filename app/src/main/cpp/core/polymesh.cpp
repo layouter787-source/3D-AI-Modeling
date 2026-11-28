@@ -838,8 +838,8 @@ PolyMesh splitEdge(const PolyMesh& m, uint32_t a, uint32_t b, float t) {
 
     PolyMesh out = m;
     const uint32_t inserted = static_cast<uint32_t>(out.verts.size());
-    const float ratio = a < b ? t : (1.0f - t);
-    out.verts.push_back(lerp(m.verts[a], m.verts[b], ratio));
+    // t is measured from the caller's first endpoint toward the second.
+    out.verts.push_back(lerp(m.verts[a], m.verts[b], t));
     for (auto& face : out.faces) {
         std::vector<uint32_t> rebuilt;
         rebuilt.reserve(face.size() + 1);
