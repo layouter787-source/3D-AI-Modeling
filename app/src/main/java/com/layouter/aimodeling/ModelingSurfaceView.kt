@@ -50,8 +50,10 @@ class ModelingSurfaceView(context: Context) : GLSurfaceView(context) {
         if (!enabled && painting) {
             painting = false
             paintObjectId = -1
-            queueEvent { NativeBridge.endVertexPaintStroke() }
-            onSceneChanged?.invoke()
+            queueEvent {
+                NativeBridge.endVertexPaintStroke()
+                post { onSceneChanged?.invoke() }
+            }
         }
     }
 
@@ -136,8 +138,10 @@ class ModelingSurfaceView(context: Context) : GLSurfaceView(context) {
                     if (painting) {
                         painting = false
                         paintObjectId = -1
-                        queueEvent { NativeBridge.endVertexPaintStroke() }
-                        onSceneChanged?.invoke()
+                        queueEvent {
+                            NativeBridge.endVertexPaintStroke()
+                            post { onSceneChanged?.invoke() }
+                        }
                     }
                     return true
                 }
