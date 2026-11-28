@@ -93,6 +93,7 @@ fun EditorScreen(isDarkTheme: Boolean = true, onToggleTheme: () -> Unit = {}) {
     var showExtensions by remember { mutableStateOf(false) }
     var showLighting by remember { mutableStateOf(false) }
     var showPrimitiveDialog by remember { mutableStateOf(false) }
+    var showMaterialDialog by remember { mutableStateOf(false) }
     var faceIndex by remember { mutableStateOf("0") }
     var objExport by remember { mutableStateOf("") }
     var projectExport by remember { mutableStateOf("") }
@@ -274,6 +275,7 @@ fun EditorScreen(isDarkTheme: Boolean = true, onToggleTheme: () -> Unit = {}) {
         if (showMeshTools) MeshWorkbenchDialog(selected, faceIndex, { faceIndex = it }, { showMeshTools = false }, refresh)
         if (showLighting) LightingDialog { showLighting = false }
         if (showExtensions) ExtensionLibraryDialog { showExtensions = false }
+        if (showMaterialDialog) MaterialWorkbenchDialog(selected, onClose = { showMaterialDialog = false }, refresh = refresh)
         if (showPrimitiveDialog) AdvancedPrimitiveDialog(onClose = { showPrimitiveDialog = false }) { type, size, detail ->
             val y = if (type == PrimitiveType.PLANE) 0f else size / 2f
             val id = NativeBridge.addPrimitiveDetailed(type.id, size, 0f, y, 0f, detail)
@@ -293,7 +295,7 @@ fun EditorScreen(isDarkTheme: Boolean = true, onToggleTheme: () -> Unit = {}) {
                     .background(Color(0xE91B1E23), androidx.compose.foundation.shape.RoundedCornerShape(22.dp)).systemBarsPadding().padding(10.dp),
                 verticalArrangement = Arrangement.spacedBy(7.dp)
             ) {
-                if (selected >= 0) SelectionTools(selected, refresh)
+                if (selected >= 0) SelectionTools(selected, refresh, onMaterial = { showMaterialDialog = true })
                 PrimitiveBar(refresh) { showPrimitiveDialog = true }
             }
         }
@@ -344,6 +346,47 @@ private fun LightingDialog(onClose: () -> Unit) {
             Slider(value = sky, onValueChange = { sky = it; apply() }, valueRange = 0f..1f)
         }
     }, confirmButton = { TextButton(onClick = onClose) { Text("Concluído") } })
+}
+
+@Composable
+private fun MaterialWorkbenchDialog(id: Int, onClose: () -> Unit, refresh: () -> Unit) {
+    var metallic by remember { mutableStateOf(0.0f) }
+    var roughness by remember { mutableStateOf(0.55f) }
+    var clearcoat by remember { mutableStateOf(0.0f) }
+    var emission by remember { mutableStateOf(0.0f) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Material · propriedades PBR") },
+        text = {
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Material não é uma textura UV: estes controlos alteram as propriedades do shader existente.")
+                Text("Metallic · ${(metallic * 100).toInt()}%")
+                Slider(value = metallic, onValueChange = { metallic = it }, valueRange = 0f..1f)
+                Text("Roughness · ${(roughness * 100).toInt()}%")
+                Slider(value = roughness, onValueChange = { roughness = it }, valueRange = 0.02f..1f)
+                Text("Clearcoat · ${(clearcoat * 100).toInt()}%")
+                Slider(value = clearcoat, onValueChange = { clearcoat = it }, valueRange = 0f..1f)
+                Text("Emission · ${(emission * 100).toInt()}%")
+                Slider(value = emission, onValueChange = { emission = it }, valueRange = 0f..1f)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TextButton(onClick = { metallic = 0f; roughness = 0.85f; clearcoat = 0f; emission = 0f }) { Text("Matte") }
+                    TextButton(onClick = { metallic = 0.9f; roughness = 0.22f; clearcoat = 0.35f; emission = 0f }) { Text("Metal") }
+                    TextButton(onClick = { metallic = 0f; roughness = 0.18f; clearcoat = 0.8f; emission = 0f }) { Text("Glossy") }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                val ok = NativeBridge.setMaterial(id, metallic, roughness, clearcoat, emission)
+                Toast.makeText(context, if (ok) "Propriedades do material aplicadas" else "Falha ao aplicar material", Toast.LENGTH_SHORT).show()
+                if (ok) refresh()
+                onClose()
+            }) { Text("Aplicar") }
+        },
+        dismissButton = { TextButton(onClick = onClose) { Text("Cancelar") } }
+    )
 }
 
 @Composable
@@ -511,7 +554,7 @@ private fun ToolButton(label: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun SelectionTools(id: Int, refresh: () -> Unit) {
+private fun SelectionTools(id: Int, refresh: () -> Unit, onMaterial: () -> Unit) {
     val scroll1 = rememberScrollState()
     val scroll2 = rememberScrollState()
 
@@ -531,6 +574,12 @@ private fun SelectionTools(id: Int, refresh: () -> Unit) {
         ToolButton("Z−") { NativeBridge.moveBy(id, 0f, 0f, -MOVE_STEP); refresh() }
         ToolButton("MOLDAR +") { NativeBridge.sculptMesh(id, 0f, 0f, 0f, 0.85f, 0f, 0.10f, 0f); refresh() }
         ToolButton("MOLDAR −") { NativeBridge.sculptMesh(id, 0f, 0f, 0f, 0.85f, 0f, -0.10f, 0f); refresh() }
+        ToolButton("CLONE") {
+            val copy = NativeBridge.duplicateObject(id, 0.8f, 0f, 0f)
+            if (copy >= 0) NativeBridge.select(copy)
+            refresh()
+        }
+        ToolButton("MATERIAL") { onMaterial() }
         ToolButton("Z+") { NativeBridge.moveBy(id, 0f, 0f, MOVE_STEP); refresh() }
     }
 
