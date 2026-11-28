@@ -18,16 +18,24 @@ class ProviderStreamingTest {
 
     @Before fun startServer() { server = MockWebServer(); server.start() }
     @After fun stopServer() { server.shutdown() }
+    private fun baseUrl() = server.url("/v1/").toString().trimEnd('/')
+    private fun sse(vararg frames: String) = frames.joinToString("\n\n") { "data: $it" } + "\n\n"
+    private fun openAiFrame(delta: JSONObject, finish: String? = null): String {
+        val choice = JSONObject().put("delta", delta)
+        if (finish != null) choice.put("finish_reason", finish)
+        return JSONObject().put("choices", JSONArray().put(choice)).toString()
+    }
 
-    private fun baseUrl(): String = server.url("/v1/").toString().trimEnd('/')
-    private fun sse(vararg jsonEvents: String): String = jsonEvents.joinToString("\n\n") { "data: $it" } + "\n\n"
-
-    @Test fun openAiCompatibleStreamEmitsTextAndAssemblesFragmentedToolArguments() = runBlocking {
+    @Test fun openAiCompatibleStreamEmitsTokensAndReassemblesToolArguments() = runBlocking {
+        val firstCall = JSONObject().put("index", 0).put("id", "call_1").put("function",
+            JSONObject().put("name", "create_").put("arguments", "{\"primitive\":"))
+        val secondCall = JSONObject().put("index", 0).put("function",
+            JSONObject().put("name", "primitive").put("arguments", "\"cube\"}"))
         server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream").setBody(sse(
-            """{"choices":[{"delta":{"content":"Build "}}]}""",
-            """{"choices":[{"delta":{"content":"a mesh"}}]}""",
-            """{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"create_","arguments":"{\\\"primitive\\\":"}}]}}]}""",
-            """{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"primitive","arguments":"\\\"cube\\\"}"}}]},"finish_reason":"tool_calls"}]}""",
+            openAiFrame(JSONObject().put("content", "Build ")),
+            openAiFrame(JSONObject().put("content", "a mesh")),
+            openAiFrame(JSONObject().put("tool_calls", JSONArray().put(firstCall))),
+            openAiFrame(JSONObject().put("tool_calls", JSONArray().put(secondCall)), "tool_calls"),
             "[DONE]"
         )))
         val provider = OpenAiProvider("test-key", "test-model", baseUrl(), "Mock OpenAI")
@@ -40,16 +48,17 @@ class ProviderStreamingTest {
         assertEquals("cube", turn.toolCalls[0].arguments.getString("primitive"))
     }
 
-    @Test fun anthropicStreamParsesTextAndToolUseBlocks() = runBlocking {
+    @Test fun anthropicStreamParsesTextAndToolUse() = runBlocking {
+        fun event(type: String, fields: JSONObject = JSONObject()) = fields.put("type", type).toString()
         server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream").setBody(sse(
-            """{"type":"message_start","message":{"id":"msg_1"}}""",
-            """{"type":"content_block_start","index":0,"content_block":{"type":"text","text":"Ready"}}""",
-            """{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"."}}""",
-            """{"type":"content_block_stop","index":0}""",
-            """{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"tool_1","name":"create_primitive","input":{}}}""",
-            """{"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\\\"primitive\\\":\\\"sphere\\\"}"}}""",
-            """{"type":"content_block_stop","index":1}""",
-            """{"type":"message_stop"}"""
+            event("message_start", JSONObject().put("message", JSONObject().put("id", "msg_1"))),
+            event("content_block_start", JSONObject().put("index", 0).put("content_block", JSONObject().put("type", "text").put("text", "Ready"))),
+            event("content_block_delta", JSONObject().put("index", 0).put("delta", JSONObject().put("type", "text_delta").put("text", "."))),
+            event("content_block_stop", JSONObject().put("index", 0)),
+            event("content_block_start", JSONObject().put("index", 1).put("content_block", JSONObject().put("type", "tool_use").put("id", "tool_1").put("name", "create_primitive").put("input", JSONObject()))),
+            event("content_block_delta", JSONObject().put("index", 1).put("delta", JSONObject().put("type", "input_json_delta").put("partial_json", "{\"primitive\":\"sphere\"}"))),
+            event("content_block_stop", JSONObject().put("index", 1)),
+            event("message_stop")
         )))
         val provider = AnthropicProvider("test-key", "claude-test", baseUrl())
         val deltas = StringBuilder()
@@ -60,17 +69,13 @@ class ProviderStreamingTest {
         assertEquals("sphere", turn.toolCalls[0].arguments.getString("primitive"))
     }
 
-    @Test fun unsupportedStreamingFallsBackToNonStreamingJsonRequest() = runBlocking {
+    @Test fun unsupportedStreamingRetriesWithJsonNotStreamFlag() = runBlocking {
         server.enqueue(MockResponse().setResponseCode(400).setBody("""{"error":{"message":"stream not supported"}}"""))
-        server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody(
-            """{"choices":[{"message":{"content":"fallback ok"}}]}"""
-        ))
+        server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody("""{"choices":[{"message":{"content":"fallback ok"}}]}"""))
         val provider = OpenAiProvider("test-key", "test-model", baseUrl(), "Fallback Provider")
         val turn = provider.sendStreaming("system", listOf(AiMessage.User("hello")), tools) {}
         assertEquals("fallback ok", turn.text)
-        val first = server.takeRequest()
-        val second = server.takeRequest()
-        assertTrue(JSONObject(first.body.readUtf8()).getBoolean("stream"))
-        assertFalse(JSONObject(second.body.readUtf8()).has("stream"))
+        assertTrue(JSONObject(server.takeRequest().body.readUtf8()).getBoolean("stream"))
+        assertFalse(JSONObject(server.takeRequest().body.readUtf8()).has("stream"))
     }
 }
