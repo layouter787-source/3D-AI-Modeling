@@ -514,7 +514,7 @@ private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (
                 Button(onClick = {
                     val newId = NativeBridge.detachFaces(selected, selectedFaceArray())
                     Toast.makeText(context, if (newId >= 0) "Faces separadas no objeto $newId" else "Não foi possível separar as faces", Toast.LENGTH_SHORT).show()
-                    if (newId >= 0) onChanged()
+                    if (newId >= 0) { NativeBridge.select(newId); onChanged() }
                 }, enabled = selected >= 0) { Text("Detach") }
                 Button(onClick = { apply("clone_faces", value = 0.12f, faces = selectedFaceArray()) }) { Text("Clone faces") }
                 Button(onClick = { apply("delete_faces", faces = selectedFaceArray()) }) { Text("Delete faces") }
