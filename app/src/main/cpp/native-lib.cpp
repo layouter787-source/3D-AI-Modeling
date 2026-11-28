@@ -558,6 +558,38 @@ Java_com_layouter_aimodeling_NativeBridge_meshOperation(JNIEnv* env, jobject, ji
     return toJ(gRenderer.editor.meshOperation(id, op, faces, parameter, value, otherObjectId));
 }
 
+JNIEXPORT jint JNICALL
+Java_com_layouter_aimodeling_NativeBridge_detachFaces(JNIEnv* env, jobject, jint id, jintArray faceIds) {
+    if (faceIds == nullptr) return -1;
+    const jsize count = env->GetArrayLength(faceIds);
+    if (count < 1 || count > 1200) return -1;
+    std::vector<int> faces(static_cast<size_t>(count));
+    env->GetIntArrayRegion(faceIds, 0, count, reinterpret_cast<jint*>(faces.data()));
+    if (env->ExceptionCheck()) { env->ExceptionClear(); return -1; }
+    std::lock_guard<std::mutex> lock(gMutex);
+    return gRenderer.editor.detachFaces(id, faces);
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_layouter_aimodeling_NativeBridge_combineObjects(JNIEnv*, jobject, jint id, jint otherObjectId) {
+    std::lock_guard<std::mutex> lock(gMutex);
+    return toJ(gRenderer.editor.combineObjects(id, otherObjectId));
+}
+
+JNIEXPORT jintArray JNICALL
+Java_com_layouter_aimodeling_NativeBridge_getFaceShell(JNIEnv* env, jobject, jint id, jint startFace) {
+    std::vector<int> shell;
+    {
+        std::lock_guard<std::mutex> lock(gMutex);
+        shell = gRenderer.editor.faceShell(id, startFace);
+    }
+    if (shell.empty()) return env->NewIntArray(0);
+    std::vector<jint> values(shell.begin(), shell.end());
+    jintArray result = env->NewIntArray(static_cast<jsize>(values.size()));
+    if (result != nullptr) env->SetIntArrayRegion(result, 0, static_cast<jsize>(values.size()), values.data());
+    return result;
+}
+
 JNIEXPORT jstring JNICALL
 Java_com_layouter_aimodeling_NativeBridge_getMeshTopology(JNIEnv* env, jobject, jint id, jint offset, jint limit) {
     std::string output;
