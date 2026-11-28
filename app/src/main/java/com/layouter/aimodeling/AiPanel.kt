@@ -547,7 +547,7 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
                                 Icon(Icons.Outlined.Add, "Adicionar referência", tint = MaterialTheme.colorScheme.primary)
                             }
                             DropdownMenu(expanded = attachmentMenu, onDismissRequest = { attachmentMenu = false }) {
-                                DropdownMenuItem(text = { Text("Galeria") }, leadingIcon = { Icon(Icons.Outlined.Image, null) }, onClick = {
+                                DropdownMenuItem(text = { Text("Galeria") }, leadingIcon = { Icon(Icons.Outlined.CameraAlt, null) }, onClick = {
                                     attachmentMenu = false
                                     galleryPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                                 })
