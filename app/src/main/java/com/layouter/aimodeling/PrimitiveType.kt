@@ -20,7 +20,8 @@ enum class PrimitiveType(val id: Int, val apiName: String, val label: String) {
     DODEC_PRISM(15, "dodec_prism", "Prisma dodecagonal"),
     TETRAHEDRON(16, "tetrahedron", "Tetraedro"),
     ICOSAHEDRON(17, "icosahedron", "Icosaedro"),
-    ICOSPHERE(18, "icosphere", "Icosfera");
+    ICOSPHERE(18, "icosphere", "Icosfera"),
+    PIPE(19, "pipe", "Tubo");
 
     companion object {
         fun fromApiName(name: String): PrimitiveType? = values().firstOrNull { it.apiName == name }
