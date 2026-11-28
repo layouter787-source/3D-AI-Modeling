@@ -33,6 +33,7 @@ class ModelingSurfaceView(context: Context) : GLSurfaceView(context) {
     @Volatile private var sculptRadius = 0.65f
     @Volatile private var sculptStrength = 0.35f
     private var sculpting = false
+    @Volatile private var sculptStrokeNativeStarted = false
     private var lastSculptX = 0f
     private var lastSculptY = 0f
     private var sculptObjectId = -1
@@ -46,7 +47,11 @@ class ModelingSurfaceView(context: Context) : GLSurfaceView(context) {
         if (!enabled && sculpting) {
             sculpting = false
             sculptObjectId = -1
-            post { onSceneChanged?.invoke() }
+            queueEvent {
+                if (sculptStrokeNativeStarted) NativeBridge.endSculptStroke()
+                sculptStrokeNativeStarted = false
+                post { onSceneChanged?.invoke() }
+            }
         }
     }
 
@@ -128,6 +133,13 @@ class ModelingSurfaceView(context: Context) : GLSurfaceView(context) {
                     sculpting = true
                     lastSculptX = event.x
                     lastSculptY = event.y
+                    val strokeId = sculptObjectId
+                    queueEvent {
+                        sculptStrokeNativeStarted = NativeBridge.beginSculptStroke(strokeId)
+                        if (!sculptStrokeNativeStarted) post {
+                            Toast.makeText(context, "Esta malha é demasiado densa para esculpir continuamente. Reduz a densidade.", Toast.LENGTH_LONG).show()
+                        }
+                    }
                     return true
                 }
                 MotionEvent.ACTION_MOVE -> {
@@ -147,8 +159,10 @@ class ModelingSurfaceView(context: Context) : GLSurfaceView(context) {
                             val strokeX = dx * 0.012f
                             val strokeY = -dy * 0.012f
                             queueEvent {
-                                NativeBridge.sculptMeshAtScreen(id, x, y, radius, brush, strength, strokeX, strokeY)
-                                post { onSceneChanged?.invoke() }
+                                if (sculptStrokeNativeStarted) {
+                                    NativeBridge.sculptMeshAtScreen(id, x, y, radius, brush, strength, strokeX, strokeY)
+                                    post { onSceneChanged?.invoke() }
+                                }
                             }
                         }
                     }
@@ -157,7 +171,11 @@ class ModelingSurfaceView(context: Context) : GLSurfaceView(context) {
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_POINTER_DOWN -> {
                     sculpting = false
                     sculptObjectId = -1
-                    post { onSceneChanged?.invoke() }
+                    queueEvent {
+                        if (sculptStrokeNativeStarted) NativeBridge.endSculptStroke()
+                        sculptStrokeNativeStarted = false
+                        post { onSceneChanged?.invoke() }
+                    }
                     return true
                 }
                 MotionEvent.ACTION_POINTER_UP -> return true
