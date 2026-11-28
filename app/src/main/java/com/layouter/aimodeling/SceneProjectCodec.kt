@@ -50,7 +50,7 @@ object SceneProjectCodec {
                 item.put("vertex_colors", packed)
             }
         }
-        return JSONObject()
+        val encoded = JSONObject()
             .put("format", FORMAT)
             .put("version", VERSION)
             .put("savedAtEpochMs", System.currentTimeMillis())
@@ -58,6 +58,10 @@ object SceneProjectCodec {
             .put("environment", scene.optJSONObject("environment"))
             .put("selected", scene.optInt("selected", -1))
             .toString(2)
+        require(encoded.toByteArray(Charsets.UTF_8).size <= MAX_PROJECT_BYTES) {
+            "O projecto é maior que o limite de 2 MB. Reduz a densidade ou a quantidade de malhas."
+        }
+        return encoded
     }
 
     /**
