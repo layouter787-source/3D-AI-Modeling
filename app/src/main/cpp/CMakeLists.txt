@@ -10,6 +10,9 @@ add_library(aimodeling SHARED
     core/polymesh.cpp
     core/json.cpp
     core/csg.cpp
+    core/mesh_ops.cpp
+    core/pick.cpp
+    core/glb.cpp
     core/scene.cpp
     core/editor.cpp)
 

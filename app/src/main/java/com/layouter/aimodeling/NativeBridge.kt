@@ -68,6 +68,27 @@ object NativeBridge {
     external fun getSelected(): Int
     external fun pickAt(x: Float, y: Float): Int
     external fun describeScene(): String
+
+    external fun exportGlb(id: Int, path: String): Boolean
+    external fun importGlb(path: String): Int
+    external fun pickAtComponent(x: Float, y: Float, mode: String, objectId: Int): String
+    external fun setDisplayMode(mode: String): Boolean
+
+    private var selectionMode: String = "object"
+    fun setSelectMode(mode: String): Boolean {
+        if (mode !in setOf("object", "vertex", "edge", "face")) return false
+        selectionMode = mode
+        return true
+    }
+    fun getSelectMode(): String = selectionMode
+
+    fun cloneObject(id: Int): Int = duplicateObject(id, 0.15f, 0.0f, 0.0f)
+    fun meshOp(id: Int, operation: String, amount: Float, segments: Int, faceIndices: IntArray?): Boolean =
+        meshOperation(id, operation, faceIndices ?: intArrayOf(), segments, amount, -1)
+    fun separateFaces(id: Int, faceIndices: IntArray?): Int = detachFaces(id, faceIndices ?: intArrayOf())
+    fun setPbr(id: Int, r: Float, g: Float, b: Float, metallic: Float, roughness: Float): Boolean =
+        setColor(id, r, g, b) && setMaterial(id, metallic, roughness, 0.0f, 0.0f)
+
     external fun exportObj(): String
     external fun exportMtl(): String
 }

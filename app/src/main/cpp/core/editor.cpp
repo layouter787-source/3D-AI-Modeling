@@ -264,6 +264,33 @@ int Editor::addPrimitive(Primitive type, float size, Vec3 position, int detail) 
     return id;
 }
 
+int Editor::addImportedMesh(Mesh mesh, Color color, float metallic, float roughness, const std::string& requestedName) {
+    if (mesh.vertices.size() < 3 || mesh.indices.size() < 3 || mesh.vertices.size() > 250000 ||
+        mesh.indices.size() > 1500000 || mesh.indices.size() % 3 != 0) return -1;
+    PolyMesh topology; topology.verts.reserve(mesh.vertices.size());
+    for (const Vertex& v : mesh.vertices) {
+        if (!std::isfinite(v.px) || !std::isfinite(v.py) || !std::isfinite(v.pz)) return -1;
+        topology.verts.push_back({v.px, v.py, v.pz});
+    }
+    topology.faces.reserve(mesh.indices.size()/3);
+    for (size_t i=0; i+2<mesh.indices.size(); i+=3) {
+        const uint32_t a=mesh.indices[i], b=mesh.indices[i+1], c=mesh.indices[i+2];
+        if (a>=topology.verts.size() || b>=topology.verts.size() || c>=topology.verts.size() || a==b || b==c || a==c) return -1;
+        topology.faces.push_back({a,b,c});
+    }
+    topology = weldVertices(topology, 1e-6f);
+    if (topology.empty() || topology.verts.size()>250000 || topology.faces.size()>250000) return -1;
+    Object object; object.id=scene_.nextId++; object.type=Primitive::CustomMesh; object.size=1.0f;
+    object.detail=8; object.smoothAngle=180.0f; object.topology=std::move(topology);
+    object.vertexColors.assign(object.topology.verts.size(), Vec3{1.0f,1.0f,1.0f});
+    object.mesh=buildRenderMesh(object.topology,object.smoothAngle,object.vertexColors);
+    if (object.mesh.vertices.empty() || object.mesh.indices.empty()) return -1;
+    object.color.r=std::clamp(color.r,0.0f,1.0f); object.color.g=std::clamp(color.g,0.0f,1.0f); object.color.b=std::clamp(color.b,0.0f,1.0f);
+    object.material.metallic=std::clamp(metallic,0.0f,1.0f); object.material.roughness=std::clamp(roughness,0.04f,1.0f);
+    object.name=requestedName.empty() ? "Imported_"+std::to_string(object.id) : requestedName;
+    const int id=object.id; execute(std::make_unique<AddCommand>(std::move(object))); return id;
+}
+
 int Editor::addLoftMesh(const std::vector<float>& profiles, int segments, Vec3 position) {
     if (profiles.size() < 12 ||
         profiles.size() % 4 != 0 || segments < 8 || !finite3(position)) return -1;

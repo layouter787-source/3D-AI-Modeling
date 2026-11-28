@@ -6,12 +6,17 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
+#include <cstring>
+#include <cstdint>
+#include <utility>
 #include <exception>
 #include <mutex>
 #include <unordered_map>
 #include <vector>
 
 #include "core/editor.h"
+#include "core/glb.h"
+#include "core/pick.h"
 
 using namespace core;
 
@@ -209,6 +214,7 @@ struct Renderer {
     GLsizei gridVertexCount = 0;
 
     std::unordered_map<int, GpuMesh> gpu;
+    int displayMode = 0; // 0 shaded, 1 wireframe, 2 shaded + wireframe
 
     float aspect = 1.0f;
     float width = 1.0f;
@@ -367,9 +373,57 @@ Java_com_layouter_aimodeling_NativeBridge_onDrawFrame(JNIEnv*, jobject) {
     glDrawArrays(GL_LINES, r.gridVertexCount + 2, 2);
     glBindVertexArray(0);
 
-    // Objetos.
-    glUseProgram(r.objectProgram);
-    for (const Object& o : scene.objects) {
+    // Objetos com modos shaded, wireframe e shaded + wireframe.
+    if (r.displayMode != 1) {
+        glUseProgram(r.objectProgram);
+        for (const Object& o : scene.objects) {
+            auto it = r.gpu.find(o.id);
+            if (it == r.gpu.end()) it = r.gpu.emplace(o.id, upload(o.mesh, o.meshRevision)).first;
+            else if (it->second.revision != o.meshRevision) { destroy(it->second); it->second = upload(o.mesh, o.meshRevision); }
+            const Mat4 mvp = multiply(viewProj, o.transform.matrix());
+            float nm[9]; normalMatrix(o.transform, nm);
+            glUniformMatrix4fv(r.objMvp, 1, GL_FALSE, mvp.m);
+            glUniformMatrix4fv(r.objModel, 1, GL_FALSE, o.transform.matrix().m);
+            const Mat4 cameraRotation = multiply(rotateY(-r.camera.yaw), rotateX(-r.camera.pitch));
+            const Vec3 cameraPosition = transformPoint(cameraRotation, Vec3{-r.camera.panX, -r.camera.panY, r.camera.distance});
+            glUniform3f(r.objCamera, cameraPosition.x, cameraPosition.y, cameraPosition.z);
+            glUniformMatrix3fv(r.objNormal, 1, GL_FALSE, nm);
+            glUniform3f(r.objColor, o.color.r, o.color.g, o.color.b);
+            glUniform1f(r.objSelected, o.id == scene.selectedId ? 1.0f : 0.0f);
+            glUniform1f(r.objMetallic, o.material.metallic);
+            glUniform1f(r.objRoughness, o.material.roughness);
+            glUniform1f(r.objClearcoat, o.material.clearcoat);
+            glUniform1f(r.objEmission, o.material.emission);
+            glUniform3f(r.objSunDirection, r.sunDirection.x, r.sunDirection.y, r.sunDirection.z);
+            glUniform3f(r.objSunColor, r.sunColor.x, r.sunColor.y, r.sunColor.z);
+            glUniform1f(r.objSunIntensity, r.sunIntensity);
+            glUniform1f(r.objAmbientStrength, r.ambientStrength);
+            glBindVertexArray(it->second.vao);
+            glDrawElements(GL_TRIANGLES, it->second.count, GL_UNSIGNED_INT, nullptr);
+        }
+        glBindVertexArray(0);
+    }
+    if (r.displayMode == 1 || r.displayMode == 2) {
+        glUseProgram(r.lineProgram);
+        glDepthFunc(GL_LEQUAL);
+        for (const Object& o : scene.objects) {
+            auto it = r.gpu.find(o.id);
+            if (it == r.gpu.end()) it = r.gpu.emplace(o.id, upload(o.mesh, o.meshRevision)).first;
+            else if (it->second.revision != o.meshRevision) { destroy(it->second); it->second = upload(o.mesh, o.meshRevision); }
+            const Mat4 mvp = multiply(viewProj, o.transform.matrix());
+            glUniformMatrix4fv(r.lineMvp, 1, GL_FALSE, mvp.m);
+            glUniform3f(r.lineColor, 0.90f, 0.90f, 0.95f);
+            glBindVertexArray(it->second.vao);
+            for (GLsizei i = 0; i + 2 < it->second.count; i += 3) {
+                const uintptr_t byteOffset = static_cast<uintptr_t>(i) * sizeof(uint32_t);
+                glDrawElements(GL_LINE_LOOP, 3, GL_UNSIGNED_INT, reinterpret_cast<const void*>(byteOffset));
+            }
+        }
+        glBindVertexArray(0);
+        glDepthFunc(GL_LESS);
+    }
+
+    // Liberta a memória da GPU de objetos que já não existem na cena.
         auto it = r.gpu.find(o.id);
         if (it == r.gpu.end()) {
             it = r.gpu.emplace(o.id, upload(o.mesh, o.meshRevision)).first;
@@ -402,8 +456,6 @@ Java_com_layouter_aimodeling_NativeBridge_onDrawFrame(JNIEnv*, jobject) {
         glBindVertexArray(it->second.vao);
         glDrawElements(GL_TRIANGLES, it->second.count, GL_UNSIGNED_INT, nullptr);
     }
-    glBindVertexArray(0);
-
     // Liberta a memória da GPU de objetos que já não existem na cena.
     for (auto it = r.gpu.begin(); it != r.gpu.end();) {
         if (scene.find(it->first) == nullptr) {
@@ -891,6 +943,88 @@ Java_com_layouter_aimodeling_NativeBridge_describeScene(JNIEnv* env, jobject) {
         }
     }
     return env->NewStringUTF(json.c_str());
+}
+
+
+JNIEXPORT jboolean JNICALL
+Java_com_layouter_aimodeling_NativeBridge_setDisplayMode(JNIEnv* env, jobject, jstring modeJ) {
+    if (!modeJ) return JNI_FALSE;
+    const char* mode = env->GetStringUTFChars(modeJ, nullptr);
+    if (!mode) return JNI_FALSE;
+    int value = -1;
+    if (std::strcmp(mode, "shaded") == 0) value = 0;
+    else if (std::strcmp(mode, "wireframe") == 0) value = 1;
+    else if (std::strcmp(mode, "wireframe_on_shaded") == 0) value = 2;
+    env->ReleaseStringUTFChars(modeJ, mode);
+    if (value < 0) return JNI_FALSE;
+    std::lock_guard<std::mutex> lock(gMutex);
+    gRenderer.displayMode = value;
+    return JNI_TRUE;
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_layouter_aimodeling_NativeBridge_pickAtComponent(JNIEnv* env, jobject, jfloat x, jfloat y,
+                                                           jstring modeJ, jint objectId) {
+    if (!modeJ) return env->NewStringUTF("{\\"ok\\":false}");
+    const char* mode = env->GetStringUTFChars(modeJ, nullptr);
+    if (!mode) return env->NewStringUTF("{\\"ok\\":false}");
+    PickComponent component = PickComponent::None;
+    if (std::strcmp(mode, "vertex") == 0) component = PickComponent::Vertex;
+    else if (std::strcmp(mode, "edge") == 0) component = PickComponent::Edge;
+    else if (std::strcmp(mode, "face") == 0) component = PickComponent::Face;
+    env->ReleaseStringUTFChars(modeJ, mode);
+    if (component == PickComponent::None) return env->NewStringUTF("{\\"ok\\":false}");
+    PickResult result;
+    {
+        std::lock_guard<std::mutex> lock(gMutex);
+        result = pickComponent(gRenderer.editor.scene(), cameraRay(gRenderer, x, y), objectId, component);
+    }
+    const char* componentName = result.component == PickComponent::Vertex ? "vertex" :
+                                result.component == PickComponent::Edge ? "edge" :
+                                result.component == PickComponent::Face ? "face" : "none";
+    char json[256];
+    std::snprintf(json, sizeof(json),
+        "{\\"ok\\":%s,\\"object_id\\":%d,\\"component\\":\\"%s\\",\\"index\\":%d,\\"index_b\\":%d,\\"point\\":[%.5f,%.5f,%.5f]}",
+        result.objectId >= 0 ? "true" : "false", result.objectId, componentName,
+        result.index, result.indexB, result.worldPoint.x, result.worldPoint.y, result.worldPoint.z);
+    return env->NewStringUTF(json);
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_layouter_aimodeling_NativeBridge_exportGlb(JNIEnv* env, jobject, jint id, jstring pathJ) {
+    if (!pathJ) return JNI_FALSE;
+    const char* path = env->GetStringUTFChars(pathJ, nullptr);
+    if (!path) return JNI_FALSE;
+    bool ok = false;
+    {
+        std::lock_guard<std::mutex> lock(gMutex);
+        const Object* object = gRenderer.editor.scene().find(id);
+        if (object) {
+            const auto bytes = exportMeshToGlb(object->mesh, object->color,
+                object->material.metallic, object->material.roughness, object->name.c_str());
+            ok = !bytes.empty() && writeGlbFile(path, bytes);
+        }
+    }
+    env->ReleaseStringUTFChars(pathJ, path);
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jint JNICALL
+Java_com_layouter_aimodeling_NativeBridge_importGlb(JNIEnv* env, jobject, jstring pathJ) {
+    if (!pathJ) return -1;
+    const char* path = env->GetStringUTFChars(pathJ, nullptr);
+    if (!path) return -1;
+    int newId = -1;
+    std::vector<uint8_t> bytes;
+    if (readFileBytes(path, bytes)) {
+        Mesh mesh; Color color; float metallic = 0.0f, roughness = 0.5f;
+        if (importMeshFromGlb(bytes.data(), bytes.size(), mesh, &color, &metallic, &roughness)) {
+            std::lock_guard<std::mutex> lock(gMutex);
+            newId = gRenderer.editor.addImportedMesh(std::move(mesh), color, metallic, roughness, "Imported_GLB");
+        }
+    }
+    env->ReleaseStringUTFChars(pathJ, path);
+    return newId;
 }
 
 }  // extern "C"
