@@ -352,6 +352,27 @@ private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (
     var edgeA by remember { mutableStateOf("0") }
     var edgeB by remember { mutableStateOf("1") }
     var booleanTarget by remember { mutableStateOf("") }
+    var topologySummary by remember { mutableStateOf("") }
+    var topologyFaces by remember { mutableStateOf<List<Pair<Int, String>>>(emptyList()) }
+    var selectedFaceIds by remember { mutableStateOf(setOf<Int>()) }
+
+    fun inspectTopology() {
+        if (selected < 0) return
+        runCatching {
+            val data = org.json.JSONObject(NativeBridge.getMeshTopology(selected, 0, 80))
+            val faces = data.optJSONArray("faces") ?: org.json.JSONArray()
+            topologyFaces = (0 until faces.length()).map { index ->
+                val face = faces.getJSONArray(index)
+                index to (0 until face.length()).joinToString(",") { face.getInt(it).toString() }
+            }
+            topologySummary = "${data.optInt("vertex_count")} vértices · ${data.optInt("face_count")} faces · página de ${topologyFaces.size}"
+            selectedFaceIds = emptySet()
+        }.onFailure {
+            topologySummary = "Não foi possível ler a topologia desta malha"
+            topologyFaces = emptyList()
+        }
+    }
+
     fun apply(operation: String, parameter: Int = 1, value: Float = 0.15f, faces: IntArray = intArrayOf(), otherObjectId: Int = -1) {
         if (selected < 0) { Toast.makeText(context, "Seleciona um objeto primeiro", Toast.LENGTH_SHORT).show(); return }
         val ok = NativeBridge.meshOperation(selected, operation, faces, parameter, value, otherObjectId)
@@ -361,7 +382,39 @@ private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (
     AlertDialog(onDismissRequest = onClose, title = { Text("Mesh Workbench") }, text = {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Text("Ferramentas de geometria nativa. As alterações entram no Undo/Redo.")
-            Text("Face ID (pede à IA: get_mesh_topology)")
+            Text("Topologia da malha", style = MaterialTheme.typography.titleSmall)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                Button(onClick = { inspectTopology() }, enabled = selected >= 0) { Text("Ler faces e vértices") }
+                Text(topologySummary, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (topologyFaces.isNotEmpty()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TextButton(onClick = { selectedFaceIds = topologyFaces.map { it.first }.toSet() }) { Text("Selecionar página") }
+                    TextButton(onClick = { selectedFaceIds = emptySet() }) { Text("Limpar seleção") }
+                }
+                topologyFaces.chunked(2).forEach { pair ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        pair.forEach { (id, vertices) ->
+                            val active = id in selectedFaceIds
+                            Button(
+                                onClick = {
+                                    selectedFaceIds = if (active) selectedFaceIds - id else selectedFaceIds + id
+                                },
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 7.dp, vertical = 7.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                    contentColor = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                                )
+                            ) {
+                                Text("F$id  [$vertices]", style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                            }
+                        }
+                        if (pair.size == 1) androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+                    }
+                }
+            }
+            Text("Seleção por ID (também podes digitar diretamente)")
             OutlinedTextField(faceIndex, onFaceIndex, label = { Text("Índice da face") }, singleLine = true)
             Text("Cortes e ligações · IDs dos dois vértices da aresta", style = MaterialTheme.typography.labelMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
@@ -380,7 +433,7 @@ private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (
                 Button(onClick = { apply("boolean_intersection", otherObjectId = booleanTarget.toIntOrNull() ?: -1) }) { Text("Intersect") }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                Button(onClick = { apply("extrude", value = 0.2f, faces = intArrayOf(faceIndex.toIntOrNull() ?: 0)) }) { Text("Extrude") }
+                Button(onClick = { apply("extrude", value = 0.2f, faces = selectedFaceIds.toIntArray().takeIf { it.isNotEmpty() } ?: intArrayOf(faceIndex.toIntOrNull() ?: 0)) }) { Text("Extrude") }
                 Button(onClick = { apply("inset", value = 0.08f, faces = intArrayOf(faceIndex.toIntOrNull() ?: 0)) }) { Text("Inset") }
                 Button(onClick = { apply("bevel", value = 0.08f, faces = intArrayOf(faceIndex.toIntOrNull() ?: 0)) }) { Text("Bevel") }
             }
