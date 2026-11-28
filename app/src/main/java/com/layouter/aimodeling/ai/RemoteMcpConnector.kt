@@ -18,6 +18,7 @@ object RemoteMcpConnector {
     private lateinit var appContext: Context
     private val requestIds = AtomicInteger(1)
     private val toolRoutes = LinkedHashMap<String, Route>()
+    private val sessions = LinkedHashMap<String, String>()
     private var cachedDefinitions = JSONArray()
     private var lastRefreshMs = 0L
 
@@ -35,6 +36,7 @@ object RemoteMcpConnector {
         SecretStore(appContext).put(CONFIG_KEY, json)
         synchronized(toolRoutes) {
             toolRoutes.clear()
+            sessions.clear()
             cachedDefinitions = JSONArray()
             lastRefreshMs = 0L
         }
@@ -192,6 +194,8 @@ object RemoteMcpConnector {
                 } else raw
             }.orEmpty()
             if (status !in 200..299) error("MCP HTTP $status: " + body.take(700))
+            val sessionId = connection.getHeaderField("Mcp-Session-Id")
+            if (!sessionId.isNullOrBlank()) synchronized(sessions) { sessions[server.endpoint] = sessionId }
             val response = JSONObject(body)
             if (response.has("error")) error("MCP ${response.optJSONObject("error")}")
             return response.optJSONObject("result") ?: error("MCP response missing result for $method")
@@ -206,6 +210,7 @@ object RemoteMcpConnector {
             readTimeout = 35_000
             instanceFollowRedirects = false
             server.headers.forEach { (key, value) -> setRequestProperty(key, value) }
+            synchronized(sessions) { sessions[server.endpoint] }?.let { setRequestProperty("Mcp-Session-Id", it) }
         }
 
     private fun safeName(value: String): String =
