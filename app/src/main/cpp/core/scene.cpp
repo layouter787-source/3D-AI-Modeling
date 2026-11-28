@@ -160,7 +160,7 @@ PolyMesh makePrimitivePolyMesh(Primitive p, float size, int detail) {
             break;
         }
         case Primitive::Pipe:
-            poly = makeCylinderPoly(size * 0.5f, size, radial, vertical, false); break;
+            poly = makePipePoly(size * 0.5f, size * 0.32f, size, radial, vertical); break;
     }
     return poly;
 }
