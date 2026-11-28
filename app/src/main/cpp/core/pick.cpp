@@ -26,17 +26,12 @@ bool rayTriangle(const Ray& ray, Vec3 a, Vec3 b, Vec3 c, float& t, float& u, flo
     return t > 1e-4f;
 }
 
-// Closest point on segment AB to ray; returns distance and ray t.
 bool raySegmentDist(const Ray& ray, Vec3 a, Vec3 b, float& outDist, float& outT, Vec3& outPt) {
-    // Approximate: closest points between ray and segment
     Vec3 u = ray.dir;
     Vec3 v = b - a;
     Vec3 w = ray.origin - a;
-    float uu = dot(u, u);
-    float uv = dot(u, v);
-    float vv = dot(v, v);
-    float uw = dot(u, w);
-    float vw = dot(v, w);
+    float uu = dot(u, u), uv = dot(u, v), vv = dot(v, v);
+    float uw = dot(u, w), vw = dot(v, w);
     float det = uu * vv - uv * uv;
     float s, t;
     if (std::fabs(det) < 1e-12f) {
@@ -58,30 +53,12 @@ bool raySegmentDist(const Ray& ray, Vec3 a, Vec3 b, float& outDist, float& outT,
 
 }  // namespace
 
-int pickObject(const Scene& scene, const Ray& ray) {
-    int bestId = -1;
-    float bestT = 1e30f;
-    for (const Object& o : scene.objects) {
-        const Mat4 model = o.transform.matrix();
-        const Mesh& mesh = o.mesh;
-        for (size_t i = 0; i + 2 < mesh.indices.size(); i += 3) {
-            Vec3 a = transformPoint(model, toVec(mesh.vertices[mesh.indices[i]]));
-            Vec3 b = transformPoint(model, toVec(mesh.vertices[mesh.indices[i + 1]]));
-            Vec3 c = transformPoint(model, toVec(mesh.vertices[mesh.indices[i + 2]]));
-            float t, u, v;
-            if (rayTriangle(ray, a, b, c, t, u, v) && t < bestT) {
-                bestT = t;
-                bestId = o.id;
-            }
-        }
-    }
-    return bestId;
-}
+// pickObject remains implemented in scene.cpp
 
 PickResult pickComponent(const Scene& scene, const Ray& ray, int objectId, PickComponent mode) {
     PickResult best;
     best.t = 1e30f;
-    const float vertexThreshold = 0.08f;  // world units (scales with distance slightly)
+    const float vertexThreshold = 0.08f;
     const float edgeThreshold = 0.06f;
 
     for (const Object& o : scene.objects) {
@@ -106,7 +83,6 @@ PickResult pickComponent(const Scene& scene, const Ray& ray, int objectId, PickC
         } else if (mode == PickComponent::Vertex) {
             for (size_t vi = 0; vi < mesh.vertices.size(); ++vi) {
                 Vec3 wp = transformPoint(model, toVec(mesh.vertices[vi]));
-                // Project distance from ray
                 Vec3 toV = wp - ray.origin;
                 float t = dot(toV, ray.dir);
                 if (t < 1e-4f) continue;
@@ -122,7 +98,6 @@ PickResult pickComponent(const Scene& scene, const Ray& ray, int objectId, PickC
                 }
             }
         } else if (mode == PickComponent::Edge) {
-            // Unique edges from triangles
             for (size_t i = 0; i + 2 < mesh.indices.size(); i += 3) {
                 uint16_t ids[3] = {mesh.indices[i], mesh.indices[i + 1], mesh.indices[i + 2]};
                 for (int e = 0; e < 3; ++e) {
