@@ -93,6 +93,7 @@ fun EditorScreen(isDarkTheme: Boolean = true, onToggleTheme: () -> Unit = {}) {
     var showMeshTools by remember { mutableStateOf(false) }
     var showExtensions by remember { mutableStateOf(false) }
     var showMcpDialog by remember { mutableStateOf(false) }
+    var showLicenseDialog by remember { mutableStateOf(false) }
     var mcpConfig by remember { mutableStateOf("") }
     var showLighting by remember { mutableStateOf(false) }
     var showPrimitiveDialog by remember { mutableStateOf(false) }
@@ -254,8 +255,8 @@ fun EditorScreen(isDarkTheme: Boolean = true, onToggleTheme: () -> Unit = {}) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Text("STUDIO", color = if (isDarkTheme) Color(0xFF60A5FA) else Color(0xFF2563EB), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 8.dp, end = 4.dp))
-            Text("/ 3D AI", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(end = 5.dp))
+            Text("AI MODELING 3D", color = if (isDarkTheme) Color(0xFF60A5FA) else Color(0xFF2563EB), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 8.dp, end = 4.dp))
+            TextButton(onClick = { showLicenseDialog = true }) { Text("Licença", style = MaterialTheme.typography.labelSmall) }
             IconButton(onClick = onToggleTheme) { Icon(if (isDarkTheme) Icons.Outlined.LightMode else Icons.Outlined.DarkMode, if (isDarkTheme) "Tema claro" else "Tema escuro", tint = if (isDarkTheme) Color(0xFF60A5FA) else Color(0xFF2563EB)) }
             IconButton(onClick = { NativeBridge.undo(); refresh() }, enabled = canUndo) {
                 Icon(Icons.Outlined.Undo, "Desfazer", tint = if (canUndo) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
@@ -297,6 +298,25 @@ fun EditorScreen(isDarkTheme: Boolean = true, onToggleTheme: () -> Unit = {}) {
             TextButton(onClick = { mcpConfig = RemoteMcpConnector.configuration(); showMcpDialog = true }) {
                 Text("MCP", color = MaterialTheme.colorScheme.primary)
             }
+        }
+
+        if (showLicenseDialog) {
+            AlertDialog(
+                onDismissRequest = { showLicenseDialog = false },
+                title = { Text("AI Modeling 3D — Avisos legais") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Este aplicativo é software livre, licenciado sob GNU General Public License v3.0 ou posterior.")
+                        Text("Pode usar, estudar, modificar e redistribuir o programa nos termos da GPL. O código-fonte correspondente à versão distribuída deve estar acessível.")
+                        Text("AI Modeling 3D é um projeto independente. Blender é um projeto separado; qualquer código Blender incorporado mantém os respetivos créditos e avisos. Não existe afiliação ou aprovação oficial da Blender Foundation.")
+                        Text("O programa é fornecido sem garantia. Consulte LICENSE e docs/BLENDER_GPL_INTEGRATION.md no repositório para a licença completa, fontes e registo de componentes.")
+                        Text("Código-fonte: github.com/layouter787-source/3D-AI-Modeling")
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showLicenseDialog = false }) { Text("Fechar") }
+                }
+            )
         }
 
         if (showMeshTools) MeshWorkbenchDialog(selected, faceIndex, { faceIndex = it }, { showMeshTools = false }, refresh)
