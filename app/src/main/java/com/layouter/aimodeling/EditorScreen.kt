@@ -499,6 +499,7 @@ private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (
     val context = androidx.compose.ui.platform.LocalContext.current
     var edgeA by remember { mutableStateOf("0") }
     var edgeB by remember { mutableStateOf("1") }
+    var loopCutSegments by remember { mutableIntStateOf(1) }
     var booleanTarget by remember { mutableStateOf("") }
     var vertexIds by remember { mutableStateOf("0,1,2") }
     var topologySummary by remember { mutableStateOf("") }
@@ -624,8 +625,10 @@ private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (
                 OutlinedTextField(edgeA, { edgeA = it.filter(Char::isDigit) }, label = { Text("Vértice A") }, modifier = Modifier.weight(1f), singleLine = true)
                 OutlinedTextField(edgeB, { edgeB = it.filter(Char::isDigit) }, label = { Text("Vértice B") }, modifier = Modifier.weight(1f), singleLine = true)
             }
+            Text("Segmentos do Loop Cut: $loopCutSegments", style = MaterialTheme.typography.labelMedium)
+            Slider(value = loopCutSegments.toFloat(), onValueChange = { loopCutSegments = it.toInt().coerceIn(1, 8) }, valueRange = 1f..8f, steps = 6)
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                Button(onClick = { apply("loop_cut", parameter = 1, faces = intArrayOf(edgeA.toIntOrNull() ?: 0, edgeB.toIntOrNull() ?: 1)) }) { Text("Loop Cut") }
+                Button(onClick = { apply("loop_cut", parameter = loopCutSegments, faces = intArrayOf(edgeA.toIntOrNull() ?: 0, edgeB.toIntOrNull() ?: 1)) }) { Text("Loop Cut") }
                 Button(onClick = { apply("connect", parameter = 1, faces = intArrayOf(edgeA.toIntOrNull() ?: 0, edgeB.toIntOrNull() ?: 1)) }) { Text("Connect") }
             }
             Text("Boolean · ID do segundo objeto", style = MaterialTheme.typography.labelMedium)
