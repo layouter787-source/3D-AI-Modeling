@@ -17,6 +17,7 @@ object NativeBridge {
 
     // Edição da cena (seguras em qualquer thread). Rotações em graus.
     external fun addPrimitive(type: Int, size: Float, x: Float, y: Float, z: Float): Int
+    external fun cloneObject(id: Int): Int
     external fun deleteObject(id: Int): Boolean
     external fun setTransform(
         id: Int,
@@ -28,6 +29,10 @@ object NativeBridge {
     external fun rotateBy(id: Int, rx: Float, ry: Float, rz: Float): Boolean
     external fun scaleBy(id: Int, fx: Float, fy: Float, fz: Float): Boolean
     external fun setColor(id: Int, r: Float, g: Float, b: Float): Boolean
+
+    // Display
+    /** mode: "shaded" | "wireframe" | "wireframe_on_shaded" */
+    external fun setDisplayMode(mode: String): Boolean
 
     // Histórico
     external fun undo(): Boolean
