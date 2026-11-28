@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
+#include <exception>
 #include <mutex>
 #include <unordered_map>
 #include <vector>
@@ -535,8 +536,16 @@ Java_com_layouter_aimodeling_NativeBridge_paintVertexRegion(JNIEnv*, jobject, ji
                                                             jfloat radius, jfloat r, jfloat g,
                                                             jfloat b, jfloat opacity) {
     std::lock_guard<std::mutex> lock(gMutex);
-    Color color{r, g, b};
-    return toJ(gRenderer.editor.paintVertexRegion(id, Vec3{cx, cy, cz}, radius, color, opacity));
+    try {
+        Color color{r, g, b};
+        return toJ(gRenderer.editor.paintVertexRegion(id, Vec3{cx, cy, cz}, radius, color, opacity));
+    } catch (const std::exception& error) {
+        LOGE("AI vertex paint failed safely: %s", error.what());
+        return JNI_FALSE;
+    } catch (...) {
+        LOGE("AI vertex paint failed with an unknown native error");
+        return JNI_FALSE;
+    }
 }
 
 JNIEXPORT jfloatArray JNICALL
@@ -600,7 +609,15 @@ Java_com_layouter_aimodeling_NativeBridge_meshOperation(JNIEnv* env, jobject, ji
         if (env->ExceptionCheck()) { env->ExceptionClear(); return JNI_FALSE; }
     }
     std::lock_guard<std::mutex> lock(gMutex);
-    return toJ(gRenderer.editor.meshOperation(id, op, faces, parameter, value, otherObjectId));
+    try {
+        return toJ(gRenderer.editor.meshOperation(id, op, faces, parameter, value, otherObjectId));
+    } catch (const std::exception& error) {
+        LOGE("Mesh operation '%s' failed safely: %s", op.c_str(), error.what());
+        return JNI_FALSE;
+    } catch (...) {
+        LOGE("Mesh operation '%s' failed with an unknown native error", op.c_str());
+        return JNI_FALSE;
+    }
 }
 
 JNIEXPORT jint JNICALL
@@ -612,13 +629,29 @@ Java_com_layouter_aimodeling_NativeBridge_detachFaces(JNIEnv* env, jobject, jint
     env->GetIntArrayRegion(faceIds, 0, count, reinterpret_cast<jint*>(faces.data()));
     if (env->ExceptionCheck()) { env->ExceptionClear(); return -1; }
     std::lock_guard<std::mutex> lock(gMutex);
-    return gRenderer.editor.detachFaces(id, faces);
+    try {
+        return gRenderer.editor.detachFaces(id, faces);
+    } catch (const std::exception& error) {
+        LOGE("Detach faces failed safely: %s", error.what());
+        return -1;
+    } catch (...) {
+        LOGE("Detach faces failed with an unknown native error");
+        return -1;
+    }
 }
 
 JNIEXPORT jboolean JNICALL
 Java_com_layouter_aimodeling_NativeBridge_combineObjects(JNIEnv*, jobject, jint id, jint otherObjectId) {
     std::lock_guard<std::mutex> lock(gMutex);
-    return toJ(gRenderer.editor.combineObjects(id, otherObjectId));
+    try {
+        return toJ(gRenderer.editor.combineObjects(id, otherObjectId));
+    } catch (const std::exception& error) {
+        LOGE("Combine objects failed safely: %s", error.what());
+        return JNI_FALSE;
+    } catch (...) {
+        LOGE("Combine objects failed with an unknown native error");
+        return JNI_FALSE;
+    }
 }
 
 JNIEXPORT jintArray JNICALL
@@ -626,7 +659,15 @@ Java_com_layouter_aimodeling_NativeBridge_getFaceShell(JNIEnv* env, jobject, jin
     std::vector<int> shell;
     {
         std::lock_guard<std::mutex> lock(gMutex);
-        shell = gRenderer.editor.faceShell(id, startFace);
+        try {
+            shell = gRenderer.editor.faceShell(id, startFace);
+        } catch (const std::exception& error) {
+            LOGE("Select shell failed safely: %s", error.what());
+            return env->NewIntArray(0);
+        } catch (...) {
+            LOGE("Select shell failed with an unknown native error");
+            return env->NewIntArray(0);
+        }
     }
     if (shell.empty()) return env->NewIntArray(0);
     std::vector<jint> values(shell.begin(), shell.end());
@@ -638,7 +679,15 @@ Java_com_layouter_aimodeling_NativeBridge_getFaceShell(JNIEnv* env, jobject, jin
 JNIEXPORT jboolean JNICALL
 Java_com_layouter_aimodeling_NativeBridge_beginVertexPaintStroke(JNIEnv*, jobject, jint id) {
     std::lock_guard<std::mutex> lock(gMutex);
-    return toJ(gRenderer.editor.beginVertexPaintStroke(id));
+    try {
+        return toJ(gRenderer.editor.beginVertexPaintStroke(id));
+    } catch (const std::exception& error) {
+        LOGE("Begin vertex paint failed safely: %s", error.what());
+        return JNI_FALSE;
+    } catch (...) {
+        LOGE("Begin vertex paint failed with an unknown native error");
+        return JNI_FALSE;
+    }
 }
 
 JNIEXPORT jboolean JNICALL
@@ -646,14 +695,28 @@ Java_com_layouter_aimodeling_NativeBridge_paintVertexAt(JNIEnv*, jobject, jint i
                                                         jfloat x, jfloat y, jfloat radius,
                                                         jfloat r, jfloat g, jfloat b, jfloat opacity) {
     std::lock_guard<std::mutex> lock(gMutex);
-    const Ray ray = cameraRay(gRenderer, x, y);
-    return toJ(gRenderer.editor.paintVertexAt(id, ray, radius, Vec3{r, g, b}, opacity));
+    try {
+        const Ray ray = cameraRay(gRenderer, x, y);
+        return toJ(gRenderer.editor.paintVertexAt(id, ray, radius, Vec3{r, g, b}, opacity));
+    } catch (const std::exception& error) {
+        LOGE("Vertex paint dab failed safely: %s", error.what());
+        return JNI_FALSE;
+    } catch (...) {
+        LOGE("Vertex paint dab failed with an unknown native error");
+        return JNI_FALSE;
+    }
 }
 
 JNIEXPORT void JNICALL
 Java_com_layouter_aimodeling_NativeBridge_endVertexPaintStroke(JNIEnv*, jobject) {
     std::lock_guard<std::mutex> lock(gMutex);
-    gRenderer.editor.endVertexPaintStroke();
+    try {
+        gRenderer.editor.endVertexPaintStroke();
+    } catch (const std::exception& error) {
+        LOGE("End vertex paint failed safely: %s", error.what());
+    } catch (...) {
+        LOGE("End vertex paint failed with an unknown native error");
+    }
 }
 
 JNIEXPORT jstring JNICALL
