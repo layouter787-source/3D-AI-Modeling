@@ -93,11 +93,15 @@ class OpenAiProvider(
                 val text = StringBuilder()
                 data class ToolPart(var id: String = "", var name: String = "", val args: StringBuilder = StringBuilder())
                 val toolParts = sortedMapOf<Int, ToolPart>()
+                var streamCompleted = false
+                var finishReasonSeen = false
                 try {
                     HttpJson.postSse("$baseUrl/chat/completions", mapOf("Authorization" to "Bearer $apiKey"), body) { raw ->
-                        if (raw == "[DONE]") return@postSse
+                        if (raw == "[DONE]") { streamCompleted = true; return@postSse }
                         val event = runCatching { JSONObject(raw) }.getOrNull() ?: return@postSse
-                        val delta = event.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("delta") ?: return@postSse
+                        val choice = event.optJSONArray("choices")?.optJSONObject(0) ?: return@postSse
+                        if (!choice.isNull("finish_reason")) finishReasonSeen = true
+                        val delta = choice.optJSONObject("delta") ?: return@postSse
                         val token = delta.optString("content", "")
                         if (token.isNotEmpty()) { text.append(token); onTextDelta(token) }
                         val chunks = delta.optJSONArray("tool_calls") ?: return@postSse
@@ -112,13 +116,17 @@ class OpenAiProvider(
                             }
                         }
                     }
+                    if (!streamCompleted && !finishReasonSeen) throw AiException("Stream terminou sem evento final")
                     val calls = toolParts.values.mapIndexed { index, part ->
-                        val args = runCatching { JSONObject(part.args.toString().ifBlank { "{}" }) }.getOrElse { JSONObject() }
+                        if (part.name.isBlank()) throw AiException("Tool call recebido sem nome")
+                        val args = try { JSONObject(part.args.toString().ifBlank { "{}" }) }
+                            catch (e: Exception) { throw AiException("JSON inválido nos argumentos da ferramenta", cause = e) }
                         ToolCall(part.id.ifBlank { "stream_call_$index" }, part.name, args)
                     }
                     return@withContext AiTurn(text.toString(), calls)
                 } catch (error: AiException) {
                     if (error.httpCode !in setOf(400, 404, 405, 406, 415, 422, 501) || text.isNotEmpty()) throw error
+                    body.remove("stream")
                 }
             }
             val response = HttpJson.post(
