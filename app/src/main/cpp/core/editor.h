@@ -82,6 +82,8 @@ private:
     Mesh sculptStrokeBeforeMesh_;
     PolyMesh sculptStrokeBeforeTopology_;
     std::vector<Vec3> sculptStrokeBeforeColors_;
+    std::vector<Vec3> sculptStrokeNormals_;
+    std::vector<std::vector<uint32_t>> sculptStrokeAdjacency_;
     float sculptStrokeBeforeSmoothAngle_ = 35.0f;
     int paintStrokeObjectId_ = -1;
     bool paintStrokeChanged_ = false;
