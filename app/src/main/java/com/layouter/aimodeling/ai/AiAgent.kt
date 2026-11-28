@@ -24,7 +24,7 @@ class AiAgent(private val provider: AiProvider) {
 
             for (call in turn.toolCalls) {
                 val result = if (toolCallsUsed >= MAX_TOOL_CALLS) {
-                    ToolResult(false, "Tool call limit reached for this request")
+                    ToolResult(false, "Tool call limit reached")
                 } else {
                     toolCallsUsed++
                     ToolDispatcher.execute(call)
@@ -34,43 +34,33 @@ class AiAgent(private val provider: AiProvider) {
             }
             onSceneChanged()
         }
-        onText("(Parei por limite de passos. Peça para continuar se faltar algo.)")
+        onText("(Limite de passos. Peça para continuar.)")
     }
 
     private fun systemPrompt(): String =
         """
-        You are the modeling assistant inside a 3D modeling app on a phone.
-        Units are meters, Y is up, the ground is the XZ plane at y=0.
-        You can only change the scene through the provided tools.
+        You are the modeling assistant inside a phone 3D app. Units: meters, Y up, ground XZ at y=0.
+        Only change the scene through tools.
 
-        NATIVE TOOLS:
-        - create_primitive, clone_object, set_transform, move_by, rotate_by, scale_by, set_color
-        - delete_object, undo, redo, get_scene
-        - set_display_mode (shaded | wireframe | wireframe_on_shaded)
-        - mesh_operation with operations:
-          soft_normals, hard_normals, divide, subdivide, triangulate, smooth,
-          weld, merge_vertices, mirror, extrude, bevel
+        TOOLS:
+        - create_primitive (cube/sphere/cylinder/cone/torus/plane)
+        - clone_object, delete_object, set_transform, move_by, rotate_by, scale_by, set_color
+        - mesh_operation: soft_normals | hard_normals | divide | smooth | weld | mirror | extrude | bevel
+          amount = distance/factor/epsilon; segments = bevel segments or smooth iterations or mirror axis 0/1/2
+          face_indices = optional csv of triangle indices for extrude
         - combine_objects, separate_faces
-        - set_select_mode (object|face|edge|vertex), set_selected_faces
-        - get_modeling_extensions
+        - set_display_mode: shaded | wireframe | wireframe_on_shaded
+        - set_select_mode: object | face | edge | vertex
+        - undo, redo, get_scene, get_modeling_extensions
 
         VIDEO WORKFLOW (potted plant reference):
-        1. create cylinder for pot; scale non-uniformly to taper
-        2. mesh_operation divide / soft_normals / bevel as needed
-        3. create leaf pieces (cone/cube), set_color green, clone_object + rotate
-        4. set_display_mode wireframe to inspect, then shaded
-        5. combine_objects when you want a single mesh
+        1) cylinder for pot, scale non-uniformly
+        2) mesh_operation divide / smooth / soft_normals on pot
+        3) small cones/cubes for leaves, set_color green, clone_object + rotate
+        4) bevel on edges when useful; wireframe to inspect topology
+        5) set_color beige/brown on pot
 
-        mesh_operation tips:
-        - soft_normals / hard_normals: amount ignored
-        - divide/subdivide: one midpoint level
-        - smooth: amount=factor (0-1), segments=iterations
-        - bevel: amount=radius-ish, segments=1..4
-        - extrude: amount=distance; optional faces[] triangle indices
-        - mirror: segments = axis (0=X,1=Y,2=Z)
-        - weld: amount=epsilon
-
-        Reply briefly in the user's language.
+        Reply briefly in the user's language. Prefer few precise tool calls.
         Current scene: ${NativeBridge.describeScene()}
         """.trimIndent()
 
@@ -83,7 +73,7 @@ class AiAgent(private val provider: AiProvider) {
 
     private companion object {
         const val MAX_ROUNDS = 10
-        const val MAX_TOOL_CALLS = 56
+        const val MAX_TOOL_CALLS = 60
         const val MAX_HISTORY = 60
     }
 }

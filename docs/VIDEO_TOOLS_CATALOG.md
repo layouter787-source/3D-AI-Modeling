@@ -1,41 +1,43 @@
-# Catálogo de ferramentas do vídeo (humano)
+# Catálogo de ferramentas do vídeo → implementação
 
-Fonte: gravação de ecrã de **3D modeling: Design my model**.  
-O vídeo **não** é do nosso app nem gerado por IA.
+Fonte: gravação humana em *3D modeling: Design my model*.
 
-## Estado de implementação (branch feature/video-tools-and-streaming)
+## Estado (branch feature/video-tools-and-streaming)
 
-| UI no vídeo | Tool nativa / AI | Estado |
-|-------------|------------------|--------|
-| Object select | select / pick / get_scene | **OK** |
-| Face / Edge / Vertex mode | set_select_mode | **OK** (estado; pick por face ainda limitado) |
-| Clone | clone_object | **OK** |
-| Delete | delete_object | **OK** |
-| Soft normals | mesh_operation soft_normals | **OK** |
-| Hard normals | mesh_operation hard_normals | **OK** |
-| Divide | mesh_operation divide/subdivide | **OK** |
-| Smooth | mesh_operation smooth | **OK** |
-| Bevel | mesh_operation bevel (amount, segments) | **OK** (aproximação) |
-| Extrude | mesh_operation extrude | **OK** |
-| Mirror | mesh_operation mirror | **OK** |
-| Merge close / weld | mesh_operation weld | **OK** |
-| Combine | combine_objects | **OK** |
-| Separate | separate_faces | **OK** |
-| Wireframe | set_display_mode | **OK** |
-| Free move/rotate/scale | set_transform / move_by / … | **OK** |
-| Materials (cor) | set_color | **OK** (PBR completo não) |
-| Create face by vertices | — | Planeado |
-| Target merge / Connect | — | Planeado |
-| GLB import/export | — | **Planeado** (sem dep Assimp ainda) |
-| Ortho / Snap / Transparent | — | UI planeada |
+| Ferramenta vídeo | Tool / op nativa | Estado |
+|------------------|------------------|--------|
+| Object select | select / pick / get_scene | OK |
+| Clone | clone_object | OK |
+| Delete | delete_object | OK |
+| Free move/rotate/scale | set_transform, move_by, rotate_by, scale_by | OK |
+| Soft normals | mesh_operation soft_normals | OK |
+| Hard normals | mesh_operation hard_normals | OK |
+| Divide | mesh_operation divide | OK |
+| Smooth | mesh_operation smooth | OK |
+| Mirror | mesh_operation mirror (segments=axis) | OK |
+| Merge close vertices | mesh_operation weld | OK |
+| Bevel | mesh_operation bevel (approx) | OK (aproximação) |
+| Extrude | mesh_operation extrude | OK (approx) |
+| Combine | combine_objects | OK |
+| Separate | separate_faces | OK |
+| Wireframe | set_display_mode | OK |
+| Materials color | set_color | OK |
+| Vertex/Edge/Face modes | set_select_mode | Parcial |
+| Create face / Connect / Target merge | — | Planeado |
+| GLB import/export | — | Planeado |
+| PBR materials | — | Planeado |
 
-## Como o AI usa
+## Uso AI
 
 ```
+mesh_operation { object_id, operation: "soft_normals" }
+mesh_operation { object_id, operation: "divide" }
+mesh_operation { object_id, operation: "smooth", amount: 0.5, segments: 5 }
 mesh_operation { object_id, operation: "bevel", amount: 0.05, segments: 2 }
-mesh_operation { object_id, operation: "extrude", amount: 0.1, faces: [0,1,2] }
+mesh_operation { object_id, operation: "mirror", segments: 0 }
+mesh_operation { object_id, operation: "weld", amount: 0.001 }
+mesh_operation { object_id, operation: "extrude", amount: 0.1, face_indices: "0,1,2" }
 combine_objects { object_id_a, object_id_b }
+separate_faces { object_id, face_indices: "3,4,5" }
 set_display_mode { mode: "wireframe" }
 ```
-
-Ver `get_modeling_extensions` em runtime.
