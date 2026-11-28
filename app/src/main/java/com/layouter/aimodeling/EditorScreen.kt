@@ -353,19 +353,23 @@ private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (
     var edgeB by remember { mutableStateOf("1") }
     var booleanTarget by remember { mutableStateOf("") }
     var topologySummary by remember { mutableStateOf("") }
+    var topologyOffset by remember { mutableIntStateOf(0) }
+    var totalFaceCount by remember { mutableIntStateOf(0) }
     var topologyFaces by remember { mutableStateOf<List<Pair<Int, String>>>(emptyList()) }
     var selectedFaceIds by remember { mutableStateOf(setOf<Int>()) }
 
-    fun inspectTopology() {
+    fun inspectTopology(offset: Int = topologyOffset) {
         if (selected < 0) return
         runCatching {
-            val data = org.json.JSONObject(NativeBridge.getMeshTopology(selected, 0, 80))
+            val data = org.json.JSONObject(NativeBridge.getMeshTopology(selected, offset.coerceAtLeast(0), 80))
             val faces = data.optJSONArray("faces") ?: org.json.JSONArray()
+            topologyOffset = offset.coerceAtLeast(0)
+            totalFaceCount = data.optInt("face_count")
             topologyFaces = (0 until faces.length()).map { index ->
                 val face = faces.getJSONArray(index)
-                index to (0 until face.length()).joinToString(",") { face.getInt(it).toString() }
+                (topologyOffset + index) to (0 until face.length()).joinToString(",") { face.getInt(it).toString() }
             }
-            topologySummary = "${data.optInt("vertex_count")} vértices · ${data.optInt("face_count")} faces · página de ${topologyFaces.size}"
+            topologySummary = "${data.optInt("vertex_count")} vértices · ${totalFaceCount} faces · IDs ${topologyOffset}–${(topologyOffset + topologyFaces.size - 1).coerceAtLeast(topologyOffset)}"
             selectedFaceIds = emptySet()
         }.onFailure {
             topologySummary = "Não foi possível ler a topologia desta malha"
@@ -388,6 +392,10 @@ private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (
                 Text(topologySummary, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (topologyFaces.isNotEmpty()) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = { inspectTopology((topologyOffset - 80).coerceAtLeast(0)) }, enabled = topologyOffset > 0) { Text("Anterior") }
+                    TextButton(onClick = { inspectTopology(topologyOffset + 80) }, enabled = topologyOffset + topologyFaces.size < totalFaceCount) { Text("Próxima") }
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     TextButton(onClick = { selectedFaceIds = topologyFaces.map { it.first }.toSet() }) { Text("Selecionar página") }
                     TextButton(onClick = { selectedFaceIds = emptySet() }) { Text("Limpar seleção") }
@@ -434,7 +442,7 @@ private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (
             }
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 Button(onClick = { apply("extrude", value = 0.2f, faces = selectedFaceIds.toIntArray().takeIf { it.isNotEmpty() } ?: intArrayOf(faceIndex.toIntOrNull() ?: 0)) }) { Text("Extrude") }
-                Button(onClick = { apply("inset", value = 0.08f, faces = intArrayOf(faceIndex.toIntOrNull() ?: 0)) }) { Text("Inset") }
+                Button(onClick = { apply("inset", value = 0.08f, faces = selectedFaceIds.toIntArray().takeIf { it.isNotEmpty() } ?: intArrayOf(faceIndex.toIntOrNull() ?: 0)) }) { Text("Inset") }
                 Button(onClick = { apply("bevel", value = 0.08f, faces = intArrayOf(faceIndex.toIntOrNull() ?: 0)) }) { Text("Bevel") }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
