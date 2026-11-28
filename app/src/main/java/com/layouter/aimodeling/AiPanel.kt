@@ -4,17 +4,23 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.net.Uri
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.util.Base64
 import java.io.ByteArrayOutputStream
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -24,6 +30,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -98,7 +108,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 
-private data class ChatLine(val role: String, val text: String)
+private data class ChatLine(val role: String, val text: String, val preview: Bitmap? = null)
 private data class SavedChat(val id: String, val title: String, val messages: List<ChatLine>)
 private val AiWorkScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -124,6 +134,7 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
     var input by remember { mutableStateOf("") }
     var attachedImage by remember { mutableStateOf<String?>(null) }
     var attachedMime by remember { mutableStateOf("image/jpeg") }
+    var attachedPreview by remember { mutableStateOf<Bitmap?>(null) }
     var attachmentMenu by remember { mutableStateOf(false) }
     var historyMenu by remember { mutableStateOf(false) }
     val chatPrefs = remember { context.getSharedPreferences("ai_chat_history", android.content.Context.MODE_PRIVATE) }
@@ -171,21 +182,33 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
 
     var routeStatus by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
-    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            try {
-                val bitmap = decodeReferenceBitmap(context, uri)
-                if (bitmap != null) {
-                    attachedImage = encodeReferenceImage(bitmap)
-                    attachedMime = "image/jpeg"
-                }
-            } catch (e: Exception) { routeStatus = "Falha ao abrir imagem" }
+    fun attachReference(uri: Uri) {
+        try {
+            val bitmap = decodeReferenceBitmap(context, uri)
+            if (bitmap == null) {
+                routeStatus = "Não foi possível descodificar esta imagem"
+                return
+            }
+            attachedPreview = bitmap
+            attachedImage = encodeReferenceImage(bitmap)
+            attachedMime = "image/jpeg"
+            routeStatus = "Imagem pronta para análise"
+        } catch (e: Exception) {
+            routeStatus = "Falha ao abrir imagem"
         }
+    }
+    val galleryPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) attachReference(uri)
+    }
+    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) attachReference(uri)
     }
     val cameraPicker = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap ->
         if (bitmap != null) {
+            attachedPreview = bitmap
             attachedImage = encodeReferenceImage(bitmap)
             attachedMime = "image/jpeg"
+            routeStatus = "Fotografia pronta para análise"
         }
     }
     val listState = rememberLazyListState()
@@ -240,8 +263,10 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
         input = ""
         val outgoingImage = attachedImage
         val outgoingMime = attachedMime
+        val outgoingPreview = attachedPreview
         attachedImage = null
-        lines.add(ChatLine("user", text + if (outgoingImage != null) "  [imagem de referência anexada]" else ""))
+        attachedPreview = null
+        lines.add(ChatLine("user", text.ifBlank { "Analisa esta imagem de referência." }, outgoingPreview))
         persistChats()
         busy = true
         AiWorkScope.launch {
@@ -269,9 +294,8 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
 
     Column(
         modifier = modifier
-            .fillMaxWidth()
-            .fillMaxHeight(0.90f)
-            .background(MaterialTheme.colorScheme.background, RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
             .systemBarsPadding()
             .imePadding()
             .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -335,8 +359,9 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
         if (showSettings) {
             Column(
                 modifier = Modifier
-                    .weight(1f, fill = false)
+                    .weight(1f)
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(18.dp))
                     .padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -492,47 +517,73 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
             }
 
             Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(22.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 7.dp, top = 5.dp, bottom = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box {
-                        IconButton(onClick = { attachmentMenu = true }, enabled = !busy) {
-                            Icon(Icons.Outlined.Add, "Adicionar imagem ou usar câmara", tint = MaterialTheme.colorScheme.primary)
-                        }
-                        DropdownMenu(expanded = attachmentMenu, onDismissRequest = { attachmentMenu = false }) {
-                            DropdownMenuItem(text = { Text("Escolher imagem / ficheiro") }, leadingIcon = { Icon(Icons.Outlined.AttachFile, null) }, onClick = {
-                                attachmentMenu = false
-                                imagePicker.launch(arrayOf("image/*"))
-                            })
-                            DropdownMenuItem(text = { Text("Tirar fotografia") }, leadingIcon = { Icon(Icons.Outlined.CameraAlt, null) }, onClick = {
-                                attachmentMenu = false
-                                cameraPicker.launch(null)
-                            })
+                Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    attachedPreview?.let { preview ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Image(
+                                bitmap = preview.asImageBitmap(),
+                                contentDescription = "Pré-visualização da imagem anexada",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.size(66.dp).clip(RoundedCornerShape(12.dp))
+                            )
+                            Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                                Text("Imagem de referência", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
+                                Text("Pronta para enviar à IA", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            IconButton(onClick = { attachedPreview = null; attachedImage = null }, enabled = !busy) {
+                                Icon(Icons.Outlined.Close, "Remover imagem", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
-                    OutlinedTextField(
-                        value = input,
-                        onValueChange = { input = it },
-                        placeholder = { Text(if (attachedImage != null) "Imagem pronta · escreve o pedido…" else "Mensagem…") },
-                        enabled = !busy,
-                        modifier = Modifier.weight(1f),
-                        maxLines = 4,
-                        singleLine = false,
-                        shape = RoundedCornerShape(16.dp),
-                        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                            unfocusedBorderColor = Color.Transparent,
-                            focusedBorderColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            focusedContainerColor = Color.Transparent
-                        )
-                    )
-                    IconButton(
-                        onClick = { send() },
-                        enabled = !busy && (input.isNotBlank() || attachedImage != null),
-                        modifier = Modifier.background(if (!busy && input.isNotBlank()) MaterialTheme.colorScheme.primary else Color(0xFF3A414B), CircleShape)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Outlined.Send, "Enviar", tint = Color(0xFF10151A))
+                        Box {
+                            IconButton(onClick = { attachmentMenu = true }, enabled = !busy) {
+                                Icon(Icons.Outlined.Add, "Adicionar referência", tint = MaterialTheme.colorScheme.primary)
+                            }
+                            DropdownMenu(expanded = attachmentMenu, onDismissRequest = { attachmentMenu = false }) {
+                                DropdownMenuItem(text = { Text("Galeria") }, leadingIcon = { Icon(Icons.Outlined.Image, null) }, onClick = {
+                                    attachmentMenu = false
+                                    galleryPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                })
+                                DropdownMenuItem(text = { Text("Ficheiros") }, leadingIcon = { Icon(Icons.Outlined.FolderOpen, null) }, onClick = {
+                                    attachmentMenu = false
+                                    filePicker.launch(arrayOf("image/*"))
+                                })
+                                DropdownMenuItem(text = { Text("Câmara") }, leadingIcon = { Icon(Icons.Outlined.CameraAlt, null) }, onClick = {
+                                    attachmentMenu = false
+                                    cameraPicker.launch(null)
+                                })
+                            }
+                        }
+                        OutlinedTextField(
+                            value = input,
+                            onValueChange = { input = it },
+                            placeholder = { Text(if (attachedImage != null) "Descreve o que queres modelar…" else "Escreve uma mensagem…") },
+                            enabled = !busy,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 4,
+                            singleLine = false,
+                            shape = RoundedCornerShape(16.dp),
+                            colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                                unfocusedBorderColor = Color.Transparent,
+                                focusedBorderColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                focusedContainerColor = Color.Transparent
+                            )
+                        )
+                        IconButton(
+                            onClick = { send() },
+                            enabled = !busy && (input.isNotBlank() || attachedImage != null),
+                            modifier = Modifier.background(if (!busy && (input.isNotBlank() || attachedImage != null)) MaterialTheme.colorScheme.primary else Color(0xFF3A414B), CircleShape)
+                        ) {
+                            Icon(Icons.Outlined.Send, "Enviar", tint = Color(0xFF10151A))
+                        }
                     }
                 }
             }
@@ -633,12 +684,23 @@ private fun ChatBubble(line: ChatLine, showActions: Boolean) {
                 shape = RoundedCornerShape(17.dp),
                 modifier = Modifier.padding(start = 24.dp, end = 10.dp)
             ) {
-                Text(
-                    line.text,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(horizontal = 13.dp, vertical = 9.dp)
-                )
+                Column(Modifier.padding(horizontal = 10.dp, vertical = 9.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    line.preview?.let { preview ->
+                        Image(
+                            bitmap = preview.asImageBitmap(),
+                            contentDescription = "Imagem enviada como referência",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp).clip(RoundedCornerShape(12.dp))
+                        )
+                    }
+                    if (line.text.isNotBlank()) {
+                        Text(
+                            line.text,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
             }
         } else {
             MarkdownText(
