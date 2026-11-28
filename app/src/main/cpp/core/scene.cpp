@@ -3,8 +3,73 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
+#include <utility>
 
 namespace core {
+
+namespace {
+
+void orientFacesOutward(PolyMesh& mesh) {
+    Vec3 center;
+    for (const Vec3& vertex : mesh.verts) center += vertex;
+    if (!mesh.verts.empty()) center = center / static_cast<float>(mesh.verts.size());
+    for (auto& face : mesh.faces) {
+        Vec3 faceCenter;
+        for (uint32_t index : face) faceCenter += mesh.verts[index];
+        if (!face.empty()) faceCenter = faceCenter / static_cast<float>(face.size());
+        if (dot(newellNormal(mesh, face), faceCenter - center) < 0.0f) {
+            std::reverse(face.begin(), face.end());
+        }
+    }
+}
+
+PolyMesh makeIcosahedronPoly(float radius, int subdivisions) {
+    const float t = (1.0f + std::sqrt(5.0f)) * 0.5f;
+    PolyMesh mesh;
+    const Vec3 base[] = {
+        {-1,t,0},{1,t,0},{-1,-t,0},{1,-t,0},
+        {0,-1,t},{0,1,t},{0,-1,-t},{0,1,-t},
+        {t,0,-1},{t,0,1},{-t,0,-1},{-t,0,1}
+    };
+    for (const Vec3& vertex : base) mesh.verts.push_back(normalize(vertex) * radius);
+    mesh.faces = {
+        {0,11,5},{0,5,1},{0,1,7},{0,7,10},{0,10,11},
+        {1,5,9},{5,11,4},{11,10,2},{10,7,6},{7,1,8},
+        {3,9,4},{3,4,2},{3,2,6},{3,6,8},{3,8,9},
+        {4,9,5},{2,4,11},{6,2,10},{8,6,7},{9,8,1}
+    };
+    orientFacesOutward(mesh);
+
+    for (int level = 0; level < std::clamp(subdivisions, 0, 4); ++level) {
+        std::map<std::pair<uint32_t, uint32_t>, uint32_t> midpointCache;
+        auto midpoint = [&](uint32_t a, uint32_t b) {
+            const auto key = std::minmax(a, b);
+            const std::pair<uint32_t, uint32_t> pair{key.first, key.second};
+            const auto found = midpointCache.find(pair);
+            if (found != midpointCache.end()) return found->second;
+            const uint32_t id = static_cast<uint32_t>(mesh.verts.size());
+            mesh.verts.push_back(normalize(mesh.verts[a] + mesh.verts[b]) * radius);
+            midpointCache.emplace(pair, id);
+            return id;
+        };
+        std::vector<std::vector<uint32_t>> faces;
+        faces.reserve(mesh.faces.size() * 4);
+        for (const auto& face : mesh.faces) {
+            if (face.size() != 3) continue;
+            const uint32_t a = face[0], b = face[1], c = face[2];
+            const uint32_t ab = midpoint(a,b), bc = midpoint(b,c), ca = midpoint(c,a);
+            faces.push_back({a,ab,ca});
+            faces.push_back({b,bc,ab});
+            faces.push_back({c,ca,bc});
+            faces.push_back({ab,bc,ca});
+        }
+        mesh.faces = std::move(faces);
+    }
+    return mesh;
+}
+
+}  // namespace
 
 const char* primitiveName(Primitive p) {
     switch (p) {
@@ -19,26 +84,36 @@ const char* primitiveName(Primitive p) {
         case Primitive::Octahedron: return "octahedron";
         case Primitive::HexPrism: return "hex_prism";
         case Primitive::CustomMesh: return "custom_mesh";
+        case Primitive::TriPrism: return "tri_prism";
+        case Primitive::PentPrism: return "pent_prism";
+        case Primitive::OctPrism: return "oct_prism";
+        case Primitive::DecPrism: return "dec_prism";
+        case Primitive::DodecPrism: return "dodec_prism";
+        case Primitive::Tetrahedron: return "tetrahedron";
+        case Primitive::Icosahedron: return "icosahedron";
+        case Primitive::IcoSphere: return "icosphere";
     }
     return "cube";
 }
 
-PolyMesh makePrimitivePolyMesh(Primitive p, float size) {
+PolyMesh makePrimitivePolyMesh(Primitive p, float size, int detail) {
     PolyMesh poly;
-    float smoothAngle = 35.0f;
+    detail = std::clamp(detail, 1, 64);
+    const int radial = std::clamp(detail * 2, 8, 128);
+    const int vertical = std::clamp(detail / 4, 1, 32);
     switch (p) {
         case Primitive::Cube:
-            poly = makeBoxPoly({size, size, size}, 1, 1, 1); break;
+            poly = makeBoxPoly({size, size, size}, detail, detail, detail); break;
         case Primitive::Sphere:
-            poly = makeSpherePoly(size * 0.5f, 48); smoothAngle = 180.0f; break;
+            poly = makeSpherePoly(size * 0.5f, radial); break;
         case Primitive::Cylinder:
-            poly = makeCylinderPoly(size * 0.5f, size, 48, 1, true); break;
+            poly = makeCylinderPoly(size * 0.5f, size, radial, vertical, true); break;
         case Primitive::Cone:
-            poly = makeConePoly(size * 0.5f, size, 48, true); break;
+            poly = makeConePoly(size * 0.5f, size, radial, true); break;
         case Primitive::Torus:
-            poly = makeTorusPoly(size * 0.35f, size * 0.15f, 64, 24); smoothAngle = 180.0f; break;
+            poly = makeTorusPoly(size * 0.35f, size * 0.15f, radial, std::clamp(detail, 6, 64)); break;
         case Primitive::Plane:
-            poly = makePlanePoly(size, size, 1, 1); smoothAngle = 0.0f; break;
+            poly = makePlanePoly(size, size, detail, detail); break;
         case Primitive::Pyramid: {
             const float h=size*0.5f;
             poly.verts={{-h,-h,-h},{h,-h,-h},{h,-h,h},{-h,-h,h},{0,h,0}};
@@ -47,19 +122,42 @@ PolyMesh makePrimitivePolyMesh(Primitive p, float size) {
         }
         case Primitive::Capsule: {
             const float r=size*0.25f, stem=std::max(0.01f,size-2.0f*r);
-            PolyMesh body=makeCylinderPoly(r,stem,40,2,true);
-            PolyMesh lower=transformed(makeSpherePoly(r,32),translate(0,-stem*0.5f,0));
-            PolyMesh upper=transformed(makeSpherePoly(r,32),translate(0,stem*0.5f,0));
-            poly=mergeMeshes(mergeMeshes(body,lower),upper); smoothAngle=180.0f; break;
+            PolyMesh body=makeCylinderPoly(r,stem,radial,vertical,true);
+            PolyMesh lower=transformed(makeSpherePoly(r,std::max(8,radial/2)),translate(0,-stem*0.5f,0));
+            PolyMesh upper=transformed(makeSpherePoly(r,std::max(8,radial/2)),translate(0,stem*0.5f,0));
+            poly=mergeMeshes(mergeMeshes(body,lower),upper); break;
         }
         case Primitive::Octahedron:
             poly.verts={{0,size*0.5f,0},{size*0.5f,0,0},{0,0,size*0.5f},{-size*0.5f,0,0},{0,0,-size*0.5f},{0,-size*0.5f,0}};
             poly.faces={{0,1,2},{0,2,3},{0,3,4},{0,4,1},{5,2,1},{5,3,2},{5,4,3},{5,1,4}};
             break;
         case Primitive::HexPrism:
-            poly=makeCylinderPoly(size*0.5f,size,6,1,true); break;
+            poly=makeCylinderPoly(size*0.5f,size,6,vertical,true); break;
         case Primitive::CustomMesh:
-            poly=makeBoxPoly({size,size,size},1,1,1); break;
+            poly=makeBoxPoly({size,size,size},detail,detail,detail); break;
+        case Primitive::TriPrism:
+            poly = makeCylinderPoly(size * 0.5f, size, 3, vertical, true); break;
+        case Primitive::PentPrism:
+            poly = makeCylinderPoly(size * 0.5f, size, 5, vertical, true); break;
+        case Primitive::OctPrism:
+            poly = makeCylinderPoly(size * 0.5f, size, 8, vertical, true); break;
+        case Primitive::DecPrism:
+            poly = makeCylinderPoly(size * 0.5f, size, 10, vertical, true); break;
+        case Primitive::DodecPrism:
+            poly = makeCylinderPoly(size * 0.5f, size, 12, vertical, true); break;
+        case Primitive::Tetrahedron: {
+            const float h = size * 0.5f;
+            poly.verts = {{h,h,h},{-h,-h,h},{-h,h,-h},{h,-h,-h}};
+            poly.faces = {{0,2,1},{0,1,3},{0,3,2},{1,2,3}};
+            break;
+        }
+        case Primitive::Icosahedron:
+            poly = makeIcosahedronPoly(size * 0.5f, 0); break;
+        case Primitive::IcoSphere: {
+            const int levels = detail <= 4 ? 0 : detail <= 12 ? 1 : detail <= 24 ? 2 : detail <= 40 ? 3 : 4;
+            poly = makeIcosahedronPoly(size * 0.5f, levels);
+            break;
+        }
     }
     return poly;
 }
@@ -69,7 +167,8 @@ float primitiveSmoothAngle(Primitive p) {
     switch (p) {
         case Primitive::Sphere:
         case Primitive::Torus:
-        case Primitive::Capsule: return 180.0f;
+        case Primitive::Capsule:
+        case Primitive::IcoSphere: return 180.0f;
         case Primitive::Plane: return 0.0f;
         default: return 35.0f;
     }
