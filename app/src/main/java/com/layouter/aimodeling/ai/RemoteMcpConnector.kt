@@ -19,6 +19,7 @@ object RemoteMcpConnector {
     private val requestIds = AtomicInteger(1)
     private val toolRoutes = LinkedHashMap<String, Route>()
     private val sessions = LinkedHashMap<String, String>()
+    private val initializedEndpoints = HashSet<String>()
     private var cachedDefinitions = JSONArray()
     private var lastRefreshMs = 0L
 
@@ -37,6 +38,7 @@ object RemoteMcpConnector {
         synchronized(toolRoutes) {
             toolRoutes.clear()
             sessions.clear()
+            initializedEndpoints.clear()
             cachedDefinitions = JSONArray()
             lastRefreshMs = 0L
         }
@@ -143,12 +145,15 @@ object RemoteMcpConnector {
     }
 
     private fun initializeSession(server: Server) {
-        // MCP initialize is idempotent for stateless servers; session headers are not persisted.
+        synchronized(initializedEndpoints) {
+            if (server.endpoint in initializedEndpoints) return
+        }
         val init = JSONObject()
             .put("protocolVersion", "2025-03-26")
             .put("capabilities", JSONObject())
             .put("clientInfo", JSONObject().put("name", "Manus-3D-AI-Android").put("version", "0.1"))
         rpc(server, "initialize", init)
+        synchronized(initializedEndpoints) { initializedEndpoints.add(server.endpoint) }
         notifyInitialized(server)
     }
 
@@ -188,9 +193,9 @@ object RemoteMcpConnector {
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
             val body = stream?.bufferedReader(Charsets.UTF_8)?.use { reader ->
                 val raw = reader.readText()
-                if (raw.trimStart().startsWith("data:")) {
-                    raw.lineSequence().filter { it.startsWith("data:") }
-                        .map { it.removePrefix("data:").trim() }.lastOrNull().orEmpty()
+                if (raw.contains("data:")) {
+                    raw.lineSequence().filter { it.trimStart().startsWith("data:") }
+                        .map { it.trimStart().removePrefix("data:").trim() }.lastOrNull().orEmpty()
                 } else raw
             }.orEmpty()
             if (status !in 200..299) error("MCP HTTP $status: " + body.take(700))
