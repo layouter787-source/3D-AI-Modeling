@@ -29,9 +29,25 @@ object ToolDispatcher {
             "create_loft_mesh" -> createLoftMesh(a)
             "sculpt_mesh" -> { val c=a.vec3("center"); val d=a.vec3("offset"); report(NativeBridge.sculptMesh(a.getInt("object_id"),c[0],c[1],c[2],a.getDouble("radius").toFloat(),d[0],d[1],d[2]),"Native mesh sculpt applied","No vertices in range or invalid sculpt parameters") }
             "get_mesh_topology" -> ToolResult(true, NativeBridge.getMeshTopology(a.getInt("object_id"), a.optInt("offset", 0), a.optInt("limit", 300)))
+            "get_face_shell" -> {
+                val ids = NativeBridge.getFaceShell(a.getInt("object_id"), a.getInt("face_id"))
+                ToolResult(true, JSONObject().put("face_ids", JSONArray(ids.toList())).toString())
+            }
+            "detach_faces" -> {
+                val ids = a.getJSONArray("face_ids")
+                val faceIds = IntArray(ids.length()) { ids.getInt(it) }
+                val detachedId = NativeBridge.detachFaces(a.getInt("object_id"), faceIds)
+                if (detachedId >= 0) ToolResult(true, "Detached faces into new object id $detachedId")
+                else ToolResult(false, "Detach failed: select a non-empty proper subset of valid faces")
+            }
+            "combine_objects" -> report(
+                NativeBridge.combineObjects(a.getInt("object_id"), a.getInt("other_object_id")),
+                "Objects combined into the target mesh",
+                "Combine failed: verify both editable objects and available mesh capacity"
+            )
             "mesh_operation" -> {
                 val op = a.getString("operation")
-                val faceArray = if (op == "loop_cut" || op == "connect") a.optJSONArray("edge_vertices") ?: JSONArray()
+                val faceArray = if (op == "loop_cut" || op == "connect" || op == "target_merge") a.optJSONArray("edge_vertices") ?: JSONArray()
                     else a.optJSONArray("face_ids") ?: JSONArray()
                 val ids = IntArray(faceArray.length()) { faceArray.getInt(it) }
                 val ok = NativeBridge.meshOperation(a.getInt("object_id"), op, ids, a.optInt("parameter", 1), a.optDouble("value", 0.1).toFloat(), a.optInt("other_object_id", -1))
@@ -120,7 +136,7 @@ object ToolDispatcher {
             .put("app", "3D-AI-Modeling")
             .put("integration_policy", "Android-native C++/JNI/Compose; Godot addons are not drop-in plugins")
             .put("native_mesh_operations", JSONArray(listOf(
-                "Catmull-Clark subdivide", "face extrude", "face inset", "smooth",
+                "Catmull-Clark subdivide", "face extrude", "face inset", "face delete", "draw face by vertices", "clone faces", "merge vertices", "target merge", "connected face shell", "detach face set", "combine objects", "soft/hard normals", "smooth",
                 "solidify", "axis mirror", "loop cut", "triangulate", "flip normals",
                 "weld by tolerance", "crease by angle", "Boolean union", "Boolean difference",
                 "Boolean intersection", "radial vertex sculpt", "lofted profile mesh",
@@ -364,13 +380,28 @@ object ToolDispatcher {
                 listOf("profiles")
             ))
             .put(tool("sculpt_mesh","Deform the existing native mesh vertices with smooth radial falloff; local mesh-space center, radius and offset. Use repeated small strokes to shape the body shell, hood, roof and fenders. This is real vertex geometry, not object scaling or added primitives; undoable.",JSONObject().put("object_id",objectId).put("center",number3("Local center [x,y,z]")).put("radius",JSONObject().put("type","number").put("minimum",0.001).put("maximum",1000)).put("offset",number3("Local displacement [dx,dy,dz]")),listOf("object_id","center","radius","offset")))
+            .put(tool("get_face_shell",
+                "Return every face connected to a starting face through shared edges. Use this for Select Shell before detaching or editing a connected surface region.",
+                JSONObject().put("object_id", objectId).put("face_id", JSONObject().put("type","integer").put("minimum",0)),
+                listOf("object_id","face_id")
+            ))
+            .put(tool("detach_faces",
+                "Detach a selected set of faces into a new editable object while removing those faces from the source mesh. Pass face IDs obtained from get_mesh_topology; the source must retain at least one face. The action is undoable.",
+                JSONObject().put("object_id", objectId).put("face_ids", JSONObject().put("type","array").put("minItems",1).put("items",JSONObject().put("type","integer"))),
+                listOf("object_id","face_ids")
+            ))
+            .put(tool("combine_objects",
+                "Combine two editable objects into one mesh in the target object's local space, applying both object transforms and welding coincident vertices. The operand object is removed; Undo restores both objects.",
+                JSONObject().put("object_id", objectId).put("other_object_id", JSONObject().put("type","integer")),
+                listOf("object_id","other_object_id")
+            ))
             .put(tool("get_mesh_topology", "Inspect the selected object's native mesh topology. Returns vertex positions and triangle face indices, optionally paged with offset and limit. Use the reported face IDs for face-edit operations; choose a page size appropriate to the device.", JSONObject().put("object_id",objectId).put("offset",JSONObject().put("type","integer").put("minimum",0)).put("limit",JSONObject().put("type","integer").put("minimum",1).put("default",300)), listOf("object_id")))
             .put(tool(
                 "mesh_operation",
                 "Edit existing mesh topology natively. Operations: subdivide, extrude, inset, bevel, smooth, solidify, mirror, loop_cut, connect, triangulate/divide, flip_normals, weld, crease_by_angle, and boolean_union/difference/intersection. Pass all relevant face IDs or edge vertices from topology inspection; there is no artificial face-batch limit. The native engine only rejects invalid data or operations exceeding available device resources. Each edit is undoable; make iterative refinements.",
                 JSONObject()
                     .put("object_id", objectId)
-                    .put("operation", JSONObject().put("type", "string").put("enum", JSONArray(listOf("subdivide","extrude","inset","bevel","smooth","solidify","mirror","loop_cut","connect","triangulate","divide","flip_normals","weld","crease_by_angle","boolean_union","boolean_difference","boolean_intersection"))))
+                    .put("operation", JSONObject().put("type", "string").put("enum", JSONArray(listOf("subdivide","extrude","inset","bevel","delete_faces","draw_face","create_face","clone_faces","merge_vertices","target_merge","soft_normals","hard_normals","normal_angle","smooth","solidify","mirror","loop_cut","connect","triangulate","divide","flip_normals","weld","crease_by_angle","boolean_union","boolean_difference","boolean_intersection"))))
                     .put("face_ids", JSONObject().put("type", "array").put("items", JSONObject().put("type", "integer")))
                     .put("edge_vertices", JSONObject().put("type", "array").put("items", JSONObject().put("type", "integer")).put("minItems", 2).put("maxItems", 2))
                     .put("parameter", JSONObject().put("type", "integer"))
