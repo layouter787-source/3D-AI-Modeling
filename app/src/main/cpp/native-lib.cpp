@@ -25,14 +25,17 @@ constexpr int kGridHalf = 10;
 const char* kObjectVertexShader = R"(#version 300 es
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aNormal;
+layout(location = 2) in vec3 aVertexColor;
 uniform mat4 uMvp;
 uniform mat4 uModel;
 uniform mat3 uNormalMat;
 out vec3 vNormal;
 out vec3 vWorldPos;
+out vec3 vVertexColor;
 void main() {
     vNormal = normalize(uNormalMat * aNormal);
     vWorldPos = (uModel * vec4(aPos, 1.0)).xyz;
+    vVertexColor = aVertexColor;
     gl_Position = uMvp * vec4(aPos, 1.0);
 }
 )";
@@ -41,6 +44,7 @@ const char* kObjectFragmentShader = R"(#version 300 es
 precision highp float;
 in vec3 vNormal;
 in vec3 vWorldPos;
+in vec3 vVertexColor;
 uniform vec3 uColor;
 uniform vec3 uCameraPosition;
 uniform float uSelected;
@@ -64,11 +68,12 @@ void main() {
     float coat = pow(max(dot(n, halfDir), 0.0), 96.0) * uClearcoat * 0.65;
     float fresnel = pow(1.0 - max(dot(n, viewDir), 0.0), 3.0) * 0.10;
     float rim = pow(1.0 - max(dot(n, viewDir), 0.0), 2.0) * 0.07;
-    vec3 f0 = mix(vec3(0.04), uColor, uMetallic);
-    vec3 base = uColor * (uAmbientStrength + uSunIntensity * 0.76 * diffuse) * (1.0 - 0.28 * uMetallic);
+    vec3 surfaceColor = uColor * max(vVertexColor, vec3(0.0));
+    vec3 f0 = mix(vec3(0.04), surfaceColor, uMetallic);
+    vec3 base = surfaceColor * (uAmbientStrength + uSunIntensity * 0.76 * diffuse) * (1.0 - 0.28 * uMetallic);
     vec3 lit = base + uSunColor * f0 * uSunIntensity * (specular + fresnel) + uSunColor * vec3(coat) * uSunIntensity;
-    lit += uColor * rim;
-    lit += uColor * uEmission;
+    lit += surfaceColor * rim;
+    lit += surfaceColor * uEmission;
     lit = mix(lit, vec3(1.0, 0.58, 0.16), 0.42 * uSelected);
     outColor = vec4(lit, 1.0);
 }
@@ -163,6 +168,9 @@ GpuMesh upload(const Mesh& mesh, uint64_t revision) {
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
                           reinterpret_cast<void*>(offsetof(Vertex, nx)));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+                          reinterpret_cast<void*>(offsetof(Vertex, cr)));
 
     glBindVertexArray(0);
     return g;
