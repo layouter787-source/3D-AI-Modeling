@@ -159,7 +159,7 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
         chatPrefs.edit().putString("sessions", array.toString()).apply()
     }
     fun persistChats() {
-        val current = lines.toList()
+        val current = lines.map { ChatLine(it.role, it.text) }
         if (current.isEmpty()) return
         val fallback = current.firstOrNull { it.role == "user" }?.text?.take(48)?.ifBlank { "Conversa" } ?: "Conversa"
         val title = activeChatTitle.ifBlank { fallback }.take(64)
