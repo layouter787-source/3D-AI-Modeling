@@ -252,8 +252,10 @@ int Editor::addPrimitive(Primitive type, float size, Vec3 position, int detail) 
     object.detail = std::clamp(detail, 1, 64);
     object.smoothAngle = primitiveSmoothAngle(type);
     object.topology = makePrimitivePolyMesh(type, size, object.detail);
+    if (object.topology.empty()) return -1;
     object.vertexColors.assign(object.topology.verts.size(), Vec3{1.0f, 1.0f, 1.0f});
     object.mesh = buildRenderMesh(object.topology, object.smoothAngle, object.vertexColors);
+    if (object.mesh.vertices.empty() || object.mesh.indices.empty()) return -1;
     object.transform.position = position;
     object.name = std::string(primitiveName(type)) + "_" + std::to_string(object.id);
 
@@ -294,7 +296,7 @@ int Editor::addLoftMesh(const std::vector<float>& profiles, int segments, Vec3 p
     for(int j=0;j<segments;++j) right.push_back(vid(rings-1,j));
     topology.faces.push_back(std::move(left));
     topology.faces.push_back(std::move(right));
-        Object object;
+    Object object;
     object.id=scene_.nextId++; object.type=Primitive::CustomMesh; object.size=1.0f;
     object.name = "loft_mesh_" + std::to_string(object.id);
     object.smoothAngle = 35.0f;
