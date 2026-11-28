@@ -34,6 +34,11 @@ int main() {
     assert(!box.empty() && box.faces.size() == 6 && box.verts.size() == 8);
     for (const auto& edge : edgeUse(box)) assert(edge.second == 2);
 
+    const std::vector<int> edgeLoop = edgeLoopFaces(box, 0u, 1u);
+    assert(!edgeLoop.empty());
+    for (int faceId : edgeLoop) assert(faceId >= 0 && static_cast<size_t>(faceId) < box.faces.size());
+    assert(edgeLoopFaces(box, 0u, 999u).empty());
+
     PolyMesh split = splitEdge(box, 0u, 1u, 0.5f);
     assert(split.verts.size() == box.verts.size() + 1);
     assert(split.faces.size() == box.faces.size());
