@@ -92,6 +92,7 @@ const char* primitiveName(Primitive p) {
         case Primitive::Tetrahedron: return "tetrahedron";
         case Primitive::Icosahedron: return "icosahedron";
         case Primitive::IcoSphere: return "icosphere";
+        case Primitive::Pipe: return "pipe";
     }
     return "cube";
 }
@@ -158,6 +159,8 @@ PolyMesh makePrimitivePolyMesh(Primitive p, float size, int detail) {
             poly = makeIcosahedronPoly(size * 0.5f, levels);
             break;
         }
+        case Primitive::Pipe:
+            poly = makeCylinderPoly(size * 0.5f, size, radial, vertical, false); break;
     }
     return poly;
 }
