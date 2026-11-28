@@ -74,7 +74,7 @@ object RemoteMcpConnector {
                     val tool = tools.optJSONObject(index) ?: continue
                     val original = tool.optString("name").trim()
                     if (original.isEmpty()) continue
-                    val exposed = "mcp_" + safeName(server.name) + "_" + safeName(original)
+                    val exposed = "mcp__" + safeName(server.name) + "__" + safeName(original)
                     val input = tool.optJSONObject("inputSchema") ?: JSONObject()
                         .put("type", "object").put("properties", JSONObject())
                     val schema = JSONObject()
@@ -95,7 +95,7 @@ object RemoteMcpConnector {
         merged
     }
 
-    suspend fun execute(exposedName: String, arguments: JSONObject): String? = withContext(Dispatchers.IO) {
+    suspend fun execute(exposedName: String, arguments: JSONObject): ToolResult? = withContext(Dispatchers.IO) {
         val route = synchronized(toolRoutes) { toolRoutes[exposedName] } ?: return@withContext null
         initializeSession(route.server)
         val response = rpc(route.server, "tools/call", JSONObject()
