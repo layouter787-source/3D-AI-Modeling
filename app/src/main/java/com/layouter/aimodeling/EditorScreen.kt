@@ -395,8 +395,8 @@ private fun MaterialWorkbenchDialog(id: Int, onClose: () -> Unit, refresh: () ->
                 Slider(value = roughness, onValueChange = { roughness = it }, valueRange = 0.02f..1f)
                 Text("Clearcoat · ${(clearcoat * 100).toInt()}%")
                 Slider(value = clearcoat, onValueChange = { clearcoat = it }, valueRange = 0f..1f)
-                Text("Emission · ${(emission * 100).toInt()}%")
-                Slider(value = emission, onValueChange = { emission = it }, valueRange = 0f..1f)
+                Text("Emission · ${"%.2f".format(emission)}")
+                Slider(value = emission, onValueChange = { emission = it }, valueRange = 0f..8f)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     TextButton(onClick = { metallic = 0f; roughness = 0.85f; clearcoat = 0f; emission = 0f }) { Text("Matte") }
                     TextButton(onClick = { metallic = 0.9f; roughness = 0.22f; clearcoat = 0.35f; emission = 0f }) { Text("Metal") }
