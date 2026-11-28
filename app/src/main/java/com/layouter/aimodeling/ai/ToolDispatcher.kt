@@ -21,7 +21,7 @@ object ToolDispatcher {
             "clone_object" -> {
                 val id = a.getInt("object_id")
                 val newId = NativeBridge.cloneObject(id)
-                if (newId >= 0) ToolResult(true, "Cloned $id -> $newId")
+                if (newId >= 0) ToolResult(true, "Cloned object $id -> $newId")
                 else ToolResult(false, "Clone failed")
             }
             "set_transform" -> {
@@ -53,42 +53,39 @@ object ToolDispatcher {
                 report(NativeBridge.setColor(a.getInt("object_id"), c[0], c[1], c[2]), "Color set")
             }
             "delete_object" -> report(NativeBridge.deleteObject(a.getInt("object_id")), "Deleted")
-            "undo" -> report(NativeBridge.undo(), "Undone", "Nothing to undo")
-            "redo" -> report(NativeBridge.redo(), "Redone", "Nothing to redo")
-            "get_scene" -> ToolResult(true, NativeBridge.describeScene())
-            "set_display_mode" -> {
-                val mode = a.getString("mode")
-                report(NativeBridge.setDisplayMode(mode), "Display: $mode", "Invalid mode")
-            }
             "mesh_operation" -> {
                 val id = a.getInt("object_id")
                 val op = a.getString("operation")
                 val amount = a.optDouble("amount", 0.0).toFloat()
                 val segments = a.optInt("segments", 1)
-                val faces = a.optIntArray("faces")
-                val ok = NativeBridge.meshOp(id, op, amount, segments, faces)
-                if (ok) ToolResult(true, "mesh_operation '$op' on $id ok")
-                else ToolResult(false, "mesh_operation '$op' failed")
+                val faces = a.optString("face_indices", "")
+                report(
+                    NativeBridge.meshOperation(id, op, amount, segments, faces),
+                    "mesh_operation $op ok",
+                    "mesh_operation $op failed"
+                )
             }
             "combine_objects" -> {
-                val id = NativeBridge.combineObjects(a.getInt("object_id_a"), a.getInt("object_id_b"))
-                if (id >= 0) ToolResult(true, "Combined into object $id")
+                val aId = a.getInt("object_id_a")
+                val bId = a.getInt("object_id_b")
+                val result = NativeBridge.combineObjects(aId, bId)
+                if (result >= 0) ToolResult(true, "Combined into object $result")
                 else ToolResult(false, "Combine failed")
             }
             "separate_faces" -> {
-                val faces = a.optIntArray("faces")
-                val id = NativeBridge.separateFaces(a.getInt("object_id"), faces)
-                if (id >= 0) ToolResult(true, "Separated into new object $id")
-                else ToolResult(false, "Separate failed (need face indices)")
+                val id = a.getInt("object_id")
+                val faces = a.optString("face_indices", "")
+                val newId = NativeBridge.separateFaces(id, faces)
+                if (newId >= 0) ToolResult(true, "Separated into object $newId")
+                else ToolResult(false, "Separate failed (need face_indices)")
             }
-            "set_select_mode" -> {
+            "set_display_mode" -> {
                 val mode = a.getString("mode")
-                report(NativeBridge.setSelectMode(mode), "Select mode: $mode", "Invalid select mode")
+                report(NativeBridge.setDisplayMode(mode), "Display mode $mode")
             }
-            "set_selected_faces" -> {
-                val faces = a.optIntArray("faces") ?: intArrayOf()
-                report(NativeBridge.setSelectedFaces(faces), "Selected ${faces.size} faces")
-            }
+            "undo" -> report(NativeBridge.undo(), "Undone", "Nothing to undo")
+            "redo" -> report(NativeBridge.redo(), "Redone", "Nothing to redo")
+            "get_scene" -> ToolResult(true, NativeBridge.describeScene())
             "get_modeling_extensions" -> modelingExtensions()
             else -> ToolResult(false, "Unknown tool: ${call.name}")
         }
@@ -98,153 +95,131 @@ object ToolDispatcher {
         val type = PrimitiveType.fromApiName(a.getString("type"))
             ?: return ToolResult(false, "Unknown primitive type")
         val size = a.optDouble("size", 1.0).toFloat()
-        require(size.isFinite() && size > 0f) { "size must be a positive number" }
-        val position = if (a.has("position")) {
-            a.vec3("position")
-        } else {
-            floatArrayOf(0f, if (type == PrimitiveType.PLANE) 0f else size / 2f, 0f)
-        }
+        require(size.isFinite() && size > 0f) { "size must be positive" }
+        val position = if (a.has("position")) a.vec3("position")
+        else floatArrayOf(0f, if (type == PrimitiveType.PLANE) 0f else size / 2f, 0f)
         val id = NativeBridge.addPrimitive(type.id, size, position[0], position[1], position[2])
         return if (id < 0) ToolResult(false, "Could not create object")
-        else ToolResult(true, "Created object with id $id")
+        else ToolResult(true, "Created object id $id")
     }
 
     private fun modelingExtensions(): ToolResult {
         val json = JSONObject()
-            .put("native_ops", JSONArray(
-                listOf(
-                    "create_primitive", "clone_object", "set_transform", "move_by", "rotate_by",
-                    "scale_by", "set_color", "delete_object", "undo", "redo", "get_scene",
-                    "set_display_mode", "mesh_operation", "combine_objects", "separate_faces",
-                    "set_select_mode", "set_selected_faces"
-                )
-            ))
-            .put("mesh_operations", JSONArray(
-                listOf(
-                    "soft_normals", "hard_normals", "divide", "subdivide", "triangulate",
-                    "smooth", "weld", "merge_vertices", "mirror", "extrude", "bevel"
-                )
-            ))
-            .put("video_tools", JSONArray(
-                listOf(
-                    "Clone", "Delete", "Soft normals", "Hard normals", "Divide", "Smooth",
-                    "Bevel", "Extrude", "Mirror", "Combine", "Separate", "Wireframe",
-                    "Object/Face selection mode"
-                )
-            ))
-            .put("glb", "export/import planned — use external pipeline for now")
+            .put("native_ops", JSONArray(listOf(
+                "create_primitive", "clone_object", "set_transform", "move_by", "rotate_by",
+                "scale_by", "set_color", "delete_object", "mesh_operation", "combine_objects",
+                "separate_faces", "set_display_mode", "undo", "redo", "get_scene"
+            )))
+            .put("mesh_operations", JSONArray(listOf(
+                "soft_normals", "hard_normals", "divide", "subdivide", "smooth",
+                "weld", "merge_vertices", "mirror", "extrude", "bevel"
+            )))
+            .put("video_tools", JSONArray(listOf(
+                "Clone", "Delete", "Soft normals", "Hard normals", "Divide", "Smooth",
+                "Mirror", "Combine", "Separate", "Bevel", "Merge close vertices",
+                "Wireframe", "Free transform", "Materials (color)"
+            )))
+            .put("note", "Use mesh_operation with operation name from mesh_operations list.")
         return ToolResult(true, json.toString())
     }
 
-    private fun report(ok: Boolean, okMessage: String, failMessage: String = "Failed") =
-        ToolResult(ok, if (ok) okMessage else failMessage)
+    private fun report(ok: Boolean, okMsg: String, failMsg: String = "Failed") =
+        ToolResult(ok, if (ok) okMsg else failMsg)
 
     private fun JSONObject.vec3(key: String): FloatArray {
         val array = getJSONArray(key)
-        require(array.length() == 3) { "$key needs exactly 3 numbers" }
+        require(array.length() == 3) { "$key needs 3 numbers" }
         return FloatArray(3) { i ->
-            val value = array.getDouble(i).toFloat()
-            require(value.isFinite()) { "$key has an invalid value" }
-            value
+            val v = array.getDouble(i).toFloat()
+            require(v.isFinite()) { "$key invalid" }
+            v
         }
     }
 
-    private fun JSONObject.optIntArray(key: String): IntArray? {
-        if (!has(key)) return null
-        val arr = getJSONArray(key)
-        return IntArray(arr.length()) { arr.getInt(it) }
-    }
-
     fun toolDefinitions(): JSONArray {
-        fun number3(description: String) = JSONObject()
+        fun number3(desc: String) = JSONObject()
             .put("type", "array")
             .put("items", JSONObject().put("type", "number"))
             .put("minItems", 3).put("maxItems", 3)
-            .put("description", description)
+            .put("description", desc)
 
         val objectId = JSONObject().put("type", "integer").put("description", "Object id")
 
-        fun tool(name: String, description: String, properties: JSONObject, required: List<String>) =
+        fun tool(name: String, desc: String, props: JSONObject, required: List<String>) =
             JSONObject()
                 .put("name", name)
-                .put("description", description)
-                .put(
-                    "parameters",
-                    JSONObject()
-                        .put("type", "object")
-                        .put("properties", properties)
-                        .put("required", JSONArray(required))
-                )
+                .put("description", desc)
+                .put("parameters", JSONObject()
+                    .put("type", "object")
+                    .put("properties", props)
+                    .put("required", JSONArray(required)))
 
-        val primitiveTypes = JSONArray(PrimitiveType.values().map { it.apiName })
-        val meshOps = JSONArray(
-            listOf(
-                "soft_normals", "hard_normals", "divide", "subdivide", "triangulate",
-                "smooth", "weld", "merge_vertices", "mirror", "extrude", "bevel"
-            )
-        )
+        val primitives = JSONArray(PrimitiveType.values().map { it.apiName })
+        val meshOps = JSONArray(listOf(
+            "soft_normals", "hard_normals", "divide", "subdivide", "smooth",
+            "weld", "merge_vertices", "mirror", "extrude", "bevel"
+        ))
 
         return JSONArray()
-            .put(tool("create_primitive", "Create a primitive (meters, Y-up).",
+            .put(tool("create_primitive", "Create a primitive (meters, Y up).",
                 JSONObject()
-                    .put("type", JSONObject().put("type", "string").put("enum", primitiveTypes))
+                    .put("type", JSONObject().put("type", "string").put("enum", primitives))
                     .put("size", JSONObject().put("type", "number"))
                     .put("position", number3("[x,y,z]")),
                 listOf("type")))
             .put(tool("clone_object", "Duplicate an object.",
                 JSONObject().put("object_id", objectId), listOf("object_id")))
             .put(tool("set_transform", "Absolute transform.",
-                JSONObject().put("object_id", objectId)
-                    .put("position", number3("pos")).put("rotation_degrees", number3("euler"))
-                    .put("scale", number3("scale")),
+                JSONObject()
+                    .put("object_id", objectId)
+                    .put("position", number3("[x,y,z]"))
+                    .put("rotation_degrees", number3("Euler XYZ deg"))
+                    .put("scale", number3("[sx,sy,sz]")),
                 listOf("object_id", "position", "rotation_degrees", "scale")))
-            .put(tool("move_by", "Offset position.",
-                JSONObject().put("object_id", objectId).put("offset", number3("delta")),
+            .put(tool("move_by", "Move by offset.",
+                JSONObject().put("object_id", objectId).put("offset", number3("[dx,dy,dz]")),
                 listOf("object_id", "offset")))
             .put(tool("rotate_by", "Rotate by degrees.",
-                JSONObject().put("object_id", objectId).put("degrees", number3("rx,ry,rz")),
+                JSONObject().put("object_id", objectId).put("degrees", number3("[rx,ry,rz]")),
                 listOf("object_id", "degrees")))
-            .put(tool("scale_by", "Multiply scale.",
-                JSONObject().put("object_id", objectId).put("factor", number3("fx,fy,fz")),
+            .put(tool("scale_by", "Scale multiply.",
+                JSONObject().put("object_id", objectId).put("factor", number3("[fx,fy,fz]")),
                 listOf("object_id", "factor")))
             .put(tool("set_color", "RGB 0..1.",
-                JSONObject().put("object_id", objectId).put("color", number3("r,g,b")),
+                JSONObject().put("object_id", objectId).put("color", number3("[r,g,b]")),
                 listOf("object_id", "color")))
             .put(tool("delete_object", "Delete object.",
                 JSONObject().put("object_id", objectId), listOf("object_id")))
-            .put(tool("undo", "Undo.", JSONObject(), emptyList()))
-            .put(tool("redo", "Redo.", JSONObject(), emptyList()))
-            .put(tool("get_scene", "Scene JSON.", JSONObject(), emptyList()))
-            .put(tool("set_display_mode", "shaded | wireframe | wireframe_on_shaded",
-                JSONObject().put("mode", JSONObject().put("type", "string").put("enum",
-                    JSONArray().put("shaded").put("wireframe").put("wireframe_on_shaded"))),
-                listOf("mode")))
-            .put(tool(
-                "mesh_operation",
-                "Apply mesh op: soft_normals, hard_normals, divide, subdivide, triangulate, smooth, weld, merge_vertices, mirror, extrude, bevel. amount/segments depend on op (bevel: amount+segments; smooth: amount=factor, segments=iterations; extrude: amount=distance; mirror: segments=axis 0/1/2; weld: amount=epsilon). faces = triangle indices for extrude/separate.",
+            .put(tool("mesh_operation",
+                "Apply mesh op from the video/Blender set: soft_normals, hard_normals, divide, smooth, weld, mirror, extrude, bevel.",
                 JSONObject()
                     .put("object_id", objectId)
                     .put("operation", JSONObject().put("type", "string").put("enum", meshOps))
-                    .put("amount", JSONObject().put("type", "number"))
-                    .put("segments", JSONObject().put("type", "integer"))
-                    .put("faces", JSONObject().put("type", "array").put("items", JSONObject().put("type", "integer"))),
-                listOf("object_id", "operation")
-            ))
+                    .put("amount", JSONObject().put("type", "number")
+                        .put("description", "Distance/factor/epsilon depending on op"))
+                    .put("segments", JSONObject().put("type", "integer")
+                        .put("description", "Bevel segments or smooth iterations; mirror axis 0/1/2"))
+                    .put("face_indices", JSONObject().put("type", "string")
+                        .put("description", "Comma-separated triangle indices for extrude/separate")),
+                listOf("object_id", "operation")))
             .put(tool("combine_objects", "Merge B into A and delete B.",
-                JSONObject().put("object_id_a", objectId).put("object_id_b", objectId),
+                JSONObject()
+                    .put("object_id_a", objectId)
+                    .put("object_id_b", objectId),
                 listOf("object_id_a", "object_id_b")))
-            .put(tool("separate_faces", "Detach faces into a new object.",
-                JSONObject().put("object_id", objectId)
-                    .put("faces", JSONObject().put("type", "array").put("items", JSONObject().put("type", "integer"))),
-                listOf("object_id", "faces")))
-            .put(tool("set_select_mode", "object | face | edge | vertex",
+            .put(tool("separate_faces", "Extract faces into a new object.",
+                JSONObject()
+                    .put("object_id", objectId)
+                    .put("face_indices", JSONObject().put("type", "string")),
+                listOf("object_id", "face_indices")))
+            .put(tool("set_display_mode", "wireframe | shaded | wireframe_on_shaded",
                 JSONObject().put("mode", JSONObject().put("type", "string").put("enum",
-                    JSONArray().put("object").put("face").put("edge").put("vertex"))),
+                    JSONArray(listOf("wireframe", "shaded", "wireframe_on_shaded")))),
                 listOf("mode")))
-            .put(tool("set_selected_faces", "Set selected triangle indices for extrude/separate.",
-                JSONObject().put("faces", JSONObject().put("type", "array").put("items", JSONObject().put("type", "integer"))),
-                listOf("faces")))
-            .put(tool("get_modeling_extensions", "Catalog of ops and video-tool mapping.",
+            .put(tool("undo", "Undo.", JSONObject(), emptyList()))
+            .put(tool("redo", "Redo.", JSONObject(), emptyList()))
+            .put(tool("get_scene", "Scene JSON.", JSONObject(), emptyList()))
+            .put(tool("get_modeling_extensions", "Catalog of native + video tools.",
                 JSONObject(), emptyList()))
     }
 }

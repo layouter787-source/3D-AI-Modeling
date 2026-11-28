@@ -31,16 +31,19 @@ object NativeBridge {
     external fun setDisplayMode(mode: String): Boolean
 
     /**
-     * Mesh ops: soft_normals, hard_normals, divide, subdivide, triangulate,
-     * smooth, weld, merge_vertices, mirror, extrude, bevel.
+     * Mesh op: soft_normals, hard_normals, divide, smooth, weld, mirror,
+     * extrude, bevel. amount/segments depend on op. faceIndicesCsv = "0,1,2" or empty.
      */
-    external fun meshOp(id: Int, op: String, amount: Float, segments: Int, faces: IntArray?): Boolean
-    external fun combineObjects(idA: Int, idB: Int): Int
-    external fun separateFaces(id: Int, faces: IntArray?): Int
+    external fun meshOperation(
+        id: Int,
+        op: String,
+        amount: Float,
+        segments: Int,
+        faceIndicesCsv: String
+    ): Boolean
 
-    /** object | face | edge | vertex */
-    external fun setSelectMode(mode: String): Boolean
-    external fun setSelectedFaces(faces: IntArray?): Boolean
+    external fun combineObjects(idA: Int, idB: Int): Int
+    external fun separateFaces(id: Int, faceIndicesCsv: String): Int
 
     external fun undo(): Boolean
     external fun redo(): Boolean
