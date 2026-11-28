@@ -731,6 +731,29 @@ Java_com_layouter_aimodeling_NativeBridge_getFaceShell(JNIEnv* env, jobject, jin
     return result;
 }
 
+JNIEXPORT jintArray JNICALL
+Java_com_layouter_aimodeling_NativeBridge_getEdgeLoopFaces(JNIEnv* env, jobject, jint id, jint vertexA, jint vertexB) {
+    std::vector<int> loop;
+    {
+        std::lock_guard<std::mutex> lock(gMutex);
+        try {
+            if (vertexA < 0 || vertexB < 0) return env->NewIntArray(0);
+            loop = gRenderer.editor.edgeLoopFaces(id, static_cast<uint32_t>(vertexA), static_cast<uint32_t>(vertexB));
+        } catch (const std::exception& error) {
+            LOGE("Edge loop selection failed safely: %s", error.what());
+            return env->NewIntArray(0);
+        } catch (...) {
+            LOGE("Edge loop selection failed with an unknown error");
+            return env->NewIntArray(0);
+        }
+    }
+    if (loop.empty()) return env->NewIntArray(0);
+    std::vector<jint> values(loop.begin(), loop.end());
+    jintArray result = env->NewIntArray(static_cast<jsize>(values.size()));
+    if (result != nullptr) env->SetIntArrayRegion(result, 0, static_cast<jsize>(values.size()), values.data());
+    return result;
+}
+
 JNIEXPORT jboolean JNICALL
 Java_com_layouter_aimodeling_NativeBridge_beginVertexPaintStroke(JNIEnv*, jobject, jint id) {
     std::lock_guard<std::mutex> lock(gMutex);
