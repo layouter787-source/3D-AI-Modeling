@@ -19,6 +19,7 @@ object SceneProjectCodec {
         val size: Float,
         val detail: Int,
         val smoothAngle: Float,
+        val vertexColors: FloatArray?,
         val position: FloatArray,
         val rotation: FloatArray,
         val scale: FloatArray,
@@ -39,11 +40,21 @@ object SceneProjectCodec {
 
     fun encode(): String {
         val scene = JSONObject(NativeBridge.describeScene())
+        val objects = scene.getJSONArray("objects")
+        for (index in 0 until objects.length()) {
+            val item = objects.getJSONObject(index)
+            val colors = NativeBridge.getVertexColors(item.getInt("id"))
+            if (colors.isNotEmpty()) {
+                val packed = JSONArray()
+                colors.forEach { packed.put(it.toDouble()) }
+                item.put("vertex_colors", packed)
+            }
+        }
         return JSONObject()
             .put("format", FORMAT)
             .put("version", VERSION)
             .put("savedAtEpochMs", System.currentTimeMillis())
-            .put("objects", scene.getJSONArray("objects"))
+            .put("objects", objects)
             .put("environment", scene.optJSONObject("environment"))
             .put("selected", scene.optInt("selected", -1))
             .toString(2)
@@ -84,6 +95,14 @@ object SceneProjectCodec {
             val smoothAngle = item.optDouble("smooth_angle", defaultSmoothAngle).also {
                 require(it.isFinite() && it in 0.0..180.0) { "Ângulo de normais inválido" }
             }.toFloat()
+            val vertexColors = item.optJSONArray("vertex_colors")?.let { packed ->
+                require(packed.length() <= 750000 && packed.length() % 3 == 0) { "Pintura por vértice inválida" }
+                FloatArray(packed.length()) { colorIndex ->
+                    val channel = packed.getDouble(colorIndex)
+                    require(channel.isFinite() && channel in 0.0..1.0) { "Canal de cor inválido" }
+                    channel.toFloat()
+                }
+            }
             val position = vector(item, "position", -10000.0, 10000.0)
             val rotation = vector(item, "rotation", -100000.0, 100000.0)
             val scale = vector(item, "scale", 0.001, 1000.0)
@@ -95,7 +114,7 @@ object SceneProjectCodec {
             val emission = material?.let { boundedNumber(it, "emission", 0.0, 8.0) } ?: 0f
 
             parsed.add(
-                StoredObject(sourceId, type, size, detail, smoothAngle, position, rotation, scale, color, metallic, roughness, clearcoat, emission)
+                StoredObject(sourceId, type, size, detail, smoothAngle, vertexColors, position, rotation, scale, color, metallic, roughness, clearcoat, emission)
             )
         }
 
@@ -124,6 +143,11 @@ object SceneProjectCodec {
                 check(id >= 0) { "O motor recusou um objeto do projeto" }
                 check(NativeBridge.meshOperation(id, "normal_angle", intArrayOf(), 1, item.smoothAngle)) {
                     "Não foi possível restaurar o modo de normais"
+                }
+                item.vertexColors?.let { packedColors ->
+                    // The current project format regenerates meshes from primitive parameters.
+                    // Restore paint only when its vertex count still matches the regenerated topology.
+                    NativeBridge.setVertexColors(id, packedColors)
                 }
 
                 check(
