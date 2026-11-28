@@ -529,6 +529,33 @@ Java_com_layouter_aimodeling_NativeBridge_setColor(JNIEnv*, jobject, jint id, jf
     return toJ(gRenderer.editor.setColor(id, c));
 }
 
+JNIEXPORT jfloatArray JNICALL
+Java_com_layouter_aimodeling_NativeBridge_getVertexColors(JNIEnv* env, jobject, jint id) {
+    std::vector<float> values;
+    {
+        std::lock_guard<std::mutex> lock(gMutex);
+        values = gRenderer.editor.getVertexColors(id);
+    }
+    if (values.size() > 750000) return env->NewFloatArray(0);
+    jfloatArray result = env->NewFloatArray(static_cast<jsize>(values.size()));
+    if (result != nullptr && !values.empty()) {
+        env->SetFloatArrayRegion(result, 0, static_cast<jsize>(values.size()), values.data());
+    }
+    return result;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_layouter_aimodeling_NativeBridge_setVertexColors(JNIEnv* env, jobject, jint id, jfloatArray colors) {
+    if (colors == nullptr) return JNI_FALSE;
+    const jsize count = env->GetArrayLength(colors);
+    if (count < 3 || count > 750000 || count % 3 != 0) return JNI_FALSE;
+    std::vector<float> values(static_cast<size_t>(count));
+    env->GetFloatArrayRegion(colors, 0, count, values.data());
+    if (env->ExceptionCheck()) { env->ExceptionClear(); return JNI_FALSE; }
+    std::lock_guard<std::mutex> lock(gMutex);
+    return toJ(gRenderer.editor.setVertexColors(id, values));
+}
+
 JNIEXPORT jboolean JNICALL
 Java_com_layouter_aimodeling_NativeBridge_setMaterial(JNIEnv*, jobject, jint id, jfloat metallic,
                                                        jfloat roughness, jfloat clearcoat,
