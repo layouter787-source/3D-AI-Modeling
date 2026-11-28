@@ -742,7 +742,7 @@ bool Editor::meshOperation(int id, const std::string& operation, const std::vect
         result = solidify(source, std::clamp(value, -20.0f, 20.0f));
     } else if (operation == "mirror") {
         result = mirrorMesh(source, std::clamp(parameter, 0, 2), 1e-4f);
-    } else if (operation == "loop_cut" || operation == "connect") {
+    } else if (operation == "draw_cut" || operation == "split_edge") {\n        if (faces.size() != 2 || faces[0] < 0 || faces[1] < 0 ||\n            static_cast<size_t>(faces[0]) >= source.verts.size() ||\n            static_cast<size_t>(faces[1]) >= source.verts.size()) return false;\n        result = splitEdge(source, static_cast<uint32_t>(faces[0]),\n                           static_cast<uint32_t>(faces[1]), std::clamp(value, 0.001f, 0.999f));\n    } else if (operation == "loop_cut" || operation == "connect") {
         if (faces.size() != 2 || faces[0] < 0 || faces[1] < 0 ||
             static_cast<size_t>(faces[0]) >= source.verts.size() ||
             static_cast<size_t>(faces[1]) >= source.verts.size()) return false;
