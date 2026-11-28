@@ -87,10 +87,10 @@ public:
         : id_(id), before_(std::move(before)), after_(std::move(after)),
           beforeTopology_(std::move(beforeTopology)), afterTopology_(std::move(afterTopology)) {}
     void apply(Scene& s) override {
-        if (Object* o = s.find(id_)) { o->mesh = after_; o->topology = afterTopology_; }
+        if (Object* o = s.find(id_)) { o->mesh = after_; o->topology = afterTopology_; ++o->meshRevision; }
     }
     void revert(Scene& s) override {
-        if (Object* o = s.find(id_)) { o->mesh = before_; o->topology = beforeTopology_; }
+        if (Object* o = s.find(id_)) { o->mesh = before_; o->topology = beforeTopology_; ++o->meshRevision; }
     }
 private:
     int id_;
