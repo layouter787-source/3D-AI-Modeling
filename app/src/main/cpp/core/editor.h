@@ -43,6 +43,7 @@ public:
     bool beginVertexPaintStroke(int id);
     bool paintVertexAt(int id, const Ray& ray, float radius, Vec3 color, float opacity);
     void endVertexPaintStroke();
+    bool paintVertexRegion(int id, Vec3 center, float radius, Color color, float opacity);
     std::string describeMesh(int id, int offset, int limit) const;
     bool setColor(int id, Color color);
     bool setMaterial(int id, Material material);
