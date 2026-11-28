@@ -154,7 +154,7 @@ object ToolDispatcher {
                 "cube", "quad_sphere", "cylinder", "cone", "torus", "subdivided_plane", "pyramid",
                 "capsule", "octahedron", "hexagonal_prism", "triangular_prism", "pentagonal_prism",
                 "octagonal_prism", "decagonal_prism", "dodecagonal_prism", "tetrahedron",
-                "icosahedron", "geodesic_icosphere", "continuous_loft_mesh"
+                "icosahedron", "geodesic_icosphere", "hollow_pipe", "continuous_loft_mesh"
             )))
             .put("primitive_detail_range", JSONObject().put("minimum", 1).put("maximum", 64).put("default", 8))
             .put("asset_templates", JSONArray(listOf("humanoid_blockout", "ergonomic_mouse", "tree", "table", "house", "robot", "barrel", "stairs", "lamp", "crystal", "sci_fi_crate")))
@@ -398,7 +398,7 @@ object ToolDispatcher {
             .put(tool("get_mesh_topology", "Inspect the selected object's native mesh topology. Returns vertex positions and triangle face indices, optionally paged with offset and limit. Use the reported face IDs for face-edit operations; choose a page size appropriate to the device.", JSONObject().put("object_id",objectId).put("offset",JSONObject().put("type","integer").put("minimum",0)).put("limit",JSONObject().put("type","integer").put("minimum",1).put("default",300)), listOf("object_id")))
             .put(tool(
                 "mesh_operation",
-                "Edit existing mesh topology natively. Operations: subdivide, extrude, inset, bevel, smooth, solidify, mirror, loop_cut, connect, triangulate/divide, flip_normals, weld, crease_by_angle, and boolean_union/difference/intersection. Pass all relevant face IDs or edge vertices from topology inspection; there is no artificial face-batch limit. The native engine only rejects invalid data or operations exceeding available device resources. Each edit is undoable; make iterative refinements.",
+                "Edit existing polygon topology in the native editor. Supports subdivide, extrude, inset, bevel, delete_faces, clone_faces, draw_face/create_face (face_ids are ordered vertex IDs), merge_vertices (face_ids are vertex IDs), target_merge (edge_vertices are source and target vertex IDs), soft_normals, hard_normals, normal_angle, smooth, solidify, mirror, loop_cut, connect, triangulate/divide, flip_normals, weld, crease_by_angle and Boolean union/difference/intersection. Use get_mesh_topology to obtain actual IDs. Each successful edit is undoable; invalid IDs and resource guards are reported.",
                 JSONObject()
                     .put("object_id", objectId)
                     .put("operation", JSONObject().put("type", "string").put("enum", JSONArray(listOf("subdivide","extrude","inset","bevel","delete_faces","draw_face","create_face","clone_faces","merge_vertices","target_merge","soft_normals","hard_normals","normal_angle","smooth","solidify","mirror","loop_cut","connect","triangulate","divide","flip_normals","weld","crease_by_angle","boolean_union","boolean_difference","boolean_intersection"))))
