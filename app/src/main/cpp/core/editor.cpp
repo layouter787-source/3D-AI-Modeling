@@ -328,9 +328,14 @@ int Editor::addLoftMesh(const std::vector<float>& profiles, int segments, Vec3 p
 
     Object object;
     object.id=scene_.nextId++; object.type=Primitive::CustomMesh; object.size=1.0f;
-    object.name="loft_mesh_"+std::to_string(object.id); object.mesh=std::move(mesh); object.smoothAngle=35.0f;
-    object.topology=std::move(topology);
-    object.transform.position=position;
+    object.name = "loft_mesh_" + std::to_string(object.id);
+    object.smoothAngle = 35.0f;
+    object.topology = std::move(topology);
+    object.vertexColors.assign(object.topology.verts.size(), Vec3{1.0f, 1.0f, 1.0f});
+    object.mesh = buildRenderMesh(object.topology, object.smoothAngle, object.vertexColors);
+    if (object.mesh.vertices.empty() || object.mesh.indices.empty()) return -1;
+    object.meshRevision = 1;
+    object.transform.position = position;
     const int id=object.id;
     execute(std::make_unique<AddCommand>(std::move(object)));
     return id;
