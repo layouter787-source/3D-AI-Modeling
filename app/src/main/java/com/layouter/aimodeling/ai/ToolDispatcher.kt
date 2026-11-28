@@ -5,11 +5,6 @@ import com.layouter.aimodeling.PrimitiveType
 import org.json.JSONArray
 import org.json.JSONObject
 
-/**
- * Executa as ferramentas pedidas pela IA no motor 3D.
- * Valida tudo: a IA só consegue chamar estas funções, com estes argumentos, e cada alteração
- * entra no histórico (undo/redo) do núcleo.
- */
 object ToolDispatcher {
 
     fun execute(call: ToolCall): ToolResult =
@@ -25,17 +20,9 @@ object ToolDispatcher {
             "create_primitive" -> createPrimitive(a)
             "clone_object" -> {
                 val id = a.getInt("object_id")
-                // Prefer native clone when available; otherwise recreate from scene description.
-                val newId = try {
-                    NativeBridge.cloneObject(id)
-                } catch (_: Throwable) {
-                    -1
-                }
-                if (newId >= 0) {
-                    ToolResult(true, "Cloned object $id -> new id $newId")
-                } else {
-                    ToolResult(false, "Clone failed (object not found or native clone not yet linked)")
-                }
+                val newId = NativeBridge.cloneObject(id)
+                if (newId >= 0) ToolResult(true, "Cloned $id -> $newId")
+                else ToolResult(false, "Clone failed")
             }
             "set_transform" -> {
                 val p = a.vec3("position")
@@ -51,34 +38,58 @@ object ToolDispatcher {
             }
             "move_by" -> {
                 val o = a.vec3("offset")
-                report(NativeBridge.moveBy(a.getInt("object_id"), o[0], o[1], o[2]), "Object moved")
+                report(NativeBridge.moveBy(a.getInt("object_id"), o[0], o[1], o[2]), "Moved")
             }
             "rotate_by" -> {
                 val d = a.vec3("degrees")
-                report(NativeBridge.rotateBy(a.getInt("object_id"), d[0], d[1], d[2]), "Object rotated")
+                report(NativeBridge.rotateBy(a.getInt("object_id"), d[0], d[1], d[2]), "Rotated")
             }
             "scale_by" -> {
                 val f = a.vec3("factor")
-                report(NativeBridge.scaleBy(a.getInt("object_id"), f[0], f[1], f[2]), "Object scaled")
+                report(NativeBridge.scaleBy(a.getInt("object_id"), f[0], f[1], f[2]), "Scaled")
             }
             "set_color" -> {
                 val c = a.vec3("color")
-                report(NativeBridge.setColor(a.getInt("object_id"), c[0], c[1], c[2]), "Color changed")
+                report(NativeBridge.setColor(a.getInt("object_id"), c[0], c[1], c[2]), "Color set")
             }
-            "delete_object" -> report(NativeBridge.deleteObject(a.getInt("object_id")), "Object deleted")
+            "delete_object" -> report(NativeBridge.deleteObject(a.getInt("object_id")), "Deleted")
             "undo" -> report(NativeBridge.undo(), "Undone", "Nothing to undo")
             "redo" -> report(NativeBridge.redo(), "Redone", "Nothing to redo")
             "get_scene" -> ToolResult(true, NativeBridge.describeScene())
-            "get_modeling_extensions" -> modelingExtensions()
             "set_display_mode" -> {
                 val mode = a.getString("mode")
-                val ok = try {
-                    NativeBridge.setDisplayMode(mode)
-                } catch (_: Throwable) {
-                    false
-                }
-                report(ok, "Display mode set to $mode", "Display mode not supported yet: $mode")
+                report(NativeBridge.setDisplayMode(mode), "Display: $mode", "Invalid mode")
             }
+            "mesh_operation" -> {
+                val id = a.getInt("object_id")
+                val op = a.getString("operation")
+                val amount = a.optDouble("amount", 0.0).toFloat()
+                val segments = a.optInt("segments", 1)
+                val faces = a.optIntArray("faces")
+                val ok = NativeBridge.meshOp(id, op, amount, segments, faces)
+                if (ok) ToolResult(true, "mesh_operation '$op' on $id ok")
+                else ToolResult(false, "mesh_operation '$op' failed")
+            }
+            "combine_objects" -> {
+                val id = NativeBridge.combineObjects(a.getInt("object_id_a"), a.getInt("object_id_b"))
+                if (id >= 0) ToolResult(true, "Combined into object $id")
+                else ToolResult(false, "Combine failed")
+            }
+            "separate_faces" -> {
+                val faces = a.optIntArray("faces")
+                val id = NativeBridge.separateFaces(a.getInt("object_id"), faces)
+                if (id >= 0) ToolResult(true, "Separated into new object $id")
+                else ToolResult(false, "Separate failed (need face indices)")
+            }
+            "set_select_mode" -> {
+                val mode = a.getString("mode")
+                report(NativeBridge.setSelectMode(mode), "Select mode: $mode", "Invalid select mode")
+            }
+            "set_selected_faces" -> {
+                val faces = a.optIntArray("faces") ?: intArrayOf()
+                report(NativeBridge.setSelectedFaces(faces), "Selected ${faces.size} faces")
+            }
+            "get_modeling_extensions" -> modelingExtensions()
             else -> ToolResult(false, "Unknown tool: ${call.name}")
         }
     }
@@ -94,51 +105,39 @@ object ToolDispatcher {
             floatArrayOf(0f, if (type == PrimitiveType.PLANE) 0f else size / 2f, 0f)
         }
         val id = NativeBridge.addPrimitive(type.id, size, position[0], position[1], position[2])
-        return if (id < 0) {
-            ToolResult(false, "Could not create the object (object limit reached or invalid values)")
-        } else {
-            ToolResult(true, "Created object with id $id")
-        }
+        return if (id < 0) ToolResult(false, "Could not create object")
+        else ToolResult(true, "Created object with id $id")
     }
 
     private fun modelingExtensions(): ToolResult {
         val json = JSONObject()
-            .put("native_ops", JSONArray()
-                .put("create_primitive")
-                .put("clone_object")
-                .put("set_transform").put("move_by").put("rotate_by").put("scale_by")
-                .put("set_color").put("delete_object")
-                .put("undo").put("redo").put("get_scene")
-                .put("set_display_mode"))
-            .put("planned_poly_mesh", JSONArray()
-                .put("extrude").put("inset").put("bevel").put("divide").put("triangulate")
-                .put("soft_normals").put("hard_normals").put("smooth")
-                .put("mirror").put("weld").put("merge_vertices").put("target_merge")
-                .put("connect").put("create_face").put("detach_faces").put("combine_objects")
-                .put("sculpt_mesh").put("loop_cut").put("boolean"))
-            .put("video_tools_mapped", JSONArray()
-                .put("Clone")
-                .put("Delete")
-                .put("Object selection")
-                .put("Free move/rotate/scale")
-                .put("Soft/Hard normals (planned)")
-                .put("Divide (planned)")
-                .put("Bevel (planned)")
-                .put("Combine/Separate (planned)")
-                .put("Wireframe display (incremental)"))
-            .put("research_sculpt_brushes", JSONArray()
-                .put("Draw/Clay/Inflate/Grab/Smooth/Flatten/Pinch/Crease — approximate with sculpt_mesh when available"))
-            .put("research_dcc", JSONArray()
-                .put("Blender").put("Prisma3D").put("Nomad Sculpt").put("ZBrush").put("3DCoat"))
-            .put("note", "Never claim planned ops are installed. Approximate with native_ops only.")
+            .put("native_ops", JSONArray(
+                listOf(
+                    "create_primitive", "clone_object", "set_transform", "move_by", "rotate_by",
+                    "scale_by", "set_color", "delete_object", "undo", "redo", "get_scene",
+                    "set_display_mode", "mesh_operation", "combine_objects", "separate_faces",
+                    "set_select_mode", "set_selected_faces"
+                )
+            ))
+            .put("mesh_operations", JSONArray(
+                listOf(
+                    "soft_normals", "hard_normals", "divide", "subdivide", "triangulate",
+                    "smooth", "weld", "merge_vertices", "mirror", "extrude", "bevel"
+                )
+            ))
+            .put("video_tools", JSONArray(
+                listOf(
+                    "Clone", "Delete", "Soft normals", "Hard normals", "Divide", "Smooth",
+                    "Bevel", "Extrude", "Mirror", "Combine", "Separate", "Wireframe",
+                    "Object/Face selection mode"
+                )
+            ))
+            .put("glb", "export/import planned — use external pipeline for now")
         return ToolResult(true, json.toString())
     }
 
-    private fun report(
-        ok: Boolean,
-        okMessage: String,
-        failMessage: String = "Object not found or invalid values"
-    ) = ToolResult(ok, if (ok) okMessage else failMessage)
+    private fun report(ok: Boolean, okMessage: String, failMessage: String = "Failed") =
+        ToolResult(ok, if (ok) okMessage else failMessage)
 
     private fun JSONObject.vec3(key: String): FloatArray {
         val array = getJSONArray(key)
@@ -150,18 +149,20 @@ object ToolDispatcher {
         }
     }
 
-    /** Definições neutras (JSON Schema). Cada provedor adapta ao formato do seu serviço. */
+    private fun JSONObject.optIntArray(key: String): IntArray? {
+        if (!has(key)) return null
+        val arr = getJSONArray(key)
+        return IntArray(arr.length()) { arr.getInt(it) }
+    }
+
     fun toolDefinitions(): JSONArray {
         fun number3(description: String) = JSONObject()
             .put("type", "array")
             .put("items", JSONObject().put("type", "number"))
-            .put("minItems", 3)
-            .put("maxItems", 3)
+            .put("minItems", 3).put("maxItems", 3)
             .put("description", description)
 
-        val objectId = JSONObject()
-            .put("type", "integer")
-            .put("description", "Object id (see get_scene)")
+        val objectId = JSONObject().put("type", "integer").put("description", "Object id")
 
         fun tool(name: String, description: String, properties: JSONObject, required: List<String>) =
             JSONObject()
@@ -176,92 +177,74 @@ object ToolDispatcher {
                 )
 
         val primitiveTypes = JSONArray(PrimitiveType.values().map { it.apiName })
+        val meshOps = JSONArray(
+            listOf(
+                "soft_normals", "hard_normals", "divide", "subdivide", "triangulate",
+                "smooth", "weld", "merge_vertices", "mirror", "extrude", "bevel"
+            )
+        )
 
         return JSONArray()
-            .put(
-                tool(
-                    "create_primitive",
-                    "Create a primitive. Units are meters; Y is up. Default position puts it on the ground.",
-                    JSONObject()
-                        .put("type", JSONObject().put("type", "string").put("enum", primitiveTypes))
-                        .put("size", JSONObject().put("type", "number").put("description", "Overall size, default 1"))
-                        .put("position", number3("World position [x, y, z]")),
-                    listOf("type")
-                )
-            )
-            .put(
-                tool(
-                    "clone_object",
-                    "Duplicate an existing object (same mesh, transform and color). Returns the new id.",
-                    JSONObject().put("object_id", objectId),
-                    listOf("object_id")
-                )
-            )
-            .put(
-                tool(
-                    "set_transform",
-                    "Set the absolute transform of an object.",
-                    JSONObject()
-                        .put("object_id", objectId)
-                        .put("position", number3("[x, y, z]"))
-                        .put("rotation_degrees", number3("Euler XYZ in degrees"))
-                        .put("scale", number3("[sx, sy, sz]")),
-                    listOf("object_id", "position", "rotation_degrees", "scale")
-                )
-            )
-            .put(
-                tool(
-                    "move_by", "Move an object by an offset.",
-                    JSONObject().put("object_id", objectId).put("offset", number3("[dx, dy, dz]")),
-                    listOf("object_id", "offset")
-                )
-            )
-            .put(
-                tool(
-                    "rotate_by", "Rotate an object by Euler angles in degrees.",
-                    JSONObject().put("object_id", objectId).put("degrees", number3("[rx, ry, rz]")),
-                    listOf("object_id", "degrees")
-                )
-            )
-            .put(
-                tool(
-                    "scale_by", "Multiply an object's scale per axis.",
-                    JSONObject().put("object_id", objectId).put("factor", number3("[fx, fy, fz]")),
-                    listOf("object_id", "factor")
-                )
-            )
-            .put(
-                tool(
-                    "set_color", "Set the color, each channel from 0 to 1.",
-                    JSONObject().put("object_id", objectId).put("color", number3("[r, g, b]")),
-                    listOf("object_id", "color")
-                )
-            )
-            .put(tool("delete_object", "Delete an object.", JSONObject().put("object_id", objectId), listOf("object_id")))
-            .put(tool("undo", "Undo the last change.", JSONObject(), emptyList()))
-            .put(tool("redo", "Redo the last undone change.", JSONObject(), emptyList()))
-            .put(tool("get_scene", "Return the current scene as JSON.", JSONObject(), emptyList()))
-            .put(
-                tool(
-                    "get_modeling_extensions",
-                    "Return the catalog of native operations, planned PolyMesh ops, and research maps (Blender/Nomad/ZBrush). Call this when the user asks for advanced modeling, sculpt, bevel, wireframe or industry workflows.",
-                    JSONObject(),
-                    emptyList()
-                )
-            )
-            .put(
-                tool(
-                    "set_display_mode",
-                    "Set viewport display mode: wireframe, shaded, or wireframe_on_shaded.",
-                    JSONObject().put(
-                        "mode",
-                        JSONObject().put("type", "string").put(
-                            "enum",
-                            JSONArray().put("wireframe").put("shaded").put("wireframe_on_shaded")
-                        )
-                    ),
-                    listOf("mode")
-                )
-            )
+            .put(tool("create_primitive", "Create a primitive (meters, Y-up).",
+                JSONObject()
+                    .put("type", JSONObject().put("type", "string").put("enum", primitiveTypes))
+                    .put("size", JSONObject().put("type", "number"))
+                    .put("position", number3("[x,y,z]")),
+                listOf("type")))
+            .put(tool("clone_object", "Duplicate an object.",
+                JSONObject().put("object_id", objectId), listOf("object_id")))
+            .put(tool("set_transform", "Absolute transform.",
+                JSONObject().put("object_id", objectId)
+                    .put("position", number3("pos")).put("rotation_degrees", number3("euler"))
+                    .put("scale", number3("scale")),
+                listOf("object_id", "position", "rotation_degrees", "scale")))
+            .put(tool("move_by", "Offset position.",
+                JSONObject().put("object_id", objectId).put("offset", number3("delta")),
+                listOf("object_id", "offset")))
+            .put(tool("rotate_by", "Rotate by degrees.",
+                JSONObject().put("object_id", objectId).put("degrees", number3("rx,ry,rz")),
+                listOf("object_id", "degrees")))
+            .put(tool("scale_by", "Multiply scale.",
+                JSONObject().put("object_id", objectId).put("factor", number3("fx,fy,fz")),
+                listOf("object_id", "factor")))
+            .put(tool("set_color", "RGB 0..1.",
+                JSONObject().put("object_id", objectId).put("color", number3("r,g,b")),
+                listOf("object_id", "color")))
+            .put(tool("delete_object", "Delete object.",
+                JSONObject().put("object_id", objectId), listOf("object_id")))
+            .put(tool("undo", "Undo.", JSONObject(), emptyList()))
+            .put(tool("redo", "Redo.", JSONObject(), emptyList()))
+            .put(tool("get_scene", "Scene JSON.", JSONObject(), emptyList()))
+            .put(tool("set_display_mode", "shaded | wireframe | wireframe_on_shaded",
+                JSONObject().put("mode", JSONObject().put("type", "string").put("enum",
+                    JSONArray().put("shaded").put("wireframe").put("wireframe_on_shaded"))),
+                listOf("mode")))
+            .put(tool(
+                "mesh_operation",
+                "Apply mesh op: soft_normals, hard_normals, divide, subdivide, triangulate, smooth, weld, merge_vertices, mirror, extrude, bevel. amount/segments depend on op (bevel: amount+segments; smooth: amount=factor, segments=iterations; extrude: amount=distance; mirror: segments=axis 0/1/2; weld: amount=epsilon). faces = triangle indices for extrude/separate.",
+                JSONObject()
+                    .put("object_id", objectId)
+                    .put("operation", JSONObject().put("type", "string").put("enum", meshOps))
+                    .put("amount", JSONObject().put("type", "number"))
+                    .put("segments", JSONObject().put("type", "integer"))
+                    .put("faces", JSONObject().put("type", "array").put("items", JSONObject().put("type", "integer"))),
+                listOf("object_id", "operation")
+            ))
+            .put(tool("combine_objects", "Merge B into A and delete B.",
+                JSONObject().put("object_id_a", objectId).put("object_id_b", objectId),
+                listOf("object_id_a", "object_id_b")))
+            .put(tool("separate_faces", "Detach faces into a new object.",
+                JSONObject().put("object_id", objectId)
+                    .put("faces", JSONObject().put("type", "array").put("items", JSONObject().put("type", "integer"))),
+                listOf("object_id", "faces")))
+            .put(tool("set_select_mode", "object | face | edge | vertex",
+                JSONObject().put("mode", JSONObject().put("type", "string").put("enum",
+                    JSONArray().put("object").put("face").put("edge").put("vertex"))),
+                listOf("mode")))
+            .put(tool("set_selected_faces", "Set selected triangle indices for extrude/separate.",
+                JSONObject().put("faces", JSONObject().put("type", "array").put("items", JSONObject().put("type", "integer"))),
+                listOf("faces")))
+            .put(tool("get_modeling_extensions", "Catalog of ops and video-tool mapping.",
+                JSONObject(), emptyList()))
     }
 }
