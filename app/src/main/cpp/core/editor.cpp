@@ -502,7 +502,7 @@ bool Editor::sculptMeshBrush(int id, Vec3 center, float radius, Vec3 stroke, int
             case 6: { // Crease: pinch line plus a restrained normal groove
                 const Vec3 normal = i < normals.size() ? normals[i] : Vec3{0, 1, 0};
                 vertex += normalize(center - original) * (radialStrength * falloff * 0.55f);
-                vertex -= normal * (radialStrength * falloff * 0.18f);
+                vertex += normal * (-radialStrength * falloff * 0.18f);
                 break;
             }
         }
