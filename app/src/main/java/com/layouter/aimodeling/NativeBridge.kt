@@ -27,23 +27,14 @@ object NativeBridge {
     external fun scaleBy(id: Int, fx: Float, fy: Float, fz: Float): Boolean
     external fun setColor(id: Int, r: Float, g: Float, b: Float): Boolean
 
-    /** mode: shaded | wireframe | wireframe_on_shaded */
     external fun setDisplayMode(mode: String): Boolean
 
-    /**
-     * Mesh op: soft_normals, hard_normals, divide, smooth, weld, mirror,
-     * extrude, bevel. amount/segments depend on op. faceIndicesCsv = "0,1,2" or empty.
-     */
-    external fun meshOperation(
-        id: Int,
-        op: String,
-        amount: Float,
-        segments: Int,
-        faceIndicesCsv: String
-    ): Boolean
-
+    /** op: soft_normals, hard_normals, divide, smooth, weld, mirror, extrude, bevel */
+    external fun meshOp(id: Int, op: String, amount: Float, segments: Int, faceIndices: IntArray?): Boolean
     external fun combineObjects(idA: Int, idB: Int): Int
-    external fun separateFaces(id: Int, faceIndicesCsv: String): Int
+    external fun separateFaces(id: Int, faceIndices: IntArray?): Int
+    external fun setSelectMode(mode: String): Boolean
+    external fun setSelectedFaces(faceIndices: IntArray?): Boolean
 
     external fun undo(): Boolean
     external fun redo(): Boolean
