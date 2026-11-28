@@ -429,6 +429,94 @@ bool Editor::sculptMesh(int id, Vec3 center, float radius, Vec3 offset) {
     return true;
 }
 
+
+bool Editor::sculptMeshBrush(int id, Vec3 center, float radius, Vec3 stroke, int brush, float strength) {
+    Object* object = scene_.find(id);
+    if (!object || !finite3(center) || !finite3(stroke) || !std::isfinite(radius) ||
+        !std::isfinite(strength) || radius < 0.001f || radius > 1000.0f || brush < 0 || brush > 6) return false;
+
+    PolyMesh beforeTopology = object->topology;
+    if (beforeTopology.empty()) {
+        beforeTopology.verts.reserve(object->mesh.vertices.size());
+        for (const Vertex& v : object->mesh.vertices) beforeTopology.verts.push_back({v.px, v.py, v.pz});
+        for (size_t i = 0; i + 2 < object->mesh.indices.size(); i += 3)
+            beforeTopology.faces.push_back({object->mesh.indices[i], object->mesh.indices[i + 1], object->mesh.indices[i + 2]});
+        beforeTopology = weldVertices(beforeTopology, 1e-5f);
+    }
+    if (beforeTopology.empty() || beforeTopology.verts.size() > 250000) return false;
+
+    strength = std::clamp(strength, 0.0f, 1.0f);
+    PolyMesh afterTopology = beforeTopology;
+    const std::vector<Vec3> normals = vertexNormals(beforeTopology);
+    std::vector<std::vector<uint32_t>> adjacency(beforeTopology.verts.size());
+    for (const auto& face : beforeTopology.faces) {
+        if (face.size() < 2) continue;
+        for (size_t i = 0; i < face.size(); ++i) {
+            const uint32_t a = face[i], b = face[(i + 1) % face.size()];
+            if (a >= adjacency.size() || b >= adjacency.size()) continue;
+            adjacency[a].push_back(b);
+            adjacency[b].push_back(a);
+        }
+    }
+    std::vector<Vec3> smoothTargets(beforeTopology.verts.size());
+    if (brush == 3) {
+        for (size_t i = 0; i < beforeTopology.verts.size(); ++i) {
+            Vec3 sum{};
+            const auto& links = adjacency[i];
+            for (uint32_t n : links) sum += beforeTopology.verts[n];
+            smoothTargets[i] = links.empty() ? beforeTopology.verts[i] : sum / static_cast<float>(links.size());
+        }
+    }
+
+    bool changed = false;
+    const Vec3 planeNormal{0.0f, 1.0f, 0.0f};
+    const float radialStrength = std::clamp(length(stroke), 0.0f, 2.0f);
+    for (size_t i = 0; i < afterTopology.verts.size(); ++i) {
+        Vec3& vertex = afterTopology.verts[i];
+        const Vec3 original = beforeTopology.verts[i];
+        const float distance = length(original - center);
+        if (distance >= radius) continue;
+        const float t = std::clamp(1.0f - distance / radius, 0.0f, 1.0f);
+        const float falloff = t * t * (3.0f - 2.0f * t);
+        const float w = falloff * strength;
+        switch (brush) {
+            case 0: // Draw
+            case 2: // Grab
+                vertex += stroke * w;
+                break;
+            case 1: { // Inflate
+                const Vec3 normal = i < normals.size() ? normals[i] : Vec3{0, 1, 0};
+                const float amount = stroke.y != 0.0f ? stroke.y : strength * 0.08f;
+                vertex += normal * (amount * falloff);
+                break;
+            }
+            case 3: // Smooth, based on one stable Laplacian pass per dab
+                vertex = lerp(original, smoothTargets[i], std::clamp(w, 0.0f, 1.0f));
+                break;
+            case 4: // Flatten to a local horizontal plane
+                vertex.y = original.y + (center.y - original.y) * std::clamp(w, 0.0f, 1.0f);
+                break;
+            case 5: // Pinch
+                vertex += normalize(center - original) * (std::min(radialStrength, 0.5f) * falloff);
+                break;
+            case 6: { // Crease: pinch line plus a restrained normal groove
+                const Vec3 normal = i < normals.size() ? normals[i] : Vec3{0, 1, 0};
+                vertex += normalize(center - original) * (radialStrength * falloff * 0.55f);
+                vertex -= normal * (radialStrength * falloff * 0.18f);
+                break;
+            }
+        }
+        changed = changed || length(vertex - original) > 1e-6f;
+    }
+    if (!changed) return false;
+    Mesh beforeMesh = object->mesh;
+    Mesh afterMesh = buildRenderMesh(afterTopology, object->smoothAngle, object->vertexColors);
+    execute(std::make_unique<MeshCommand>(id, std::move(beforeMesh), std::move(afterMesh),
+        std::move(beforeTopology), std::move(afterTopology), object->smoothAngle, object->smoothAngle,
+        object->vertexColors, object->vertexColors));
+    return true;
+}
+
 bool Editor::meshOperation(int id, const std::string& operation, const std::vector<int>& faces,
                             int parameter, float value, int otherObjectId) {
     Object* object = scene_.find(id);
