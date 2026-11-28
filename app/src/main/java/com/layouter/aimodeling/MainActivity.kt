@@ -13,6 +13,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import com.layouter.aimodeling.ai.RemoteMcpConnector
 
 private val StudioBlue = Color(0xFF2563EB)
 private val StudioBlueDark = Color(0xFF60A5FA)
@@ -21,6 +22,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        RemoteMcpConnector.initialize(applicationContext)
         val preferences = getSharedPreferences("studio_preferences", MODE_PRIVATE)
         setContent {
             var darkTheme by remember { mutableStateOf(preferences.getBoolean("dark_theme", true)) }
