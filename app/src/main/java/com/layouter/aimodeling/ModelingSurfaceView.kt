@@ -5,6 +5,7 @@ import android.opengl.GLSurfaceView
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.ViewConfiguration
+import android.widget.Toast
 import kotlin.math.hypot
 
 /**
@@ -20,6 +21,51 @@ class ModelingSurfaceView(context: Context) : GLSurfaceView(context) {
     var onSceneChanged: (() -> Unit)? = null
 
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+
+    @Volatile private var vertexPaintEnabled = false
+    @Volatile private var vertexBrushRadius = 0.22f
+    @Volatile private var vertexBrushOpacity = 0.85f
+    @Volatile private var vertexBrushR = 0.20f
+    @Volatile private var vertexBrushG = 0.75f
+    @Volatile private var vertexBrushB = 0.38f
+    private var painting = false
+    private var paintObjectId = -1
+    private var lastPaintX = -1f
+    private var lastPaintY = -1f
+
+    fun setVertexPaintMode(
+        enabled: Boolean,
+        radius: Float = vertexBrushRadius,
+        opacity: Float = vertexBrushOpacity,
+        red: Float = vertexBrushR,
+        green: Float = vertexBrushG,
+        blue: Float = vertexBrushB
+    ) {
+        vertexPaintEnabled = enabled
+        vertexBrushRadius = radius.coerceIn(0.03f, 2.0f)
+        vertexBrushOpacity = opacity.coerceIn(0f, 1f)
+        vertexBrushR = red.coerceIn(0f, 1f)
+        vertexBrushG = green.coerceIn(0f, 1f)
+        vertexBrushB = blue.coerceIn(0f, 1f)
+        if (!enabled && painting) {
+            painting = false
+            paintObjectId = -1
+            queueEvent { NativeBridge.endVertexPaintStroke() }
+            onSceneChanged?.invoke()
+        }
+    }
+
+    private fun paintAt(x: Float, y: Float) {
+        val id = paintObjectId
+        val radius = vertexBrushRadius
+        val red = vertexBrushR
+        val green = vertexBrushG
+        val blue = vertexBrushB
+        val opacity = vertexBrushOpacity
+        queueEvent {
+            NativeBridge.paintVertexAt(id, x, y, radius, red, green, blue, opacity)
+        }
+    }
 
     private val scaleDetector = ScaleGestureDetector(
         context,
@@ -47,6 +93,59 @@ class ModelingSurfaceView(context: Context) : GLSurfaceView(context) {
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (vertexPaintEnabled) {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    val selectedId = NativeBridge.getSelected()
+                    if (selectedId < 0) {
+                        Toast.makeText(context, "Seleciona um objecto antes de pintar", Toast.LENGTH_SHORT).show()
+                        return true
+                    }
+                    paintObjectId = selectedId
+                    painting = true
+                    lastPaintX = event.x
+                    lastPaintY = event.y
+                    val id = paintObjectId
+                    val x = event.x
+                    val y = event.y
+                    val radius = vertexBrushRadius
+                    val red = vertexBrushR
+                    val green = vertexBrushG
+                    val blue = vertexBrushB
+                    val opacity = vertexBrushOpacity
+                    queueEvent {
+                        if (NativeBridge.beginVertexPaintStroke(id)) {
+                            NativeBridge.paintVertexAt(id, x, y, radius, red, green, blue, opacity)
+                        }
+                    }
+                    return true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (painting && event.pointerCount == 1) {
+                        val dx = event.x - lastPaintX
+                        val dy = event.y - lastPaintY
+                        if (hypot(dx, dy) >= 3.5f) {
+                            lastPaintX = event.x
+                            lastPaintY = event.y
+                            paintAt(event.x, event.y)
+                        }
+                    }
+                    return true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_POINTER_DOWN -> {
+                    if (painting) {
+                        painting = false
+                        paintObjectId = -1
+                        queueEvent { NativeBridge.endVertexPaintStroke() }
+                        onSceneChanged?.invoke()
+                    }
+                    return true
+                }
+                MotionEvent.ACTION_POINTER_UP -> return true
+            }
+            return true
+        }
+
         scaleDetector.onTouchEvent(event)
 
         // Centro dos dedos, sem contar o dedo que acabou de levantar.
