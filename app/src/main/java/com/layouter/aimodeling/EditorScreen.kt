@@ -95,6 +95,10 @@ fun EditorScreen(isDarkTheme: Boolean = true, onToggleTheme: () -> Unit = {}) {
     var showPrimitiveDialog by remember { mutableStateOf(false) }
     var showMaterialDialog by remember { mutableStateOf(false) }
     var vertexPaintMode by remember { mutableStateOf(false) }
+    var sculptMode by remember { mutableStateOf(false) }
+    var sculptBrush by remember { mutableIntStateOf(0) }
+    var sculptRadius by remember { mutableStateOf(0.65f) }
+    var sculptStrength by remember { mutableStateOf(0.35f) }
     var vertexBrushSize by remember { mutableStateOf(0.22f) }
     var vertexBrushOpacity by remember { mutableStateOf(0.85f) }
     var vertexPaintColorIndex by remember { mutableIntStateOf(2) }
@@ -229,12 +233,14 @@ fun EditorScreen(isDarkTheme: Boolean = true, onToggleTheme: () -> Unit = {}) {
                     onSceneChanged = refresh
                     val initialColor = palette[vertexPaintColorIndex]
                     setVertexPaintMode(vertexPaintMode, vertexBrushSize, vertexBrushOpacity, initialColor.first, initialColor.second, initialColor.third)
+                    setSculptMode(sculptMode, sculptBrush, sculptRadius, sculptStrength)
                 }
             },
             update = { view ->
                 view.onSceneChanged = refresh
                 val selectedColor = palette.getOrElse(vertexPaintColorIndex) { palette[2] }
                 view.setVertexPaintMode(vertexPaintMode, vertexBrushSize, vertexBrushOpacity, selectedColor.first, selectedColor.second, selectedColor.third)
+                view.setSculptMode(sculptMode, sculptBrush, sculptRadius, sculptStrength)
             }
         )
 
@@ -310,7 +316,9 @@ fun EditorScreen(isDarkTheme: Boolean = true, onToggleTheme: () -> Unit = {}) {
                     .background(Color(0xE91B1E23), androidx.compose.foundation.shape.RoundedCornerShape(22.dp)).systemBarsPadding().padding(10.dp),
                 verticalArrangement = Arrangement.spacedBy(7.dp)
             ) {
-                if (vertexPaintMode && selected >= 0) {
+                if (sculptMode && selected >= 0) {
+                    SculptControls(brush = sculptBrush, onBrush = { sculptBrush = it }, radius = sculptRadius, onRadius = { sculptRadius = it }, strength = sculptStrength, onStrength = { sculptStrength = it }, onDone = { sculptMode = false })
+                } else if (vertexPaintMode && selected >= 0) {
                     VertexPaintControls(
                         brushSize = vertexBrushSize,
                         onBrushSize = { vertexBrushSize = it },
@@ -321,7 +329,7 @@ fun EditorScreen(isDarkTheme: Boolean = true, onToggleTheme: () -> Unit = {}) {
                         onDone = { vertexPaintMode = false }
                     )
                 } else if (selected >= 0) {
-                    SelectionTools(selected, refresh, onMaterial = { showMaterialDialog = true }, onVertexPaint = { vertexPaintMode = true })
+                    SelectionTools(selected, refresh, onMaterial = { showMaterialDialog = true }, onVertexPaint = { vertexPaintMode = true; sculptMode = false }, onSculpt = { sculptMode = true; vertexPaintMode = false })
                 }
                 PrimitiveBar(refresh) { showPrimitiveDialog = true }
             }
@@ -628,6 +636,36 @@ private fun ToolButton(label: String, onClick: () -> Unit) {
 }
 
 @Composable
+private fun SculptControls(
+    brush: Int, onBrush: (Int) -> Unit,
+    radius: Float, onRadius: (Float) -> Unit,
+    strength: Float, onStrength: (Float) -> Unit,
+    onDone: () -> Unit
+) {
+    val brushes = listOf("Draw", "Inflate", "Grab", "Smooth", "Flatten", "Pinch", "Crease")
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("SCULPT · PINCEL SOBRE A MALHA", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+            TextButton(onClick = onDone) { Text("Concluir") }
+        }
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            brushes.forEachIndexed { index, label -> ToolButton(if (brush == index) "• $label" else label) { onBrush(index) } }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Raio", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(end = 8.dp))
+            Slider(value = radius, onValueChange = onRadius, valueRange = 0.08f..2.5f, modifier = Modifier.weight(1f))
+            Text("%.2f".format(radius), style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 6.dp))
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Força", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(end = 8.dp))
+            Slider(value = strength, onValueChange = onStrength, valueRange = 0.03f..1f, modifier = Modifier.weight(1f))
+            Text((strength * 100).toInt().toString() + "%", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 6.dp))
+        }
+        Text("Arrasta o dedo na superfície. O pincel usa picking 3D, falloff suave e Undo/Redo.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
 private fun VertexPaintControls(
     brushSize: Float,
     onBrushSize: (Float) -> Unit,
@@ -667,7 +705,7 @@ private fun VertexPaintControls(
     }
 }
 @Composable
-private fun SelectionTools(id: Int, refresh: () -> Unit, onMaterial: () -> Unit, onVertexPaint: () -> Unit) {
+private fun SelectionTools(id: Int, refresh: () -> Unit, onMaterial: () -> Unit, onVertexPaint: () -> Unit, onSculpt: () -> Unit) {
     val scroll1 = rememberScrollState()
     val scroll2 = rememberScrollState()
 
@@ -685,8 +723,7 @@ private fun SelectionTools(id: Int, refresh: () -> Unit, onMaterial: () -> Unit,
             Icon(Icons.Outlined.ArrowDownward, "Mover para Y negativo", tint = MaterialTheme.colorScheme.onSurface)
         }
         ToolButton("Z−") { NativeBridge.moveBy(id, 0f, 0f, -MOVE_STEP); refresh() }
-        ToolButton("MOLDAR +") { NativeBridge.sculptMesh(id, 0f, 0f, 0f, 0.85f, 0f, 0.10f, 0f); refresh() }
-        ToolButton("MOLDAR −") { NativeBridge.sculptMesh(id, 0f, 0f, 0f, 0.85f, 0f, -0.10f, 0f); refresh() }
+        ToolButton("SCULPT · PINCEL") { onSculpt() }
         ToolButton("CLONE") {
             val copy = NativeBridge.duplicateObject(id, 0.8f, 0f, 0f)
             if (copy >= 0) NativeBridge.select(copy)
