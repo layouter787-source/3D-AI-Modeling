@@ -17,6 +17,7 @@ object SceneProjectCodec {
         val sourceId: Int,
         val type: PrimitiveType,
         val size: Float,
+        val detail: Int,
         val position: FloatArray,
         val rotation: FloatArray,
         val scale: FloatArray,
@@ -74,6 +75,7 @@ object SceneProjectCodec {
             val type = PrimitiveType.fromApiName(item.getString("type"))
                 ?: throw IllegalArgumentException("Tipo de objeto não suportado")
             val size = boundedNumber(item, "size", 0.01, 100.0)
+            val detail = item.optInt("detail", 8).also { require(it in 1..64) { "Resolução de malha inválida" } }
             val position = vector(item, "position", -10000.0, 10000.0)
             val rotation = vector(item, "rotation", -100000.0, 100000.0)
             val scale = vector(item, "scale", 0.001, 1000.0)
@@ -85,7 +87,7 @@ object SceneProjectCodec {
             val emission = material?.let { boundedNumber(it, "emission", 0.0, 8.0) } ?: 0f
 
             parsed.add(
-                StoredObject(sourceId, type, size, position, rotation, scale, color, metallic, roughness, clearcoat, emission)
+                StoredObject(sourceId, type, size, detail, position, rotation, scale, color, metallic, roughness, clearcoat, emission)
             )
         }
 
@@ -103,12 +105,13 @@ object SceneProjectCodec {
         return try {
             val remappedIds = HashMap<Int, Int>(parsed.size)
             for (item in parsed) {
-                val id = NativeBridge.addPrimitive(
+                val id = NativeBridge.addPrimitiveDetailed(
                     item.type.id,
                     item.size,
                     item.position[0],
                     item.position[1],
-                    item.position[2]
+                    item.position[2],
+                    item.detail
                 )
                 check(id >= 0) { "O motor recusou um objeto do projeto" }
 
