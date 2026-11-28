@@ -22,9 +22,10 @@ class AiAgent(private val provider: AiProvider) {
         trimHistory()
 
         while (true) {
-            val turn = provider.send(systemPrompt(), history, ToolDispatcher.toolDefinitions())
+            val turn = provider.sendStreaming(systemPrompt(), history, ToolDispatcher.toolDefinitions()) { delta ->
+                if (delta.isNotEmpty()) onText(delta)
+            }
             history.add(AiMessage.Assistant(turn.text, turn.toolCalls))
-            if (turn.text.isNotBlank()) onText(turn.text.trim())
             if (turn.toolCalls.isEmpty()) return
 
             for (call in turn.toolCalls) {
