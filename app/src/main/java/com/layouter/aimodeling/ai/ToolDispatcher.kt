@@ -72,7 +72,8 @@ object ToolDispatcher {
 
     private fun parseFaces(csv: String): IntArray? {
         if (csv.isBlank()) return null
-        return csv.split(',').mapNotNull { it.trim().toIntOrNull() }.toIntArray().ifEmpty { null }
+        val list = csv.split(',').mapNotNull { it.trim().toIntOrNull() }
+        return if (list.isEmpty()) null else list.toIntArray()
     }
 
     private fun createPrimitive(a: JSONObject): ToolResult {
