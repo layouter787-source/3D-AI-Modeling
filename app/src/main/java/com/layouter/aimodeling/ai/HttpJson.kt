@@ -6,6 +6,7 @@ import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ensureActive
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -17,9 +18,9 @@ import java.util.concurrent.TimeUnit
 internal object HttpJson {
     private val streamClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(0, TimeUnit.MILLISECONDS)
+        .readTimeout(120, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
-        .retryOnConnectionFailure(true)
+        .retryOnConnectionFailure(false)
         .build()
 
 
@@ -39,7 +40,12 @@ internal object HttpJson {
                 .header("Content-Type", "application/json")
                 .apply { headers.forEach { (name, value) -> header(name, value) } }
                 .build()
-            streamClient.newCall(request).execute().use { response ->
+            val call = streamClient.newCall(request)
+            val cancellation = currentCoroutineContext().job.invokeOnCompletion { cause ->
+                if (cause is CancellationException) call.cancel()
+            }
+            try {
+            call.execute().use { response ->
                 if (!response.isSuccessful) {
                     val error = response.body?.string().orEmpty()
                     throw AiException("HTTP ${response.code}: ${errorMessage(error)}", httpCode = response.code)
@@ -57,6 +63,9 @@ internal object HttpJson {
                     }
                 }
                 if (data.isNotEmpty()) onData(data.toString())
+            }
+            } finally {
+                cancellation.dispose()
             }
         }
 
