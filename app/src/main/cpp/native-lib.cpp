@@ -436,6 +436,15 @@ Java_com_layouter_aimodeling_NativeBridge_addPrimitive(JNIEnv*, jobject, jint ty
 }
 
 JNIEXPORT jint JNICALL
+Java_com_layouter_aimodeling_NativeBridge_addPrimitiveDetailed(JNIEnv*, jobject, jint type,
+                                                               jfloat size, jfloat x, jfloat y,
+                                                               jfloat z, jint detail) {
+    if (type < 0 || type >= kPrimitiveCount || detail < 1 || detail > 64) return -1;
+    std::lock_guard<std::mutex> lock(gMutex);
+    return gRenderer.editor.addPrimitive(static_cast<Primitive>(type), size, Vec3{x, y, z}, detail);
+}
+
+JNIEXPORT jint JNICALL
 Java_com_layouter_aimodeling_NativeBridge_createLoftMesh(JNIEnv* env, jobject, jfloatArray data,
                                                         jint segments, jfloat x, jfloat y, jfloat z) {
     if (data == nullptr) return -1;
