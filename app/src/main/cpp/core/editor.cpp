@@ -54,6 +54,43 @@ PolyMesh extractFaceSet(const PolyMesh& source, const std::vector<int>& faceIds,
 
 bool finite3(Vec3 v) { return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z); }
 
+using VertexPositionKey = std::tuple<long long, long long, long long>;
+
+VertexPositionKey vertexPositionKey(Vec3 position) {
+    constexpr double scale = 100000.0;
+    return {
+        std::llround(static_cast<double>(position.x) * scale),
+        std::llround(static_cast<double>(position.y) * scale),
+        std::llround(static_cast<double>(position.z) * scale)
+    };
+}
+
+std::vector<Vec3> remapVertexColors(const PolyMesh& source,
+                                    const std::vector<Vec3>& sourceColors,
+                                    const PolyMesh& result,
+                                    bool preserveVertexOrder) {
+    const Vec3 white{1.0f, 1.0f, 1.0f};
+    std::vector<Vec3> colors(result.verts.size(), white);
+    if (sourceColors.size() != source.verts.size()) return colors;
+
+    if (preserveVertexOrder && source.verts.size() == result.verts.size()) {
+        return sourceColors;
+    }
+
+    std::map<VertexPositionKey, Vec3> byPosition;
+    for (size_t i = 0; i < source.verts.size(); ++i) {
+        const Vec3 position = source.verts[i];
+        if (finite3(position)) byPosition.emplace(vertexPositionKey(position), sourceColors[i]);
+    }
+    for (size_t i = 0; i < result.verts.size(); ++i) {
+        const Vec3 position = result.verts[i];
+        if (!finite3(position)) continue;
+        const auto found = byPosition.find(vertexPositionKey(position));
+        if (found != byPosition.end()) colors[i] = found->second;
+    }
+    return colors;
+}
+
 bool rayTriangleHit(const Ray& ray, Vec3 a, Vec3 b, Vec3 c, float& distance) {
     const Vec3 edge1 = b - a;
     const Vec3 edge2 = c - a;
@@ -563,9 +600,11 @@ bool Editor::meshOperation(int id, const std::string& operation, const std::vect
 
     if (result.empty() || result.verts.size() > 250000 || result.faces.size() > 250000) return false;
     if (afterColors.size() != result.verts.size()) {
-        afterColors.assign(result.verts.size(), Vec3{1.0f, 1.0f, 1.0f});
-        const size_t retained = std::min(object->vertexColors.size(), afterColors.size());
-        for (size_t i = 0; i < retained; ++i) afterColors[i] = object->vertexColors[i];
+        const bool orderIsStable =
+            operation != "boolean_union" &&
+            operation != "boolean_difference" &&
+            operation != "boolean_intersection";
+        afterColors = remapVertexColors(source, object->vertexColors, result, orderIsStable);
     }
     Mesh after = buildRenderMesh(result, afterSmoothAngle, afterColors);
     if (after.vertices.empty() || after.indices.empty() || after.vertices.size() > 500000 ||
