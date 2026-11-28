@@ -268,6 +268,60 @@ PolyMesh makeCylinderPoly(float radius, float height, int radial, int heightSegm
     return m;
 }
 
+PolyMesh makePipePoly(float outerRadius, float innerRadius, float height, int radial, int heightSegments) {
+    radial = clampInt(radial, 3, 256);
+    heightSegments = clampInt(heightSegments, 1, 128);
+    outerRadius = std::max(outerRadius, 0.001f);
+    innerRadius = std::clamp(innerRadius, outerRadius * 0.05f, outerRadius * 0.95f);
+    const float halfHeight = height * 0.5f;
+    PolyMesh mesh;
+    const uint32_t ringSize = static_cast<uint32_t>(radial);
+    const uint32_t outerBottom = 0;
+    const uint32_t outerTop = ringSize * static_cast<uint32_t>(heightSegments + 1);
+    const uint32_t innerBottom = outerTop + ringSize;
+    const uint32_t innerTop = innerBottom + ringSize * static_cast<uint32_t>(heightSegments + 1);
+
+    // Outer and inner walls use independent rings so the wall has real thickness.
+    for (int level = 0; level <= heightSegments; ++level) {
+        const float y = -halfHeight + height * static_cast<float>(level) / static_cast<float>(heightSegments);
+        for (int i = 0; i < radial; ++i) {
+            const float angle = 2.0f * kPi * static_cast<float>(i) / static_cast<float>(radial);
+            const float cs = std::cos(angle);
+            const float sn = std::sin(angle);
+            mesh.verts.push_back({outerRadius * cs, y, outerRadius * sn});
+        }
+    }
+    for (int level = 0; level <= heightSegments; ++level) {
+        const float y = -halfHeight + height * static_cast<float>(level) / static_cast<float>(heightSegments);
+        for (int i = 0; i < radial; ++i) {
+            const float angle = 2.0f * kPi * static_cast<float>(i) / static_cast<float>(radial);
+            const float cs = std::cos(angle);
+            const float sn = std::sin(angle);
+            mesh.verts.push_back({innerRadius * cs, y, innerRadius * sn});
+        }
+    }
+
+    auto outer = [&](int level, int i) {
+        return outerBottom + static_cast<uint32_t>(level) * ringSize + static_cast<uint32_t>((i + radial) % radial);
+    };
+    auto inner = [&](int level, int i) {
+        return innerBottom + static_cast<uint32_t>(level) * ringSize + static_cast<uint32_t>((i + radial) % radial);
+    };
+    for (int level = 0; level < heightSegments; ++level) {
+        for (int i = 0; i < radial; ++i) {
+            const int next = (i + 1) % radial;
+            mesh.faces.push_back({outer(level, i), outer(level, next), outer(level + 1, next), outer(level + 1, i)});
+            mesh.faces.push_back({inner(level, next), inner(level, i), inner(level + 1, i), inner(level + 1, next)});
+        }
+    }
+    for (int i = 0; i < radial; ++i) {
+        const int next = (i + 1) % radial;
+        mesh.faces.push_back({outer(0, i), outer(0, next), inner(0, next), inner(0, i)});
+        mesh.faces.push_back({outer(heightSegments, i), inner(heightSegments, i), inner(heightSegments, next), outer(heightSegments, next)});
+    }
+    return mesh;
+}
+
 PolyMesh makeConePoly(float radius, float height, int radial, bool cap) {
     radial = clampInt(radial, 3, 256);
     const float h = height * 0.5f;
