@@ -8,9 +8,7 @@ import org.json.JSONObject
 object ToolDispatcher {
 
     fun execute(call: ToolCall): ToolResult =
-        try {
-            dispatch(call)
-        } catch (e: Exception) {
+        try { dispatch(call) } catch (e: Exception) {
             ToolResult(false, "Invalid arguments: ${e.message}")
         }
 
@@ -26,21 +24,18 @@ object ToolDispatcher {
                 val p = a.vec3("position"); val r = a.vec3("rotation_degrees"); val s = a.vec3("scale")
                 report(NativeBridge.setTransform(a.getInt("object_id"), p[0], p[1], p[2], r[0], r[1], r[2], s[0], s[1], s[2]), "Transform updated")
             }
-            "move_by" -> {
-                val o = a.vec3("offset")
-                report(NativeBridge.moveBy(a.getInt("object_id"), o[0], o[1], o[2]), "Moved")
-            }
-            "rotate_by" -> {
-                val d = a.vec3("degrees")
-                report(NativeBridge.rotateBy(a.getInt("object_id"), d[0], d[1], d[2]), "Rotated")
-            }
-            "scale_by" -> {
-                val f = a.vec3("factor")
-                report(NativeBridge.scaleBy(a.getInt("object_id"), f[0], f[1], f[2]), "Scaled")
-            }
+            "move_by" -> { val o = a.vec3("offset"); report(NativeBridge.moveBy(a.getInt("object_id"), o[0], o[1], o[2]), "Moved") }
+            "rotate_by" -> { val d = a.vec3("degrees"); report(NativeBridge.rotateBy(a.getInt("object_id"), d[0], d[1], d[2]), "Rotated") }
+            "scale_by" -> { val f = a.vec3("factor"); report(NativeBridge.scaleBy(a.getInt("object_id"), f[0], f[1], f[2]), "Scaled") }
             "set_color" -> {
                 val c = a.vec3("color")
                 report(NativeBridge.setColor(a.getInt("object_id"), c[0], c[1], c[2]), "Color set")
+            }
+            "set_pbr" -> {
+                val c = a.vec3("color")
+                val metallic = a.optDouble("metallic", 0.0).toFloat()
+                val roughness = a.optDouble("roughness", 0.5).toFloat()
+                report(NativeBridge.setPbr(a.getInt("object_id"), c[0], c[1], c[2], metallic, roughness), "PBR set")
             }
             "delete_object" -> report(NativeBridge.deleteObject(a.getInt("object_id")), "Deleted")
             "mesh_operation" -> {
@@ -59,6 +54,15 @@ object ToolDispatcher {
                 val faces = parseFaces(a.optString("face_indices", ""))
                 val newId = NativeBridge.separateFaces(a.getInt("object_id"), faces)
                 if (newId >= 0) ToolResult(true, "Separated -> $newId") else ToolResult(false, "Separate failed")
+            }
+            "export_glb" -> {
+                val path = a.getString("path")
+                report(NativeBridge.exportGlb(a.getInt("object_id"), path), "Exported GLB to $path")
+            }
+            "import_glb" -> {
+                val path = a.getString("path")
+                val id = NativeBridge.importGlb(path)
+                if (id >= 0) ToolResult(true, "Imported GLB as object $id") else ToolResult(false, "Import failed")
             }
             "set_display_mode" -> report(NativeBridge.setDisplayMode(a.getString("mode")), "Display mode set")
             "set_select_mode" -> report(NativeBridge.setSelectMode(a.getString("mode")), "Select mode set")
@@ -87,17 +91,16 @@ object ToolDispatcher {
         return if (id < 0) ToolResult(false, "Could not create") else ToolResult(true, "Created id $id")
     }
 
-    private fun modelingExtensions(): ToolResult {
-        return ToolResult(true, JSONObject()
+    private fun modelingExtensions(): ToolResult =
+        ToolResult(true, JSONObject()
             .put("mesh_operations", JSONArray(listOf(
-                "soft_normals", "hard_normals", "divide", "smooth", "weld", "mirror", "extrude", "bevel"
+                "soft_normals", "hard_normals", "divide", "smooth", "weld", "mirror",
+                "extrude", "bevel", "create_face", "connect", "target_merge"
             )))
-            .put("video_tools", JSONArray(listOf(
-                "Clone", "Delete", "Soft/Hard normals", "Divide", "Smooth", "Mirror",
-                "Combine", "Separate", "Bevel", "Weld", "Wireframe", "Transform", "Color"
-            )))
+            .put("formats", JSONArray(listOf("glb")))
+            .put("pbr", true)
+            .put("picking", JSONArray(listOf("object", "vertex", "edge", "face")))
             .toString())
-    }
 
     private fun report(ok: Boolean, okMsg: String, failMsg: String = "Failed") =
         ToolResult(ok, if (ok) okMsg else failMsg)
@@ -116,7 +119,10 @@ object ToolDispatcher {
             .put("name", n).put("description", d)
             .put("parameters", JSONObject().put("type", "object").put("properties", p).put("required", JSONArray(r)))
         val prims = JSONArray(PrimitiveType.values().map { it.apiName })
-        val ops = JSONArray(listOf("soft_normals", "hard_normals", "divide", "smooth", "weld", "mirror", "extrude", "bevel"))
+        val ops = JSONArray(listOf(
+            "soft_normals", "hard_normals", "divide", "smooth", "weld", "mirror",
+            "extrude", "bevel", "create_face", "connect", "target_merge"
+        ))
         return JSONArray()
             .put(tool("create_primitive", "Create primitive", JSONObject()
                 .put("type", JSONObject().put("type", "string").put("enum", prims))
@@ -131,24 +137,35 @@ object ToolDispatcher {
             .put(tool("rotate_by", "Rotate", JSONObject().put("object_id", oid).put("degrees", number3("deg")), listOf("object_id", "degrees")))
             .put(tool("scale_by", "Scale", JSONObject().put("object_id", oid).put("factor", number3("f")), listOf("object_id", "factor")))
             .put(tool("set_color", "Color RGB 0-1", JSONObject().put("object_id", oid).put("color", number3("rgb")), listOf("object_id", "color")))
+            .put(tool("set_pbr", "PBR baseColor + metallic + roughness", JSONObject()
+                .put("object_id", oid).put("color", number3("rgb"))
+                .put("metallic", JSONObject().put("type", "number"))
+                .put("roughness", JSONObject().put("type", "number")),
+                listOf("object_id", "color")))
             .put(tool("delete_object", "Delete", JSONObject().put("object_id", oid), listOf("object_id")))
-            .put(tool("mesh_operation", "Mesh op from video toolset", JSONObject()
+            .put(tool("mesh_operation", "Mesh/topology op", JSONObject()
                 .put("object_id", oid)
                 .put("operation", JSONObject().put("type", "string").put("enum", ops))
                 .put("amount", JSONObject().put("type", "number"))
                 .put("segments", JSONObject().put("type", "integer"))
-                .put("face_indices", JSONObject().put("type", "string").put("description", "csv triangle indices")),
+                .put("face_indices", JSONObject().put("type", "string")
+                    .put("description", "csv: faces OR verts for create_face/connect/target_merge")),
                 listOf("object_id", "operation")))
             .put(tool("combine_objects", "Merge B into A", JSONObject()
                 .put("object_id_a", oid).put("object_id_b", oid), listOf("object_id_a", "object_id_b")))
             .put(tool("separate_faces", "Extract faces", JSONObject()
                 .put("object_id", oid).put("face_indices", JSONObject().put("type", "string")),
                 listOf("object_id", "face_indices")))
-            .put(tool("set_display_mode", "Display mode", JSONObject()
+            .put(tool("export_glb", "Export object to GLB file path", JSONObject()
+                .put("object_id", oid).put("path", JSONObject().put("type", "string")),
+                listOf("object_id", "path")))
+            .put(tool("import_glb", "Import GLB from path", JSONObject()
+                .put("path", JSONObject().put("type", "string")), listOf("path")))
+            .put(tool("set_display_mode", "Display", JSONObject()
                 .put("mode", JSONObject().put("type", "string").put("enum",
                     JSONArray(listOf("shaded", "wireframe", "wireframe_on_shaded")))),
                 listOf("mode")))
-            .put(tool("set_select_mode", "object|face|edge|vertex", JSONObject()
+            .put(tool("set_select_mode", "Selection mode", JSONObject()
                 .put("mode", JSONObject().put("type", "string").put("enum",
                     JSONArray(listOf("object", "face", "edge", "vertex")))),
                 listOf("mode")))
