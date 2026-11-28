@@ -21,11 +21,19 @@ enum class Primitive : int {
     Octahedron = 8,
     HexPrism = 9,
     CustomMesh = 10,
+    TriPrism = 11,
+    PentPrism = 12,
+    OctPrism = 13,
+    DecPrism = 14,
+    DodecPrism = 15,
+    Tetrahedron = 16,
+    Icosahedron = 17,
+    IcoSphere = 18,
 };
-constexpr int kPrimitiveCount = 11;
+constexpr int kPrimitiveCount = 19;
 
 const char* primitiveName(Primitive p);
-PolyMesh makePrimitivePolyMesh(Primitive p, float size);
+PolyMesh makePrimitivePolyMesh(Primitive p, float size, int detail = 8);
 float primitiveSmoothAngle(Primitive p);
 Mesh makePrimitiveMesh(Primitive p, float size);
 
@@ -59,6 +67,7 @@ struct Object {
     std::string name;
     Primitive type = Primitive::Cube;
     float size = 1.0f;
+    int detail = 8;
     Mesh mesh;                 // malha triangulada de renderização
     PolyMesh topology;          // malha poligonal editável (quads/ngons)
     Transform transform;
