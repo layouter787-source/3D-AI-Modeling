@@ -20,7 +20,19 @@ object SceneProjectCodec {
         val position: FloatArray,
         val rotation: FloatArray,
         val scale: FloatArray,
-        val color: FloatArray
+        val color: FloatArray,
+        val metallic: Float,
+        val roughness: Float,
+        val clearcoat: Float,
+        val emission: Float
+    )
+
+    private data class StoredEnvironment(
+        val sunDirection: FloatArray,
+        val sunColor: FloatArray,
+        val sunIntensity: Float,
+        val ambientStrength: Float,
+        val skyColor: FloatArray
     )
 
     fun encode(): String {
@@ -30,6 +42,7 @@ object SceneProjectCodec {
             .put("version", VERSION)
             .put("savedAtEpochMs", System.currentTimeMillis())
             .put("objects", scene.getJSONArray("objects"))
+            .put("environment", scene.optJSONObject("environment"))
             .put("selected", scene.optInt("selected", -1))
             .toString(2)
     }
@@ -65,13 +78,27 @@ object SceneProjectCodec {
             val rotation = vector(item, "rotation", -100000.0, 100000.0)
             val scale = vector(item, "scale", 0.001, 1000.0)
             val color = vector(item, "color", 0.0, 1.0)
+            val material = item.optJSONObject("material")
+            val metallic = material?.let { boundedNumber(it, "metallic", 0.0, 1.0) } ?: 0f
+            val roughness = material?.let { boundedNumber(it, "roughness", 0.04, 1.0) } ?: 0.48f
+            val clearcoat = material?.let { boundedNumber(it, "clearcoat", 0.0, 1.0) } ?: 0f
+            val emission = material?.let { boundedNumber(it, "emission", 0.0, 8.0) } ?: 0f
 
             parsed.add(
-                StoredObject(sourceId, type, size, position, rotation, scale, color)
+                StoredObject(sourceId, type, size, position, rotation, scale, color, metallic, roughness, clearcoat, emission)
             )
         }
 
         val selectedSourceId = root.optInt("selected", -1)
+        val environment = root.optJSONObject("environment")?.let { item ->
+            StoredEnvironment(
+                vector(item, "sun_direction", -1.0, 1.0),
+                vector(item, "sun_color", 0.0, 1.0),
+                boundedNumber(item, "sun_intensity", 0.0, 8.0),
+                boundedNumber(item, "ambient_strength", 0.0, 1.0),
+                vector(item, "sky_color", 0.0, 1.0)
+            )
+        }
         NativeBridge.clearScene()
         return try {
             val remappedIds = HashMap<Int, Int>(parsed.size)
@@ -97,7 +124,19 @@ object SceneProjectCodec {
                 check(NativeBridge.setColor(id, item.color[0], item.color[1], item.color[2])) {
                     "Não foi possível restaurar a cor do objeto"
                 }
+                check(NativeBridge.setMaterial(id, item.metallic, item.roughness, item.clearcoat, item.emission)) {
+                    "Não foi possível restaurar o material do objeto"
+                }
                 remappedIds[item.sourceId] = id
+            }
+
+            environment?.let {
+                NativeBridge.setEnvironment(
+                    it.sunDirection[0], it.sunDirection[1], it.sunDirection[2],
+                    it.sunColor[0], it.sunColor[1], it.sunColor[2],
+                    it.sunIntensity, it.ambientStrength,
+                    it.skyColor[0], it.skyColor[1], it.skyColor[2]
+                )
             }
 
             NativeBridge.select(remappedIds[selectedSourceId] ?: -1)

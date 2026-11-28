@@ -22,7 +22,7 @@ class Editor {
 public:
     const Scene& scene() const { return scene_; }
 
-    // Devolve o id do novo objeto, ou -1 se os valores forem inválidos ou o limite foi atingido.
+    // Devolve o id do novo objeto, ou -1 se os valores forem inválidos ou os recursos da malha falharem.
     int addPrimitive(Primitive type, float size, Vec3 position);
     // Profiles are [x, halfWidth, centerY, halfHeight] along the X axis.
     int addLoftMesh(const std::vector<float>& profiles, int segments, Vec3 position);
@@ -39,6 +39,7 @@ public:
                        int parameter, float value, int otherObjectId = -1);
     std::string describeMesh(int id, int offset, int limit) const;
     bool setColor(int id, Color color);
+    bool setMaterial(int id, Material material);
     bool snapToGround(int id);
     bool snapToGrid(int id, float step);
 

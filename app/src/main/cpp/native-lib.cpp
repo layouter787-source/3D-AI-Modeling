@@ -44,19 +44,31 @@ in vec3 vWorldPos;
 uniform vec3 uColor;
 uniform vec3 uCameraPosition;
 uniform float uSelected;
+uniform float uMetallic;
+uniform float uRoughness;
+uniform float uClearcoat;
+uniform float uEmission;
+uniform vec3 uSunDirection;
+uniform vec3 uSunColor;
+uniform float uSunIntensity;
+uniform float uAmbientStrength;
 out vec4 outColor;
 void main() {
     vec3 n = normalize(vNormal);
-    vec3 lightDir = normalize(vec3(-0.45, 0.82, 0.36));
+    vec3 lightDir = normalize(uSunDirection);
     vec3 viewDir = normalize(uCameraPosition - vWorldPos);
     vec3 halfDir = normalize(lightDir + viewDir);
     float diffuse = max(dot(n, lightDir), 0.0);
-    float specular = pow(max(dot(n, halfDir), 0.0), 48.0) * 0.28;
+    float gloss = mix(8.0, 160.0, 1.0 - uRoughness);
+    float specular = pow(max(dot(n, halfDir), 0.0), gloss) * mix(0.18, 0.92, uMetallic);
+    float coat = pow(max(dot(n, halfDir), 0.0), 96.0) * uClearcoat * 0.65;
     float fresnel = pow(1.0 - max(dot(n, viewDir), 0.0), 3.0) * 0.10;
     float rim = pow(1.0 - max(dot(n, viewDir), 0.0), 2.0) * 0.07;
-    vec3 base = uColor * (0.20 + 0.72 * diffuse);
-    vec3 lit = base + vec3(specular + fresnel);
+    vec3 f0 = mix(vec3(0.04), uColor, uMetallic);
+    vec3 base = uColor * (uAmbientStrength + uSunIntensity * 0.76 * diffuse) * (1.0 - 0.28 * uMetallic);
+    vec3 lit = base + uSunColor * f0 * uSunIntensity * (specular + fresnel) + uSunColor * vec3(coat) * uSunIntensity;
     lit += uColor * rim;
+    lit += uColor * uEmission;
     lit = mix(lit, vec3(1.0, 0.58, 0.16), 0.42 * uSelected);
     outColor = vec4(lit, 1.0);
 }
@@ -169,6 +181,14 @@ struct Renderer {
     GLint objCamera = -1;
     GLint objColor = -1;
     GLint objSelected = -1;
+    GLint objMetallic = -1;
+    GLint objRoughness = -1;
+    GLint objClearcoat = -1;
+    GLint objEmission = -1;
+    GLint objSunDirection = -1;
+    GLint objSunColor = -1;
+    GLint objSunIntensity = -1;
+    GLint objAmbientStrength = -1;
 
     GLuint lineProgram = 0;
     GLint lineMvp = -1;
@@ -183,6 +203,11 @@ struct Renderer {
     float width = 1.0f;
     float height = 1.0f;
     bool darkViewport = true;
+    Vec3 sunDirection{-0.45f, 0.82f, 0.36f};
+    Vec3 sunColor{1.0f, 0.94f, 0.82f};
+    float sunIntensity = 1.0f;
+    float ambientStrength = 0.16f;
+    Color skyColor{0.12f, 0.14f, 0.20f};
     Camera camera;
     Editor editor;
 };
@@ -253,6 +278,14 @@ Java_com_layouter_aimodeling_NativeBridge_onSurfaceCreated(JNIEnv*, jobject) {
     r.objNormal = glGetUniformLocation(r.objectProgram, "uNormalMat");
     r.objColor = glGetUniformLocation(r.objectProgram, "uColor");
     r.objSelected = glGetUniformLocation(r.objectProgram, "uSelected");
+    r.objMetallic = glGetUniformLocation(r.objectProgram, "uMetallic");
+    r.objRoughness = glGetUniformLocation(r.objectProgram, "uRoughness");
+    r.objClearcoat = glGetUniformLocation(r.objectProgram, "uClearcoat");
+    r.objEmission = glGetUniformLocation(r.objectProgram, "uEmission");
+    r.objSunDirection = glGetUniformLocation(r.objectProgram, "uSunDirection");
+    r.objSunColor = glGetUniformLocation(r.objectProgram, "uSunColor");
+    r.objSunIntensity = glGetUniformLocation(r.objectProgram, "uSunIntensity");
+    r.objAmbientStrength = glGetUniformLocation(r.objectProgram, "uAmbientStrength");
 
     r.lineProgram = linkProgram(kLineVertexShader, kLineFragmentShader);
     r.lineMvp = glGetUniformLocation(r.lineProgram, "uMvp");
@@ -261,7 +294,7 @@ Java_com_layouter_aimodeling_NativeBridge_onSurfaceCreated(JNIEnv*, jobject) {
 
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
-    glClearColor(0.12f, 0.12f, 0.14f, 1.0f);
+    glClearColor(r.skyColor.r, r.skyColor.g, r.skyColor.b, 1.0f);
 }
 
 JNIEXPORT void JNICALL
@@ -281,12 +314,31 @@ Java_com_layouter_aimodeling_NativeBridge_setViewportTheme(JNIEnv*, jobject, jbo
 }
 
 JNIEXPORT void JNICALL
+Java_com_layouter_aimodeling_NativeBridge_setEnvironment(
+    JNIEnv*, jobject, jfloat sunX, jfloat sunY, jfloat sunZ,
+    jfloat sunR, jfloat sunG, jfloat sunB, jfloat sunIntensity,
+    jfloat ambientStrength, jfloat skyR, jfloat skyG, jfloat skyB) {
+    std::lock_guard<std::mutex> lock(gMutex);
+    Renderer& r = gRenderer;
+    if (!std::isfinite(sunX) || !std::isfinite(sunY) || !std::isfinite(sunZ) ||
+        !std::isfinite(sunR) || !std::isfinite(sunG) || !std::isfinite(sunB) ||
+        !std::isfinite(sunIntensity) || !std::isfinite(ambientStrength) ||
+        !std::isfinite(skyR) || !std::isfinite(skyG) || !std::isfinite(skyB)) return;
+    r.sunDirection = normalize(Vec3{sunX, sunY, sunZ});
+    r.sunColor = Vec3{std::clamp(sunR, 0.0f, 1.0f), std::clamp(sunG, 0.0f, 1.0f), std::clamp(sunB, 0.0f, 1.0f)};
+    r.sunIntensity = std::clamp(sunIntensity, 0.0f, 8.0f);
+    r.ambientStrength = std::clamp(ambientStrength, 0.0f, 1.0f);
+    r.skyColor = Color{std::clamp(skyR, 0.0f, 1.0f), std::clamp(skyG, 0.0f, 1.0f), std::clamp(skyB, 0.0f, 1.0f)};
+}
+
+JNIEXPORT void JNICALL
 Java_com_layouter_aimodeling_NativeBridge_onDrawFrame(JNIEnv*, jobject) {
     std::lock_guard<std::mutex> lock(gMutex);
     Renderer& r = gRenderer;
     const Scene& scene = r.editor.scene();
 
-    glClearColor(r.darkViewport ? 0.035f : 0.965f, r.darkViewport ? 0.035f : 0.965f, r.darkViewport ? 0.04f : 0.975f, 1.0f);
+    const float skyMix = r.darkViewport ? 0.72f : 0.34f;
+    glClearColor(r.skyColor.r * skyMix, r.skyColor.g * skyMix, r.skyColor.b * skyMix, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     const Mat4 proj = perspective(kFovY, r.aspect, 0.1f, 200.0f);
@@ -322,6 +374,14 @@ Java_com_layouter_aimodeling_NativeBridge_onDrawFrame(JNIEnv*, jobject) {
         glUniformMatrix3fv(r.objNormal, 1, GL_FALSE, nm);
         glUniform3f(r.objColor, o.color.r, o.color.g, o.color.b);
         glUniform1f(r.objSelected, o.id == scene.selectedId ? 1.0f : 0.0f);
+        glUniform1f(r.objMetallic, o.material.metallic);
+        glUniform1f(r.objRoughness, o.material.roughness);
+        glUniform1f(r.objClearcoat, o.material.clearcoat);
+        glUniform1f(r.objEmission, o.material.emission);
+        glUniform3f(r.objSunDirection, r.sunDirection.x, r.sunDirection.y, r.sunDirection.z);
+        glUniform3f(r.objSunColor, r.sunColor.x, r.sunColor.y, r.sunColor.z);
+        glUniform1f(r.objSunIntensity, r.sunIntensity);
+        glUniform1f(r.objAmbientStrength, r.ambientStrength);
 
         glBindVertexArray(it->second.vao);
         glDrawElements(GL_TRIANGLES, it->second.count, GL_UNSIGNED_INT, nullptr);
@@ -443,6 +503,19 @@ Java_com_layouter_aimodeling_NativeBridge_setColor(JNIEnv*, jobject, jint id, jf
     c.b = b;
     std::lock_guard<std::mutex> lock(gMutex);
     return toJ(gRenderer.editor.setColor(id, c));
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_layouter_aimodeling_NativeBridge_setMaterial(JNIEnv*, jobject, jint id, jfloat metallic,
+                                                       jfloat roughness, jfloat clearcoat,
+                                                       jfloat emission) {
+    Material material;
+    material.metallic = metallic;
+    material.roughness = roughness;
+    material.clearcoat = clearcoat;
+    material.emission = emission;
+    std::lock_guard<std::mutex> lock(gMutex);
+    return toJ(gRenderer.editor.setMaterial(id, material));
 }
 
 JNIEXPORT jboolean JNICALL
@@ -606,8 +679,15 @@ Java_com_layouter_aimodeling_NativeBridge_exportMtl(JNIEnv* env, jobject) {
             char line[320];
             std::snprintf(
                 line, sizeof(line),
-                "newmtl material_%d\nKa 0.080000 0.080000 0.080000\nKd %.6f %.6f %.6f\nKs 0.180000 0.180000 0.180000\nNs 32.000000\nillum 2\n\n",
-                object.id, object.color.r, object.color.g, object.color.b
+                "newmtl material_%d\nKa 0.080000 0.080000 0.080000\nKd %.6f %.6f %.6f\nKs %.6f %.6f %.6f\nNs %.6f\nKe %.6f %.6f %.6f\nillum 2\n\n",
+                object.id, object.color.r, object.color.g, object.color.b,
+                0.12f + object.material.metallic * 0.88f,
+                0.12f + object.material.metallic * 0.88f,
+                0.12f + object.material.metallic * 0.88f,
+                8.0f + (1.0f - object.material.roughness) * 992.0f,
+                object.color.r * object.material.emission,
+                object.color.g * object.material.emission,
+                object.color.b * object.material.emission
             );
             output += line;
         }
@@ -621,6 +701,17 @@ Java_com_layouter_aimodeling_NativeBridge_describeScene(JNIEnv* env, jobject) {
     {
         std::lock_guard<std::mutex> lock(gMutex);
         json = gRenderer.editor.describeScene();
+        if (!json.empty() && json.back() == '}') {
+            json.pop_back();
+            char environment[320];
+            std::snprintf(environment, sizeof(environment),
+                          R"JSON(,"environment":{"sun_direction":[%.3f,%.3f,%.3f],"sun_color":[%.3f,%.3f,%.3f],"sun_intensity":%.3f,"ambient_strength":%.3f,"sky_color":[%.3f,%.3f,%.3f]}})JSON",
+                          gRenderer.sunDirection.x, gRenderer.sunDirection.y, gRenderer.sunDirection.z,
+                          gRenderer.sunColor.x, gRenderer.sunColor.y, gRenderer.sunColor.z,
+                          gRenderer.sunIntensity, gRenderer.ambientStrength,
+                          gRenderer.skyColor.r, gRenderer.skyColor.g, gRenderer.skyColor.b);
+            json += environment;
+        }
     }
     return env->NewStringUTF(json.c_str());
 }

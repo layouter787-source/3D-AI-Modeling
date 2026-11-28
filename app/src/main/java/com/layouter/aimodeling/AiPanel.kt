@@ -4,6 +4,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.util.Base64
 import java.io.ByteArrayOutputStream
 import androidx.compose.foundation.background
@@ -32,6 +34,7 @@ import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Menu
@@ -41,6 +44,9 @@ import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.ThumbDown
+import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.AlertDialog
@@ -70,6 +76,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.layouter.aimodeling.ai.AiAgent
 import com.layouter.aimodeling.ai.AiModel
@@ -466,7 +479,7 @@ fun AiPanel(onClose: () -> Unit, onSceneChanged: () -> Unit, modifier: Modifier 
                         }
                     }
                 }
-                items(lines) { line -> ChatBubble(line) }
+                items(lines) { line -> ChatBubble(line, showActions = !busy) }
                 if (busy) {
                     item {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -571,55 +584,172 @@ private fun encodeReferenceImage(source: Bitmap): String {
 }
 
 @Composable
-private fun ChatBubble(line: ChatLine) {
+private fun ChatBubble(line: ChatLine, showActions: Boolean) {
     if (line.role == "tool") {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 34.dp),
+            modifier = Modifier.fillMaxWidth().padding(start = 8.dp, top = 2.dp, bottom = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Outlined.CheckCircle, null, tint = Color(0xFF79CDA4), modifier = Modifier.size(15.dp))
-            Text(line.text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 6.dp))
+            Box(Modifier.size(7.dp).background(Color(0xFF79CDA4), CircleShape))
+            Text("  ${line.text}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
         }
         return
     }
 
     val isUser = line.role == "user"
     val isError = line.role == "error"
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
-        verticalAlignment = Alignment.Top
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 7.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
-        if (!isUser) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
-                if (isError) Icons.Outlined.Warning else Icons.Filled.SmartToy,
+                when {
+                    isError -> Icons.Outlined.Warning
+                    isUser -> Icons.Outlined.Person
+                    else -> Icons.Filled.SmartToy
+                },
                 null,
-                tint = if (isError) Color(0xFFFFB66E) else MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(top = 6.dp, end = 8.dp).size(20.dp)
+                tint = when {
+                    isError -> Color(0xFFFFB66E)
+                    isUser -> MaterialTheme.colorScheme.primary
+                    else -> MaterialTheme.colorScheme.primary
+                },
+                modifier = Modifier.size(16.dp)
             )
-        }
-        Surface(
-            color = when {
-                isUser -> MaterialTheme.colorScheme.primary
-                isError -> Color(0xFF492D2D)
-                else -> MaterialTheme.colorScheme.surfaceVariant
-            },
-            shape = RoundedCornerShape(
-                topStart = 18.dp, topEnd = 18.dp,
-                bottomStart = if (isUser) 18.dp else 5.dp,
-                bottomEnd = if (isUser) 5.dp else 18.dp
-            ),
-            modifier = Modifier.fillMaxWidth(if (isUser) 0.86f else 0.94f)
-        ) {
             Text(
-                line.text,
-                color = MaterialTheme.colorScheme.onSurface,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp)
+                if (isError) "ERRO" else if (isUser) "TU" else "AGENTE",
+                color = if (isError) Color(0xFFFFB66E) else MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(start = 8.dp)
             )
         }
         if (isUser) {
-            Icon(Icons.Outlined.Person, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 7.dp, top = 6.dp).size(19.dp))
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.82f),
+                shape = RoundedCornerShape(17.dp),
+                modifier = Modifier.padding(start = 24.dp, end = 10.dp)
+            ) {
+                Text(
+                    line.text,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = 13.dp, vertical = 9.dp)
+                )
+            }
+        } else {
+            MarkdownText(
+                markdown = line.text,
+                color = if (isError) Color(0xFFFFB66E) else MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(start = 24.dp, end = 10.dp)
+            )
+            if (!isError && showActions) {
+                AssistantActions(line.text)
+            }
         }
     }
+}
+
+@Composable
+private fun AssistantActions(text: String) {
+    val context = LocalContext.current
+    var feedback by remember(text) { mutableStateOf<Int?>(null) }
+    Row(
+        modifier = Modifier.padding(start = 18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(1.dp)
+    ) {
+        IconButton(onClick = {
+            val clipboard = context.getSystemService(ClipboardManager::class.java)
+            clipboard?.setPrimaryClip(ClipData.newPlainText("Resposta da IA", text))
+            android.widget.Toast.makeText(context, "Resposta copiada", android.widget.Toast.LENGTH_SHORT).show()
+        }) {
+            Icon(Icons.Outlined.ContentCopy, "Copiar resposta", modifier = Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        IconButton(onClick = { feedback = if (feedback == 1) null else 1 }) {
+            Icon(Icons.Outlined.ThumbUp, "Boa resposta", modifier = Modifier.size(17.dp), tint = if (feedback == 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        IconButton(onClick = { feedback = if (feedback == -1) null else -1 }) {
+            Icon(Icons.Outlined.ThumbDown, "Má resposta", modifier = Modifier.size(17.dp), tint = if (feedback == -1) Color(0xFFFF9A9A) else MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        IconButton(onClick = {
+            val sendIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(android.content.Intent.EXTRA_TEXT, text)
+            }
+            context.startActivity(android.content.Intent.createChooser(sendIntent, "Partilhar resposta"))
+        }) {
+            Icon(Icons.Outlined.Share, "Partilhar resposta", modifier = Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (feedback != null) {
+            Text(
+                if (feedback == 1) "Obrigado pelo feedback" else "Feedback registado",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 4.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun MarkdownText(markdown: String, color: Color, modifier: Modifier = Modifier) {
+    Text(
+        text = markdownToAnnotatedString(markdown, color),
+        style = MaterialTheme.typography.bodyMedium,
+        modifier = modifier,
+        lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.18f
+    )
+}
+
+private fun markdownToAnnotatedString(markdown: String, color: Color): AnnotatedString = buildAnnotatedString {
+    var inCodeBlock = false
+    val normalized = markdown.replace("\r\n", "\n")
+    normalized.split("\n").forEachIndexed { index, originalLine ->
+        var line = originalLine
+        if (line.trimStart().startsWith("```") || line.trimStart().startsWith("~~~")) {
+            inCodeBlock = !inCodeBlock
+        } else {
+            if (inCodeBlock) {
+                withStyle(SpanStyle(fontFamily = FontFamily.Monospace, color = color.copy(alpha = 0.92f))) { append(line) }
+            } else {
+                val heading = Regex("^\\s*#{1,6}\\s+").find(line)
+                val bullet = Regex("^\\s*(?:[-*+]\\s+|\\d+[.)]\\s+)").find(line)
+                val prefixStyle = when {
+                    heading != null -> SpanStyle(fontWeight = FontWeight.Bold, color = color)
+                    bullet != null -> SpanStyle(color = color)
+                    else -> SpanStyle(color = color)
+                }
+                if (heading != null) line = line.removeRange(heading.range)
+                if (bullet != null) {
+                    line = "• " + line.removeRange(bullet.range)
+                }
+                appendInlineMarkdown(line, prefixStyle, color)
+            }
+        }
+        if (index < normalized.count { it == '\n' }) append("\n")
+    }
+}
+
+private fun androidx.compose.ui.text.AnnotatedString.Builder.appendInlineMarkdown(
+    source: String,
+    baseStyle: SpanStyle,
+    color: Color
+) {
+    val token = Regex("(\\*\\*[^*]+\\*\\*|__[^_]+__|\\*[^*]+\\*|_[^_]+_|`[^`]+`|\\[[^]]+\\]\\([^)]*\\))")
+    var cursor = 0
+    token.findAll(source).forEach { match ->
+        if (match.range.first > cursor) withStyle(baseStyle) { append(source.substring(cursor, match.range.first)) }
+        val raw = match.value
+        when {
+            raw.startsWith("**") || raw.startsWith("__") -> withStyle(baseStyle.copy(fontWeight = FontWeight.Bold)) { append(raw.substring(2, raw.length - 2)) }
+            raw.startsWith("*") || raw.startsWith("_") -> withStyle(baseStyle.copy(fontStyle = FontStyle.Italic)) { append(raw.substring(1, raw.length - 1)) }
+            raw.startsWith("`") -> withStyle(baseStyle.copy(fontFamily = FontFamily.Monospace, background = color.copy(alpha = 0.12f))) { append(raw.substring(1, raw.length - 1)) }
+            raw.startsWith("[") -> withStyle(baseStyle.copy(color = color, textDecoration = TextDecoration.Underline)) { append(raw.substringAfter("[").substringBefore("]")) }
+        }
+        cursor = match.range.last + 1
+    }
+    if (cursor < source.length) withStyle(baseStyle) { append(source.substring(cursor)) }
 }

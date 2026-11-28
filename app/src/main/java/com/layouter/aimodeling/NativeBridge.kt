@@ -10,6 +10,13 @@ object NativeBridge {
     external fun onSurfaceChanged(width: Int, height: Int)
     external fun onDrawFrame()
     external fun setViewportTheme(dark: Boolean)
+    // Ambiente do viewport: direção do sol, cor, intensidade, ambiente e céu.
+    external fun setEnvironment(
+        sunX: Float, sunY: Float, sunZ: Float,
+        sunR: Float, sunG: Float, sunB: Float,
+        sunIntensity: Float, ambientStrength: Float,
+        skyR: Float, skyG: Float, skyB: Float
+    )
 
     // Câmera
     external fun onOrbit(dx: Float, dy: Float)
@@ -31,6 +38,7 @@ object NativeBridge {
     external fun rotateBy(id: Int, rx: Float, ry: Float, rz: Float): Boolean
     external fun scaleBy(id: Int, fx: Float, fy: Float, fz: Float): Boolean
     external fun setColor(id: Int, r: Float, g: Float, b: Float): Boolean
+    external fun setMaterial(id: Int, metallic: Float, roughness: Float, clearcoat: Float, emission: Float): Boolean
     external fun sculptMesh(id: Int, centerX: Float, centerY: Float, centerZ: Float, radius: Float, offsetX: Float, offsetY: Float, offsetZ: Float): Boolean
     external fun meshOperation(id: Int, operation: String, faceIds: IntArray, parameter: Int, value: Float, otherObjectId: Int = -1): Boolean
     external fun getMeshTopology(id: Int, offset: Int, limit: Int): String

@@ -9,11 +9,12 @@ Aplicativo Android de modelagem 3D com assistente de IA integrado. A interface �
 - Seleção, transformações, cor, remoção e histórico undo/redo.
 - Guardar e abrir projetos editáveis `.3dproj` (JSON versionado, com validação e limite de 500 objetos).
 - Exportar geometria transformada para OBJ com biblioteca MTL separada para manter as cores.
+- Materiais PBR básicos no viewport: metallic, roughness, clearcoat e emission, com presets no inspector e histórico undo/redo.
 - Duplicar objetos pela interface e pelo assistente de IA.
 - Assistente de IA que pode chamar ferramentas limitadas para modificar a cena.
 - OpenAI, Claude/Anthropic, Google Gemini e NVIDIA NIM.
 - Chaves cifradas no Android Keystore.
-- Chat renovado com composer compacto, mensagens separadas, ícones vetoriais e configuração em painel próprio.
+- Chat renovado com composer compacto, timeline sem balões, estados de ferramentas, ícones vetoriais e configuração em painel próprio.
 - Descoberta de modelos em tempo real a partir da API do provedor: não existem modelos predefinidos no seletor.
 
 ## Modelos por API

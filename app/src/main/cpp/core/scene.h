@@ -47,6 +47,13 @@ struct Color {
     float b = 0.95f;
 };
 
+struct Material {
+    float metallic = 0.0f;
+    float roughness = 0.48f;
+    float clearcoat = 0.0f;
+    float emission = 0.0f;
+};
+
 struct Object {
     int id = 0;
     std::string name;
@@ -56,6 +63,7 @@ struct Object {
     PolyMesh topology;          // malha poligonal editável (quads/ngons)
     Transform transform;
     Color color;
+    Material material;
 };
 
 struct Ray {

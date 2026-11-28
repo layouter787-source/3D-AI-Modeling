@@ -33,6 +33,7 @@ As chaves são guardadas cifradas com AES-GCM e Android Keystore (`SecretStore`)
 - transformar, mover, rodar, escalar e colorir objetos
 - apagar, desfazer e refazer
 - consultar a cena
+- aplicar material PBR básico por objeto (`metallic`, `roughness`, `clearcoat` e `emission`)
 
 A IA só altera a cena através destas ferramentas. Os parâmetros são validados no Kotlin e no núcleo C++.
 
@@ -70,7 +71,7 @@ A resposta só é processada e as ferramentas da cena só são executadas depois
 - ferramentas existentes: criar primitiva, mover, rodar, escalar, transformar, colorir, apagar, seleção, undo/redo e estado da cena.
 - Tesselação procedural aumentada para esfera (48x32), cilindro/cone (48 segmentos) e toro (64x24), mantendo índices dentro do limite atual de 16 bits.
 
-Estes recursos aumentam a densidade geométrica e permitem composições mais complexas. **Não equivalem ainda a escultura orgânica, retopologia, materiais PBR, texturas, rigging, importação GLB ou renderização fotorealista**; essas funcionalidades exigem novos sistemas de malha, materiais, importador e renderizador.
+Estes recursos aumentam a densidade geométrica e permitem composições mais complexas. O viewport já possui materiais PBR básicos no estado nativo e no shader OpenGL ES, mas isso **não equivale ainda a texturas PBR completas, UVs, pintura de mapas, rigging, importação GLB ou renderização fotorealista**; essas funcionalidades exigem sistemas adicionais de textura, animação, importador e renderização.
 
 ### Pesquisa na Internet
 

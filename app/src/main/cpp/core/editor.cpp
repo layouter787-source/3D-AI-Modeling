@@ -13,7 +13,6 @@ namespace core {
 namespace {
 
 constexpr size_t kMaxHistory = 200;
-constexpr size_t kMaxObjects = 500;
 
 bool finite3(Vec3 v) { return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z); }
 
@@ -116,10 +115,27 @@ private:
     Color after_;
 };
 
+class MaterialCommand : public Command {
+public:
+    MaterialCommand(int id, Material before, Material after)
+        : id_(id), before_(before), after_(after) {}
+
+    void apply(Scene& scene) override {
+        if (Object* o = scene.find(id_)) o->material = after_;
+    }
+    void revert(Scene& scene) override {
+        if (Object* o = scene.find(id_)) o->material = before_;
+    }
+
+private:
+    int id_;
+    Material before_;
+    Material after_;
+};
+
 }  // namespace
 
 int Editor::addPrimitive(Primitive type, float size, Vec3 position) {
-    if (scene_.objects.size() >= kMaxObjects) return -1;
     if (!std::isfinite(size) || !finite3(position)) return -1;
     size = std::clamp(size, 0.01f, 100.0f);
 
@@ -138,8 +154,8 @@ int Editor::addPrimitive(Primitive type, float size, Vec3 position) {
 }
 
 int Editor::addLoftMesh(const std::vector<float>& profiles, int segments, Vec3 position) {
-    if (scene_.objects.size() >= kMaxObjects || profiles.size() < 12 || profiles.size() > 96 ||
-        profiles.size() % 4 != 0 || segments < 8 || segments > 32 || !finite3(position)) return -1;
+    if (profiles.size() < 12 ||
+        profiles.size() % 4 != 0 || segments < 8 || !finite3(position)) return -1;
     const size_t rings = profiles.size() / 4;
     for (size_t i = 0; i < rings; ++i) {
         const float x = profiles[i*4], width = profiles[i*4+1];
@@ -212,7 +228,7 @@ int Editor::addLoftMesh(const std::vector<float>& profiles, int segments, Vec3 p
 }
 
 int Editor::duplicateObject(int id, Vec3 offset) {
-    if (scene_.objects.size() >= kMaxObjects || !finite3(offset)) return -1;
+    if (!finite3(offset)) return -1;
     const Object* source = scene_.find(id);
     if (source == nullptr) return -1;
 
@@ -351,20 +367,28 @@ bool Editor::meshOperation(int id, const std::string& operation, const std::vect
         if (faces.empty() || faces.size() > source.faces.size()) return false;
         for (int face : faces) if (face < 0 || static_cast<size_t>(face) >= source.faces.size()) return false;
         result = insetFaces(source, faces, std::clamp(value, 0.0001f, 100.0f));
+    } else if (operation == "bevel") {
+        if (faces.empty() || faces.size() > source.faces.size()) return false;
+        for (int face : faces) if (face < 0 || static_cast<size_t>(face) >= source.faces.size()) return false;
+        const float amount = std::clamp(std::abs(value), 0.0001f, 0.95f);
+        // Face bevel: cria o anel de transição com inset e levanta/baixa a face interna.
+        // A operação é uma só para o histórico, portanto Undo restaura a malha original.
+        PolyMesh beveled = insetFaces(source, faces, amount);
+        result = extrudeFaces(beveled, faces, value, false, Vec3{}, 1.0f);
     } else if (operation == "smooth") {
         result = smoothMesh(source, std::clamp(parameter, 1, 100), std::clamp(value, 0.0f, 1.0f));
     } else if (operation == "solidify") {
         result = solidify(source, std::clamp(value, -20.0f, 20.0f));
     } else if (operation == "mirror") {
         result = mirrorMesh(source, std::clamp(parameter, 0, 2), 1e-4f);
-    } else if (operation == "loop_cut") {
+    } else if (operation == "loop_cut" || operation == "connect") {
         if (faces.size() != 2 || faces[0] < 0 || faces[1] < 0 ||
             static_cast<size_t>(faces[0]) >= source.verts.size() ||
             static_cast<size_t>(faces[1]) >= source.verts.size()) return false;
         result = loopCut(source, static_cast<uint32_t>(faces[0]), static_cast<uint32_t>(faces[1]),
                          std::clamp(parameter, 1, 32));
 
-    } else if (operation == "triangulate") {
+    } else if (operation == "triangulate" || operation == "divide") {
         result = triangulate(source);
     } else if (operation == "flip_normals") {
         result = flipFaces(source);
@@ -391,7 +415,7 @@ std::string Editor::describeMesh(int id, int offset, int limit) const {
     const Object* object = scene_.find(id);
     if (object == nullptr) return "{\"error\":\"Object not found\"}";
     offset = std::max(0, offset);
-    limit = std::clamp(limit, 1, 1200);
+    limit = std::max(limit, 1);
     const PolyMesh& topology = object->topology;
     const bool hasTopology = !topology.empty();
     const Mesh& render = object->mesh;
@@ -476,6 +500,19 @@ bool Editor::setColor(int id, Color color) {
     return true;
 }
 
+bool Editor::setMaterial(int id, Material material) {
+    Object* o = scene_.find(id);
+    if (o == nullptr) return false;
+    if (!std::isfinite(material.metallic) || !std::isfinite(material.roughness) ||
+        !std::isfinite(material.clearcoat) || !std::isfinite(material.emission)) return false;
+    material.metallic = std::clamp(material.metallic, 0.0f, 1.0f);
+    material.roughness = std::clamp(material.roughness, 0.04f, 1.0f);
+    material.clearcoat = std::clamp(material.clearcoat, 0.0f, 1.0f);
+    material.emission = std::clamp(material.emission, 0.0f, 8.0f);
+    execute(std::make_unique<MaterialCommand>(id, o->material, material));
+    return true;
+}
+
 void Editor::clearScene() {
     scene_ = Scene{};
     undo_.clear();
@@ -524,12 +561,13 @@ std::string Editor::describeScene() const {
         if (!first) out += ",";
         first = false;
         std::snprintf(buf, sizeof(buf),
-                      R"JSON({"id":%d,"type":"%s","size":%.3f,"vertices":%zu,"triangles":%zu,"position":[%.3f,%.3f,%.3f],"rotation":[%.1f,%.1f,%.1f],"scale":[%.3f,%.3f,%.3f],"color":[%.2f,%.2f,%.2f]})JSON",
+                      R"JSON({"id":%d,"type":"%s","size":%.3f,"vertices":%zu,"triangles":%zu,"position":[%.3f,%.3f,%.3f],"rotation":[%.1f,%.1f,%.1f],"scale":[%.3f,%.3f,%.3f],"color":[%.2f,%.2f,%.2f],"material":{"metallic":%.2f,"roughness":%.2f,"clearcoat":%.2f,"emission":%.2f}})JSON",
                       o.id, primitiveName(o.type), o.size, o.mesh.vertices.size(),
                       o.mesh.indices.size() / 3, o.transform.position.x,
                       o.transform.position.y, o.transform.position.z, o.transform.rotationDeg.x,
                       o.transform.rotationDeg.y, o.transform.rotationDeg.z, o.transform.scale.x,
-                      o.transform.scale.y, o.transform.scale.z, o.color.r, o.color.g, o.color.b);
+                      o.transform.scale.y, o.transform.scale.z, o.color.r, o.color.g, o.color.b,
+                      o.material.metallic, o.material.roughness, o.material.clearcoat, o.material.emission);
         out += buf;
     }
     std::snprintf(buf, sizeof(buf), R"JSON(],"selected":%d})JSON", scene_.selectedId);

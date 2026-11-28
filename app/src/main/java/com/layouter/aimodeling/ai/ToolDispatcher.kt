@@ -31,9 +31,8 @@ object ToolDispatcher {
             "get_mesh_topology" -> ToolResult(true, NativeBridge.getMeshTopology(a.getInt("object_id"), a.optInt("offset", 0), a.optInt("limit", 300)))
             "mesh_operation" -> {
                 val op = a.getString("operation")
-                val faceArray = if (op == "loop_cut") a.optJSONArray("edge_vertices") ?: JSONArray()
+                val faceArray = if (op == "loop_cut" || op == "connect") a.optJSONArray("edge_vertices") ?: JSONArray()
                     else a.optJSONArray("face_ids") ?: JSONArray()
-                require(faceArray.length() <= 1200) { "Use smaller face batches (maximum 1200 faces per operation)" }
                 val ids = IntArray(faceArray.length()) { faceArray.getInt(it) }
                 val ok = NativeBridge.meshOperation(a.getInt("object_id"), op, ids, a.optInt("parameter", 1), a.optDouble("value", 0.1).toFloat(), a.optInt("other_object_id", -1))
                 report(ok, "Native topology operation '$op' completed and entered undo history",
@@ -73,6 +72,29 @@ object ToolDispatcher {
                 val c = a.vec3("color")
                 report(NativeBridge.setColor(a.getInt("object_id"), c[0], c[1], c[2]), "Color changed")
             }
+            "set_material" -> report(
+                NativeBridge.setMaterial(
+                    a.getInt("object_id"),
+                    a.optDouble("metallic", 0.0).toFloat(),
+                    a.optDouble("roughness", 0.48).toFloat(),
+                    a.optDouble("clearcoat", 0.0).toFloat(),
+                    a.optDouble("emission", 0.0).toFloat()
+                ),
+                "PBR material updated",
+                "Material update failed: object not found or invalid values"
+            )
+            "set_environment" -> {
+                val d = a.vec3("sun_direction")
+                val c = a.vec3("sun_color")
+                val sky = a.vec3("sky_color")
+                NativeBridge.setEnvironment(
+                    d[0], d[1], d[2], c[0], c[1], c[2],
+                    a.optDouble("sun_intensity", 1.0).toFloat(),
+                    a.optDouble("ambient_strength", 0.16).toFloat(),
+                    sky[0], sky[1], sky[2]
+                )
+                ToolResult(true, "Environment updated: sun, ambient light and sky color")
+            }
             "delete_object" -> report(NativeBridge.deleteObject(a.getInt("object_id")), "Object deleted")
             "undo" -> report(NativeBridge.undo(), "Undone", "Nothing to undo")
             "redo" -> report(NativeBridge.redo(), "Redone", "Nothing to redo")
@@ -102,7 +124,7 @@ object ToolDispatcher {
                 "solidify", "axis mirror", "loop cut", "triangulate", "flip normals",
                 "weld by tolerance", "crease by angle", "Boolean union", "Boolean difference",
                 "Boolean intersection", "radial vertex sculpt", "lofted profile mesh",
-                "topology inspection", "undo/redo mesh commands"
+                "topology inspection", "undo/redo mesh commands", "bevel", "connect", "divide", "sun light", "sky color", "ambient environment"
             )))
             .put("research_candidates", JSONArray()
                 .put(JSONObject().put("name", "meshoptimizer").put("purpose", "mesh cache optimization, simplification and LOD").put("license", "MIT").put("status", "not yet vendored"))
@@ -117,7 +139,7 @@ object ToolDispatcher {
     }
     private fun createLoftMesh(a: JSONObject): ToolResult {
         val profiles = a.getJSONArray("profiles")
-        require(profiles.length() in 3..24) { "A loft needs 3..24 cross-section profiles" }
+        require(profiles.length() >= 3) { "A loft needs at least 3 cross-section profiles" }
         val packed = FloatArray(profiles.length() * 4)
         var previousX = Float.NEGATIVE_INFINITY
         for (i in 0 until profiles.length()) {
@@ -133,10 +155,11 @@ object ToolDispatcher {
             packed[i*4] = x; packed[i*4+1] = width
             packed[i*4+2] = centerY; packed[i*4+3] = height
         }
-        val segments = a.optInt("segments", 24).coerceIn(8, 32)
+        val segments = a.optInt("segments", 24)
+        require(segments >= 8) { "Loft segments must be at least 8" }
         val position = a.optJSONArray("position")?.let { a.vec3("position") } ?: floatArrayOf(0f,0f,0f)
         val id = NativeBridge.createLoftMesh(packed, segments, position[0], position[1], position[2])
-        if (id < 0) return ToolResult(false, "Mesh creation failed: invalid profile or object limit")
+        if (id < 0) return ToolResult(false, "Mesh creation failed: invalid profile or native resource guard")
         a.optJSONArray("color")?.let { val c=a.vec3("color"); NativeBridge.setColor(id,c[0],c[1],c[2]) }
         return ToolResult(true, "Created smooth closed loft mesh id $id with ${profiles.length()} profiles and $segments segments. Scene: ${NativeBridge.describeScene()}")
     }
@@ -153,7 +176,7 @@ object ToolDispatcher {
         }
         val id = NativeBridge.addPrimitive(type.id, size, position[0], position[1], position[2])
         return if (id < 0) {
-            ToolResult(false, "Could not create the object (object limit reached or invalid values)")
+            ToolResult(false, "Could not create the object (invalid values or native resource failure)")
         } else {
             ToolResult(true, "Created object with id $id")
         }
@@ -161,7 +184,7 @@ object ToolDispatcher {
 
     private fun createBatch(a: JSONObject): ToolResult {
         val items = a.getJSONArray("items")
-        require(items.length() in 1..30) { "Batch size must be 1..30" }
+        require(items.length() >= 1) { "Batch must contain at least one item" }
         val ids = mutableListOf<Int>()
         for (i in 0 until items.length()) {
             val item = items.getJSONObject(i)
@@ -181,7 +204,7 @@ object ToolDispatcher {
             ?: floatArrayOf(1f, 0f, 0f)
         val duplicateId = NativeBridge.duplicateObject(id, offset[0], offset[1], offset[2])
         return if (duplicateId < 0) {
-            ToolResult(false, "Object not found or object limit reached")
+            ToolResult(false, "Object not found or native resource failure")
         } else {
             ToolResult(true, "Duplicated " + id + " as " + duplicateId)
         }
@@ -274,29 +297,29 @@ object ToolDispatcher {
             )
             .put(tool(
                 "create_loft_mesh",
-                "Create ONE continuous, closed, smooth custom mesh by lofting cross-sections along X. Use for car bodies, vehicle shells, helmets, organic elongated forms and shaped hulls—not primitive piles. profiles are ordered front-to-rear and each profile has x, half_width (along Z), center_y and half_height (along Y). Shape the silhouette by changing width/height at each section. 3..24 profiles; segments 8..32 (use 24..32 for smooth automotive surfaces). For detailed vehicles, use 16..24 carefully shaped profiles. Optional position and RGB color.",
+                "Create ONE continuous, closed, smooth custom mesh by lofting cross-sections along X. Use for car bodies, vehicle shells, helmets, organic elongated forms and shaped hulls—not primitive piles. profiles are ordered front-to-rear and each profile has x, half_width (along Z), center_y and half_height (along Y). Use as many profiles and radial segments as the target detail requires; the native engine still rejects non-finite data or a mesh that exceeds its resource budget. Optional position and RGB color.",
                 JSONObject()
-                    .put("profiles", JSONObject().put("type","array").put("minItems",3).put("maxItems",24)
+                    .put("profiles", JSONObject().put("type","array").put("minItems",3)
                         .put("items",JSONObject().put("type","object").put("properties",JSONObject()
                             .put("x",JSONObject().put("type","number"))
                             .put("half_width",JSONObject().put("type","number"))
                             .put("center_y",JSONObject().put("type","number"))
                             .put("half_height",JSONObject().put("type","number")))
                             .put("required",JSONArray(listOf("x","half_width","half_height")))))
-                    .put("segments",JSONObject().put("type","integer").put("minimum",8).put("maximum",32).put("default",16))
+                    .put("segments",JSONObject().put("type","integer").put("minimum",8).put("default",24))
                     .put("position",number3("World position"))
                     .put("color",number3("RGB 0..1")),
                 listOf("profiles")
             ))
             .put(tool("sculpt_mesh","Deform the existing native mesh vertices with smooth radial falloff; local mesh-space center, radius and offset. Use repeated small strokes to shape the body shell, hood, roof and fenders. This is real vertex geometry, not object scaling or added primitives; undoable.",JSONObject().put("object_id",objectId).put("center",number3("Local center [x,y,z]")).put("radius",JSONObject().put("type","number").put("minimum",0.001).put("maximum",1000)).put("offset",number3("Local displacement [dx,dy,dz]")),listOf("object_id","center","radius","offset")))
-            .put(tool("get_mesh_topology", "Inspect the selected object's native mesh topology. Returns vertex positions and triangle face indices in pages; use the reported face IDs for face-edit operations. Keep pages small for dense meshes.", JSONObject().put("object_id",objectId).put("offset",JSONObject().put("type","integer").put("minimum",0)).put("limit",JSONObject().put("type","integer").put("minimum",1).put("maximum",1200).put("default",300)), listOf("object_id")))
+            .put(tool("get_mesh_topology", "Inspect the selected object's native mesh topology. Returns vertex positions and triangle face indices, optionally paged with offset and limit. Use the reported face IDs for face-edit operations; choose a page size appropriate to the device.", JSONObject().put("object_id",objectId).put("offset",JSONObject().put("type","integer").put("minimum",0)).put("limit",JSONObject().put("type","integer").put("minimum",1).put("default",300)), listOf("object_id")))
             .put(tool(
                 "mesh_operation",
-                "Edit existing mesh topology natively. Operations: subdivide (parameter levels 1..3), extrude/inset (face_ids and value), smooth (parameter iterations and value factor), solidify (value thickness), mirror (parameter axis 0=X 1=Y 2=Z), loop_cut (edge_vertices), triangulate, flip_normals, weld (value tolerance), crease_by_angle (value degrees), and boolean_union/difference/intersection (other_object_id). Inspect topology first. Each edit is undoable; make iterative refinements.",
+                "Edit existing mesh topology natively. Operations: subdivide, extrude, inset, bevel, smooth, solidify, mirror, loop_cut, connect, triangulate/divide, flip_normals, weld, crease_by_angle, and boolean_union/difference/intersection. Pass all relevant face IDs or edge vertices from topology inspection; there is no artificial face-batch limit. The native engine only rejects invalid data or operations exceeding available device resources. Each edit is undoable; make iterative refinements.",
                 JSONObject()
                     .put("object_id", objectId)
-                    .put("operation", JSONObject().put("type", "string").put("enum", JSONArray(listOf("subdivide","extrude","inset","smooth","solidify","mirror","loop_cut","triangulate","flip_normals","weld","crease_by_angle","boolean_union","boolean_difference","boolean_intersection"))))
-                    .put("face_ids", JSONObject().put("type", "array").put("items", JSONObject().put("type", "integer")).put("maxItems", 1200))
+                    .put("operation", JSONObject().put("type", "string").put("enum", JSONArray(listOf("subdivide","extrude","inset","bevel","smooth","solidify","mirror","loop_cut","connect","triangulate","divide","flip_normals","weld","crease_by_angle","boolean_union","boolean_difference","boolean_intersection"))))
+                    .put("face_ids", JSONObject().put("type", "array").put("items", JSONObject().put("type", "integer")))
                     .put("edge_vertices", JSONObject().put("type", "array").put("items", JSONObject().put("type", "integer")).put("minItems", 2).put("maxItems", 2))
                     .put("parameter", JSONObject().put("type", "integer"))
                     .put("value", JSONObject().put("type", "number"))
@@ -343,11 +366,33 @@ object ToolDispatcher {
                     listOf("object_id", "color")
                 )
             )
+            .put(tool(
+                "set_material",
+                "Set physically-based material controls. metallic and clearcoat are 0..1, roughness is 0.04..1, and emission is 0..8. This changes real viewport shading and is undoable.",
+                JSONObject()
+                    .put("object_id", objectId)
+                    .put("metallic", JSONObject().put("type", "number").put("minimum", 0).put("maximum", 1))
+                    .put("roughness", JSONObject().put("type", "number").put("minimum", 0.04).put("maximum", 1))
+                    .put("clearcoat", JSONObject().put("type", "number").put("minimum", 0).put("maximum", 1))
+                    .put("emission", JSONObject().put("type", "number").put("minimum", 0).put("maximum", 8)),
+                listOf("object_id")
+            ))
+            .put(tool(
+                "set_environment",
+                "Set the viewport lighting environment. sun_direction points from the surface toward the light; sun_color and sky_color use RGB 0..1. sun_intensity is 0..8 and ambient_strength is 0..1. The current environment is included in get_scene.",
+                JSONObject()
+                    .put("sun_direction", number3("Light direction [x,y,z]"))
+                    .put("sun_color", number3("Sun RGB 0..1"))
+                    .put("sun_intensity", JSONObject().put("type", "number").put("minimum", 0).put("maximum", 8))
+                    .put("ambient_strength", JSONObject().put("type", "number").put("minimum", 0).put("maximum", 1))
+                    .put("sky_color", number3("Sky RGB 0..1")),
+                listOf("sun_direction", "sun_color", "sky_color")
+            ))
             .put(tool("delete_object", "Delete an object.", JSONObject().put("object_id", objectId), listOf("object_id")))
             .put(tool("snap_to_ground", "Place object's transformed mesh lowest point on world ground y=0. Undoable.", JSONObject().put("object_id", objectId), listOf("object_id")))
             .put(tool("snap_to_grid", "Snap object position to nearest grid step (default 1). Undoable.", JSONObject().put("object_id", objectId).put("step", JSONObject().put("type","number").put("minimum",0.001).put("maximum",100).put("default",1)), listOf("object_id")))
 
-            .put(tool("create_batch", "Create 1..30 primitive meshes in one call. Each item: type, size, position and optional color, scale, rotation_degrees.", JSONObject().put("items", JSONObject().put("type","array").put("minItems",1).put("maxItems",30).put("items",JSONObject().put("type","object").put("properties",JSONObject().put("type",JSONObject().put("type","string").put("enum",primitiveTypes)).put("size",JSONObject().put("type","number")).put("position",number3("[x,y,z]")).put("color",number3("RGB 0..1")).put("scale",number3("XYZ")).put("rotation_degrees",number3("Euler degrees"))).put("required",JSONArray(listOf("type","size","position"))))), listOf("items")))
+            .put(tool("create_batch", "Create any number of primitive meshes in one call. Each item: type, size, position and optional color, scale, rotation_degrees. The batch is processed until completion or a real device-resource failure.", JSONObject().put("items", JSONObject().put("type","array").put("minItems",1).put("items",JSONObject().put("type","object").put("properties",JSONObject().put("type",JSONObject().put("type","string").put("enum",primitiveTypes)).put("size",JSONObject().put("type","number")).put("position",number3("[x,y,z]")).put("color",number3("RGB 0..1")).put("scale",number3("XYZ")).put("rotation_degrees",number3("Euler degrees"))).put("required",JSONArray(listOf("type","size","position"))))), listOf("items")))
             .put(tool("create_asset_preset", "Generate editable, multi-part scene asset: tree, table, house, robot, barrel, stairs, lamp, crystal or sci_fi_crate.", JSONObject().put("preset",JSONObject().put("type","string").put("enum",JSONArray(listOf("tree","table","house","robot","barrel","stairs","lamp","crystal","sci_fi_crate")))).put("position",number3("World origin")).put("scale",JSONObject().put("type","number")), listOf("preset")))
             .put(tool("duplicate_object", "Duplicate an object, retaining its scale, rotation and color. Offset optional.", JSONObject().put("object_id",objectId).put("offset",number3("XYZ offset")), listOf("object_id")))
             .put(tool("get_object_details", "Get the complete scene properties for one object id.", JSONObject().put("object_id",objectId), listOf("object_id")))

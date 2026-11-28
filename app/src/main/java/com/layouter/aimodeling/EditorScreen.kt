@@ -43,6 +43,7 @@ import androidx.compose.material.icons.outlined.ZoomIn
 import androidx.compose.material.icons.outlined.ZoomOut
 import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Extension
+import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
@@ -53,6 +54,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
@@ -87,6 +89,7 @@ fun EditorScreen(isDarkTheme: Boolean = true, onToggleTheme: () -> Unit = {}) {
     var showAi by remember { mutableStateOf(false) }
     var showMeshTools by remember { mutableStateOf(false) }
     var showExtensions by remember { mutableStateOf(false) }
+    var showLighting by remember { mutableStateOf(false) }
     var faceIndex by remember { mutableStateOf("0") }
     var objExport by remember { mutableStateOf("") }
     var projectExport by remember { mutableStateOf("") }
@@ -223,7 +226,8 @@ fun EditorScreen(isDarkTheme: Boolean = true, onToggleTheme: () -> Unit = {}) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Text("MESH", color = if (isDarkTheme) Color(0xFF60A5FA) else Color(0xFF2563EB), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 8.dp, end = 4.dp))
+            Text("STUDIO", color = if (isDarkTheme) Color(0xFF60A5FA) else Color(0xFF2563EB), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 8.dp, end = 4.dp))
+            Text("/ 3D AI", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(end = 5.dp))
             IconButton(onClick = onToggleTheme) { Icon(if (isDarkTheme) Icons.Outlined.LightMode else Icons.Outlined.DarkMode, if (isDarkTheme) "Tema claro" else "Tema escuro", tint = if (isDarkTheme) Color(0xFF60A5FA) else Color(0xFF2563EB)) }
             IconButton(onClick = { NativeBridge.undo(); refresh() }, enabled = canUndo) {
                 Icon(Icons.Outlined.Undo, "Desfazer", tint = if (canUndo) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
@@ -256,16 +260,16 @@ fun EditorScreen(isDarkTheme: Boolean = true, onToggleTheme: () -> Unit = {}) {
             IconButton(onClick = { showMeshTools = true }) {
                 Icon(Icons.Outlined.Build, "Ferramentas de malha", tint = MaterialTheme.colorScheme.primary)
             }
+            IconButton(onClick = { showLighting = true }) {
+                Icon(Icons.Outlined.WbSunny, "Luz, sol e céu", tint = Color(0xFFFFC857))
+            }
             IconButton(onClick = { showExtensions = true }) {
                 Icon(Icons.Outlined.Extension, "Extensões", tint = MaterialTheme.colorScheme.onSurface)
-            }
-            IconButton(onClick = onToggleTheme) {
-                Icon(if (isDarkTheme) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,
-                    if (isDarkTheme) "Tema claro" else "Tema escuro", tint = MaterialTheme.colorScheme.primary)
             }
         }
 
         if (showMeshTools) MeshWorkbenchDialog(selected, faceIndex, { faceIndex = it }, { showMeshTools = false }, refresh)
+        if (showLighting) LightingDialog { showLighting = false }
         if (showExtensions) ExtensionLibraryDialog { showExtensions = false }
         AiPanel(
             onClose = { showAi = false },
@@ -288,6 +292,51 @@ fun EditorScreen(isDarkTheme: Boolean = true, onToggleTheme: () -> Unit = {}) {
 
 
 @Composable
+private fun LightingDialog(onClose: () -> Unit) {
+    var elevation by remember { mutableStateOf(48f) }
+    var azimuth by remember { mutableStateOf(-35f) }
+    var intensity by remember { mutableStateOf(1.2f) }
+    var ambient by remember { mutableStateOf(0.18f) }
+    var sky by remember { mutableStateOf(0.34f) }
+
+    fun apply() {
+        val yaw = Math.toRadians(azimuth.toDouble())
+        val pitch = Math.toRadians(elevation.toDouble())
+        val direction = floatArrayOf(
+            (Math.cos(pitch) * Math.sin(yaw)).toFloat(),
+            Math.sin(pitch).toFloat(),
+            (Math.cos(pitch) * Math.cos(yaw)).toFloat()
+        )
+        NativeBridge.setEnvironment(
+            direction[0], direction[1], direction[2],
+            1.0f, 0.93f, 0.78f, intensity, ambient,
+            0.12f + sky * 0.18f, 0.16f + sky * 0.22f, 0.24f + sky * 0.35f
+        )
+    }
+
+    AlertDialog(onDismissRequest = onClose, title = {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.WbSunny, null, tint = Color(0xFFFFC857), modifier = Modifier.padding(end = 8.dp))
+            Text("Luz e ambiente")
+        }
+    }, text = {
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text("Ajusta a luz principal e o céu do viewport. A IA também pode controlar este ambiente.", style = MaterialTheme.typography.bodySmall)
+            Text("Elevação do sol · ${elevation.toInt()}°", style = MaterialTheme.typography.labelMedium)
+            Slider(value = elevation, onValueChange = { elevation = it; apply() }, valueRange = 5f..85f)
+            Text("Azimute · ${azimuth.toInt()}°", style = MaterialTheme.typography.labelMedium)
+            Slider(value = azimuth, onValueChange = { azimuth = it; apply() }, valueRange = -180f..180f)
+            Text("Intensidade · ${"%.2f".format(intensity)}", style = MaterialTheme.typography.labelMedium)
+            Slider(value = intensity, onValueChange = { intensity = it; apply() }, valueRange = 0f..4f)
+            Text("Luz ambiente · ${"%.2f".format(ambient)}", style = MaterialTheme.typography.labelMedium)
+            Slider(value = ambient, onValueChange = { ambient = it; apply() }, valueRange = 0f..0.8f)
+            Text("Atmosfera do céu · ${"%.2f".format(sky)}", style = MaterialTheme.typography.labelMedium)
+            Slider(value = sky, onValueChange = { sky = it; apply() }, valueRange = 0f..1f)
+        }
+    }, confirmButton = { TextButton(onClick = onClose) { Text("Concluído") } })
+}
+
+@Composable
 private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (String) -> Unit, onClose: () -> Unit, onChanged: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     fun apply(operation: String, parameter: Int = 1, value: Float = 0.15f, faces: IntArray = intArrayOf()) {
@@ -304,6 +353,7 @@ private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 Button(onClick = { apply("extrude", value = 0.2f, faces = intArrayOf(faceIndex.toIntOrNull() ?: 0)) }) { Text("Extrude") }
                 Button(onClick = { apply("inset", value = 0.08f, faces = intArrayOf(faceIndex.toIntOrNull() ?: 0)) }) { Text("Inset") }
+                Button(onClick = { apply("bevel", value = 0.08f, faces = intArrayOf(faceIndex.toIntOrNull() ?: 0)) }) { Text("Bevel") }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 Button(onClick = { apply("subdivide") }) { Text("Subdividir") }
@@ -315,6 +365,7 @@ private fun MeshWorkbenchDialog(selected: Int, faceIndex: String, onFaceIndex: (
             }
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 Button(onClick = { apply("triangulate") }) { Text("Triangular") }
+                Button(onClick = { apply("divide") }) { Text("Divide") }
                 Button(onClick = { apply("flip_normals") }) { Text("Inverter normais") }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -437,12 +488,26 @@ private fun SelectionTools(id: Int, refresh: () -> Unit) {
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
         ToolButton("SUBDIVIDIR") { meshAction("subdivide", 1) }
         ToolButton("SUAVIZAR") { meshAction("smooth", 5, 0.28f) }
+        ToolButton("BEVEL") { meshAction("bevel", 1, 0.08f) }
         ToolButton("ESPESSAR") { meshAction("solidify", 1, 0.035f) }
         ToolButton("MIRROR X") { meshAction("mirror", 0) }
         ToolButton("TRIANGULAR") { meshAction("triangulate") }
+        ToolButton("DIVIDE") { meshAction("divide") }
         ToolButton("NORMAIS") { meshAction("flip_normals") }
         ToolButton("WELD") { meshAction("weld", 1, 0.0001f) }
         ToolButton("CREASE 30°") { meshAction("crease_by_angle", 1, 30f) }
+    }
+    Row(
+        Modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("MATERIAL", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
+        ToolButton("METAL") { if (NativeBridge.setMaterial(id, 0.92f, 0.18f, 0.35f, 0f)) refresh() else Toast.makeText(context, "Material não aplicado", Toast.LENGTH_SHORT).show() }
+        ToolButton("PLÁSTICO") { if (NativeBridge.setMaterial(id, 0.02f, 0.42f, 0.08f, 0f)) refresh() else Toast.makeText(context, "Material não aplicado", Toast.LENGTH_SHORT).show() }
+        ToolButton("VIDRO") { if (NativeBridge.setMaterial(id, 0.12f, 0.08f, 0.85f, 0f)) refresh() else Toast.makeText(context, "Material não aplicado", Toast.LENGTH_SHORT).show() }
+        ToolButton("EMISSIVO") { if (NativeBridge.setMaterial(id, 0.05f, 0.28f, 0.18f, 1.8f)) refresh() else Toast.makeText(context, "Material não aplicado", Toast.LENGTH_SHORT).show() }
+        ToolButton("MATTE") { if (NativeBridge.setMaterial(id, 0f, 0.86f, 0f, 0f)) refresh() else Toast.makeText(context, "Material não aplicado", Toast.LENGTH_SHORT).show() }
     }
 }
 
