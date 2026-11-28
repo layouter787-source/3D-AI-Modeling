@@ -46,6 +46,8 @@ public:
     std::string describeMesh(int id, int offset, int limit) const;
     bool setColor(int id, Color color);
     bool setMaterial(int id, Material material);
+    std::vector<float> getVertexColors(int id) const;
+    bool setVertexColors(int id, const std::vector<float>& rgb);
     bool snapToGround(int id);
     bool snapToGrid(int id, float step);
 
